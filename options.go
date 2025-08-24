@@ -1,5 +1,7 @@
 package claudecode
 
+import "fmt"
+
 // PermissionMode represents the different permission handling modes.
 type PermissionMode string
 
@@ -143,10 +145,24 @@ func WithPermissionMode(mode PermissionMode) Option {
 	}
 }
 
+// WithPermissionPromptToolName sets the permission prompt tool name.
+func WithPermissionPromptToolName(toolName string) Option {
+	return func(o *Options) {
+		o.PermissionPromptToolName = &toolName
+	}
+}
+
 // WithContinueConversation enables conversation continuation.
 func WithContinueConversation(continue_ bool) Option {
 	return func(o *Options) {
 		o.ContinueConversation = continue_
+	}
+}
+
+// WithResume sets the session ID to resume.
+func WithResume(sessionID string) Option {
+	return func(o *Options) {
+		o.Resume = &sessionID
 	}
 }
 
@@ -164,12 +180,68 @@ func WithAddDirs(dirs ...string) Option {
 	}
 }
 
+// WithMcpServers sets the MCP server configurations.
+func WithMcpServers(servers map[string]McpServerConfig) Option {
+	return func(o *Options) {
+		o.McpServers = servers
+	}
+}
+
+// WithMaxTurns sets the maximum number of conversation turns.
+func WithMaxTurns(turns int) Option {
+	return func(o *Options) {
+		o.MaxTurns = turns
+	}
+}
+
+// WithSettings sets the settings file path or JSON string.
+func WithSettings(settings string) Option {
+	return func(o *Options) {
+		o.Settings = &settings
+	}
+}
+
+// WithExtraArgs sets arbitrary CLI flags via ExtraArgs.
+func WithExtraArgs(args map[string]*string) Option {
+	return func(o *Options) {
+		o.ExtraArgs = args
+	}
+}
+
+// Validate checks the options for valid values and constraints.
+func (o *Options) Validate() error {
+	// Validate MaxThinkingTokens
+	if o.MaxThinkingTokens < 0 {
+		return fmt.Errorf("MaxThinkingTokens must be non-negative, got %d", o.MaxThinkingTokens)
+	}
+
+	// Validate MaxTurns
+	if o.MaxTurns < 0 {
+		return fmt.Errorf("MaxTurns must be non-negative, got %d", o.MaxTurns)
+	}
+
+	// Validate tool conflicts (same tool in both allowed and disallowed)
+	allowedSet := make(map[string]bool)
+	for _, tool := range o.AllowedTools {
+		allowedSet[tool] = true
+	}
+
+	for _, tool := range o.DisallowedTools {
+		if allowedSet[tool] {
+			return fmt.Errorf("tool '%s' cannot be in both AllowedTools and DisallowedTools", tool)
+		}
+	}
+
+	return nil
+}
+
 // NewOptions creates Options with default values.
 func NewOptions(opts ...Option) *Options {
 	options := &Options{
 		AllowedTools:      []string{},
 		DisallowedTools:   []string{},
 		MaxThinkingTokens: 8000,
+		AddDirs:           []string{},
 		McpServers:        make(map[string]McpServerConfig),
 		ExtraArgs:         make(map[string]*string),
 	}
