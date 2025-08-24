@@ -165,7 +165,7 @@ func TestJSONDecodeError(t *testing.T) {
 	if jsonErr.OriginalError != originalError {
 		t.Errorf("Expected original error to be preserved")
 	}
-	
+
 	// Test that Unwrap() also works
 	if jsonErr.Unwrap() != originalError {
 		t.Errorf("Expected Unwrap() to return original error")
@@ -366,14 +366,14 @@ func TestPythonSDKExactAlignment(t *testing.T) {
 	if procErr.Error() != expected {
 		t.Errorf("ProcessError format mismatch:\nExpected: %q\nGot:      %q", expected, procErr.Error())
 	}
-	
+
 	// Test CLINotFoundError with path: "message: path"
-	cliErr := NewCLINotFoundError("/path/to/claude", "Claude Code not found") 
+	cliErr := NewCLINotFoundError("/path/to/claude", "Claude Code not found")
 	expectedCli := "Claude Code not found: /path/to/claude"
 	if cliErr.Error() != expectedCli {
 		t.Errorf("CLINotFoundError format mismatch:\nExpected: %q\nGot:      %q", expectedCli, cliErr.Error())
 	}
-	
+
 	// Test JSONDecodeError exact Python format: f"Failed to decode JSON: {line[:100]}..."
 	longJSON := "this is a very long json line that should be truncated at exactly 100 characters"
 	jsonErr := NewJSONDecodeError(longJSON, 0, errors.New("syntax error"))
@@ -381,7 +381,7 @@ func TestPythonSDKExactAlignment(t *testing.T) {
 	if jsonErr.Error() != expectedJSON {
 		t.Errorf("JSONDecodeError format mismatch:\nExpected: %q\nGot:      %q", expectedJSON, jsonErr.Error())
 	}
-	
+
 	// Test truncation with >100 char line
 	longJSON2 := strings.Repeat("x", 120)
 	jsonErr2 := NewJSONDecodeError(longJSON2, 0, errors.New("syntax error"))
