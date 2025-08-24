@@ -25,6 +25,10 @@ func (e *BaseError) Unwrap() error {
 	return e.cause
 }
 
+func (e *BaseError) Type() string {
+	return "base_error"
+}
+
 // ConnectionError represents connection-related failures.
 type ConnectionError struct {
 	BaseError
@@ -51,6 +55,10 @@ func (e *CLINotFoundError) Type() string {
 }
 
 func NewCLINotFoundError(path string, message string) *CLINotFoundError {
+	// Match Python behavior: if path provided, format as "message: path"
+	if path != "" {
+		message = fmt.Sprintf("%s: %s", message, path)
+	}
 	return &CLINotFoundError{
 		BaseError: BaseError{message: message},
 		Path:      path,
@@ -69,7 +77,14 @@ func (e *ProcessError) Type() string {
 }
 
 func (e *ProcessError) Error() string {
-	return fmt.Sprintf("%s (exit code: %d, stderr: %s)", e.message, e.ExitCode, e.Stderr)
+	message := e.message
+	if e.ExitCode != 0 {
+		message = fmt.Sprintf("%s (exit code: %d)", message, e.ExitCode)
+	}
+	if e.Stderr != "" {
+		message = fmt.Sprintf("%s\nError output: %s", message, e.Stderr)
+	}
+	return message
 }
 
 func NewProcessError(message string, exitCode int, stderr string) *ProcessError {
@@ -83,8 +98,9 @@ func NewProcessError(message string, exitCode int, stderr string) *ProcessError 
 // JSONDecodeError represents JSON parsing failures.
 type JSONDecodeError struct {
 	BaseError
-	Line     string
-	Position int
+	Line          string
+	Position      int
+	OriginalError error
 }
 
 func (e *JSONDecodeError) Type() string {
@@ -92,24 +108,36 @@ func (e *JSONDecodeError) Type() string {
 }
 
 func NewJSONDecodeError(line string, position int, cause error) *JSONDecodeError {
-	return &JSONDecodeError{
-		BaseError: BaseError{message: "Failed to decode JSON", cause: cause},
-		Line:      line,
-		Position:  position,
+	// Match Python behavior: truncate line to 100 chars and add ...
+	truncatedLine := line
+	if len(line) > 100 {
+		truncatedLine = line[:100]
 	}
+	message := fmt.Sprintf("Failed to decode JSON: %s...", truncatedLine)
+
+	return &JSONDecodeError{
+		BaseError:     BaseError{message: message}, // Don't include cause in message
+		Line:          line,
+		Position:      position,
+		OriginalError: cause, // Store separately like Python
+	}
+}
+
+func (e *JSONDecodeError) Unwrap() error {
+	return e.OriginalError
 }
 
 // MessageParseError represents message structure parsing failures.
 type MessageParseError struct {
 	BaseError
-	Data interface{}
+	Data any
 }
 
 func (e *MessageParseError) Type() string {
 	return "message_parse_error"
 }
 
-func NewMessageParseError(message string, data interface{}) *MessageParseError {
+func NewMessageParseError(message string, data any) *MessageParseError {
 	return &MessageParseError{
 		BaseError: BaseError{message: message},
 		Data:      data,
