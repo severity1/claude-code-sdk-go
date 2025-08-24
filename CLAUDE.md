@@ -25,15 +25,15 @@ golangci-lint run                 # Comprehensive linting
 
 ## Code Style & Conventions
 
-**Go Standards**: Use `gofmt` formatting with no exceptions. Follow standard Go naming conventions.
+**Idiomatic Go**: Write Go-native code using `gofmt` formatting with no exceptions. Follow standard Go naming conventions and prefer Go idioms over Python patterns.
 
-**Interface-Driven Design**: All message types implement `Message`, all content blocks implement `ContentBlock`. Use interfaces for testability.
+**Interface-Driven Design**: All message types implement `Message`, all content blocks implement `ContentBlock`. Use interfaces for testability and Go-native polymorphism.
 
-**Error Handling**: Use structured error types with `fmt.Errorf` and `%w` verb for wrapping. Include contextual information (exit codes, file paths).
+**Error Handling**: Use structured error types with `fmt.Errorf` and `%w` verb for wrapping. Include contextual information (exit codes, file paths). Follow Go error handling patterns, not exceptions.
 
-**Context-First**: All functions that can block should accept `context.Context` as first parameter for cancellation and timeouts.
+**Context-First**: All functions that can block should accept `context.Context` as first parameter for cancellation and timeouts (Go-native concurrency pattern).
 
-**JSON Handling**: Use custom `UnmarshalJSON` methods for union types, discriminate on `"type"` field with `json.RawMessage` for delayed parsing.
+**JSON Handling**: Use custom `UnmarshalJSON` methods for union types, discriminate on `"type"` field with `json.RawMessage` for delayed parsing (Go-native JSON handling).
 
 ## Critical Implementation Notes
 
