@@ -1,7 +1,9 @@
 package parser
 
 import (
+	"fmt"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/severity1/claude-code-sdk-go"
@@ -977,6 +979,1180 @@ func TestMalformedJSONRecovery(t *testing.T) {
 	systemMsg, ok := msg2.(*claudecode.SystemMessage)
 	if !ok || systemMsg.Subtype != "status" {
 		t.Errorf("Expected valid system message with subtype 'status'")
+	}
+}
+
+// TestBufferResetOnSuccess tests T065: Buffer Reset on Success
+func TestBufferResetOnSuccess(t *testing.T) {
+	parser := New()
+	
+	// Parse a complete JSON message
+	validJSON := `{"type": "system", "subtype": "status"}`
+	
+	msg, err := parser.processJSONLine(validJSON)
+	if err != nil {
+		t.Fatalf("Failed to parse valid JSON: %v", err)
+	}
+	
+	if msg == nil {
+		t.Fatal("Expected message, got nil")
+	}
+	
+	// Buffer should be reset after successful parse
+	if parser.BufferSize() != 0 {
+		t.Errorf("Expected buffer to be reset after successful parse, but size is %d", parser.BufferSize())
+	}
+	
+	// Test multiple successful parses to ensure consistent reset behavior
+	for i := 0; i < 5; i++ {
+		testJSON := fmt.Sprintf(`{"type": "system", "subtype": "test_%d"}`, i)
+		
+		msg, err := parser.processJSONLine(testJSON)
+		if err != nil {
+			t.Fatalf("Failed to parse JSON on iteration %d: %v", i, err)
+		}
+		
+		if msg == nil {
+			t.Fatalf("Expected message on iteration %d, got nil", i)
+		}
+		
+		// Buffer should be reset after each successful parse
+		if parser.BufferSize() != 0 {
+			t.Errorf("Iteration %d: Expected buffer to be reset, but size is %d", i, parser.BufferSize())
+		}
+	}
+}
+
+// TestConcurrentBufferAccess tests T066: Concurrent Buffer Access
+func TestConcurrentBufferAccess(t *testing.T) {
+	parser := New()
+	const numGoroutines = 10
+	const messagesPerGoroutine = 100
+	
+	var wg sync.WaitGroup
+	results := make(chan error, numGoroutines)
+	
+	// Launch multiple goroutines to parse messages concurrently
+	for i := 0; i < numGoroutines; i++ {
+		wg.Add(1)
+		go func(goroutineID int) {
+			defer wg.Done()
+			
+			for j := 0; j < messagesPerGoroutine; j++ {
+				// Each goroutine parses different messages to avoid confusion
+				testJSON := fmt.Sprintf(`{"type": "system", "subtype": "goroutine_%d_msg_%d"}`, goroutineID, j)
+				
+				msg, err := parser.processJSONLine(testJSON)
+				if err != nil {
+					results <- fmt.Errorf("goroutine %d, message %d: failed to parse JSON: %v", goroutineID, j, err)
+					return
+				}
+				
+				if msg == nil {
+					results <- fmt.Errorf("goroutine %d, message %d: expected message, got nil", goroutineID, j)
+					return
+				}
+				
+				// Verify the parsed message
+				systemMsg, ok := msg.(*claudecode.SystemMessage)
+				if !ok {
+					results <- fmt.Errorf("goroutine %d, message %d: expected SystemMessage, got %T", goroutineID, j, msg)
+					return
+				}
+				
+				expectedSubtype := fmt.Sprintf("goroutine_%d_msg_%d", goroutineID, j)
+				if systemMsg.Subtype != expectedSubtype {
+					results <- fmt.Errorf("goroutine %d, message %d: expected subtype %s, got %s", goroutineID, j, expectedSubtype, systemMsg.Subtype)
+					return
+				}
+			}
+		}(i)
+	}
+	
+	// Wait for all goroutines to finish
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+	
+	// Check for any errors
+	for err := range results {
+		t.Errorf("Concurrent access error: %v", err)
+	}
+}
+
+// TestBufferStateManagement tests T067: Buffer State Management
+func TestBufferStateManagement(t *testing.T) {
+	parser := New()
+	
+	// Test 1: Buffer state after partial JSON (should accumulate)
+	partialJSON := `{"type": "user", "message"`
+	
+	msg, err := parser.processJSONLine(partialJSON)
+	if err != nil {
+		t.Fatalf("Unexpected error for partial JSON: %v", err)
+	}
+	
+	if msg != nil {
+		t.Fatalf("Expected no message for partial JSON, got: %v", msg)
+	}
+	
+	// Buffer should contain the partial JSON
+	expectedSize := len(partialJSON)
+	if parser.BufferSize() != expectedSize {
+		t.Errorf("Expected buffer size %d after partial JSON, got %d", expectedSize, parser.BufferSize())
+	}
+	
+	// Test 2: Complete the JSON (should parse successfully and reset buffer)
+	completingJSON := `: {"content": [{"type": "text", "text": "hello"}]}}`
+	
+	msg, err = parser.processJSONLine(completingJSON)
+	if err != nil {
+		t.Fatalf("Failed to parse completed JSON: %v", err)
+	}
+	
+	if msg == nil {
+		t.Fatal("Expected message after completing JSON, got nil")
+	}
+	
+	// Buffer should be reset after successful parse
+	if parser.BufferSize() != 0 {
+		t.Errorf("Expected buffer to be reset after successful parse, but size is %d", parser.BufferSize())
+	}
+	
+	// Test 3: Multiple failed parses should accumulate correctly
+	parser.Reset() // Start fresh
+	
+	partials := []string{
+		`{"type":`,
+		` "system",`,
+		` "subtype":`,
+		` "test"}`,
+	}
+	
+	for i, partial := range partials {
+		msg, err := parser.processJSONLine(partial)
+		if err != nil {
+			t.Fatalf("Unexpected error for partial %d: %v", i, err)
+		}
+		
+		if i < len(partials)-1 {
+			// Should not have message yet
+			if msg != nil {
+				t.Fatalf("Partial %d: Expected no message, got: %v", i, msg)
+			}
+			
+			// Buffer should be growing
+			if parser.BufferSize() == 0 {
+				t.Errorf("Partial %d: Expected buffer to contain data", i)
+			}
+		} else {
+			// Final part should complete the message
+			if msg == nil {
+				t.Fatal("Expected message after final partial, got nil")
+			}
+			
+			// Buffer should be reset
+			if parser.BufferSize() != 0 {
+				t.Errorf("Expected buffer to be reset after completing partials, but size is %d", parser.BufferSize())
+			}
+		}
+	}
+	
+	// Test 4: Error conditions should maintain consistent state
+	parser.Reset()
+	
+	// Try to trigger a buffer overflow error
+	largeString := strings.Repeat("x", MaxBufferSize+100)
+	
+	_, err = parser.processJSONLine(largeString)
+	if err == nil {
+		t.Fatal("Expected error for oversized buffer, got nil")
+	}
+	
+	// Buffer should be reset after overflow error
+	if parser.BufferSize() != 0 {
+		t.Errorf("Expected buffer to be reset after overflow error, but size is %d", parser.BufferSize())
+	}
+	
+	// Parser should still work after error
+	validJSON := `{"type": "system", "subtype": "recovery_test"}`
+	msg, err = parser.processJSONLine(validJSON)
+	if err != nil {
+		t.Fatalf("Parser should work after error, but got: %v", err)
+	}
+	
+	if msg == nil {
+		t.Fatal("Expected message after error recovery, got nil")
+	}
+}
+
+// TestLargeMessageHandling tests T068: Large Message Handling
+func TestLargeMessageHandling(t *testing.T) {
+	parser := New()
+	
+	// Test 1: Handle large message close to but under the limit (950KB)
+	largeContent := strings.Repeat("X", 950*1024) // 950KB
+	largeJSON := fmt.Sprintf(`{"type": "user", "message": {"content": [{"type": "text", "text": "%s"}]}}`, largeContent)
+	
+	// Should be under 1MB total
+	if len(largeJSON) >= MaxBufferSize {
+		t.Fatalf("Test setup error: large JSON (%d bytes) exceeds MaxBufferSize (%d bytes)", len(largeJSON), MaxBufferSize)
+	}
+	
+	msg, err := parser.processJSONLine(largeJSON)
+	if err != nil {
+		t.Fatalf("Failed to parse large message under limit: %v", err)
+	}
+	
+	if msg == nil {
+		t.Fatal("Expected message for large JSON under limit, got nil")
+	}
+	
+	// Verify the parsed message contains the large content
+	userMsg, ok := msg.(*claudecode.UserMessage)
+	if !ok {
+		t.Fatalf("Expected UserMessage, got %T", msg)
+	}
+	
+	blocks, ok := userMsg.Content.([]claudecode.ContentBlock)
+	if !ok {
+		t.Fatalf("Expected Content to be []ContentBlock, got %T", userMsg.Content)
+	}
+	
+	textBlock, ok := blocks[0].(*claudecode.TextBlock)
+	if !ok {
+		t.Fatalf("Expected TextBlock, got %T", blocks[0])
+	}
+	
+	if len(textBlock.Text) != len(largeContent) {
+		t.Errorf("Expected text length %d, got %d", len(largeContent), len(textBlock.Text))
+	}
+	
+	// Buffer should be reset after successful parse
+	if parser.BufferSize() != 0 {
+		t.Errorf("Expected buffer to be reset after large message parse, but size is %d", parser.BufferSize())
+	}
+	
+	// Test 2: Handle large message built incrementally
+	parser.Reset()
+	
+	// Build a large message in smaller chunks
+	baseJSON := `{"type": "system", "subtype": "large_test", "data": "`
+	largeData := strings.Repeat("Y", 800*1024) // 800KB of data
+	endJSON := `"}`
+	
+	// Send in chunks
+	chunkSize := 50000 // 50KB chunks
+	totalJSON := baseJSON + largeData + endJSON
+	
+	var finalMessage claudecode.Message
+	for i := 0; i < len(totalJSON); i += chunkSize {
+		end := i + chunkSize
+		if end > len(totalJSON) {
+			end = len(totalJSON)
+		}
+		
+		chunk := totalJSON[i:end]
+		msg, err := parser.processJSONLine(chunk)
+		
+		if err != nil {
+			t.Fatalf("Error processing chunk at position %d: %v", i, err)
+		}
+		
+		if i+chunkSize < len(totalJSON) {
+			// Intermediate chunks should not produce a message
+			if msg != nil {
+				t.Fatalf("Unexpected message at chunk position %d", i)
+			}
+		} else {
+			// Final chunk should complete the message
+			if msg == nil {
+				t.Fatal("Expected message after final chunk")
+			}
+			finalMessage = msg
+		}
+	}
+	
+	// Verify the final message
+	systemMsg, ok := finalMessage.(*claudecode.SystemMessage)
+	if !ok {
+		t.Fatalf("Expected SystemMessage, got %T", finalMessage)
+	}
+	
+	if systemMsg.Subtype != "large_test" {
+		t.Errorf("Expected subtype 'large_test', got '%s'", systemMsg.Subtype)
+	}
+	
+	// Buffer should be reset
+	if parser.BufferSize() != 0 {
+		t.Errorf("Expected buffer to be reset after incremental large message, but size is %d", parser.BufferSize())
+	}
+	
+	// Test 3: Parser should still work efficiently after handling large messages
+	parser.Reset()
+	
+	for i := 0; i < 10; i++ {
+		smallJSON := fmt.Sprintf(`{"type": "system", "subtype": "post_large_%d"}`, i)
+		
+		msg, err := parser.processJSONLine(smallJSON)
+		if err != nil {
+			t.Fatalf("Parser failed on small message %d after large message handling: %v", i, err)
+		}
+		
+		if msg == nil {
+			t.Fatalf("Expected message for small JSON %d, got nil", i)
+		}
+	}
+}
+
+// TestLineBoundaryEdgeCases tests T070: Line Boundary Edge Cases
+func TestLineBoundaryEdgeCases(t *testing.T) {
+	parser := New()
+	
+	// Test 1: JSON with multiple embedded newlines creating complex line boundaries
+	complexJSON := `{"type": "user", "message": {"content": [
+		{"type": "text", "text": "Line 1\nLine 2\nLine 3"},
+		{
+			"type": "tool_use",
+			"id": "tool_123",
+			"name": "MultiLineTool",
+			"input": {
+				"script": "function test() {\n  console.log('hello');\n  return 'world';\n}"
+			}
+		}
+	]}}`
+	
+	messages, err := parser.ProcessLine(complexJSON)
+	if err != nil {
+		t.Fatalf("Failed to parse JSON with complex line boundaries: %v", err)
+	}
+	
+	if len(messages) != 1 {
+		t.Fatalf("Expected 1 message, got %d", len(messages))
+	}
+	
+	userMsg, ok := messages[0].(*claudecode.UserMessage)
+	if !ok {
+		t.Fatalf("Expected UserMessage, got %T", messages[0])
+	}
+	
+	blocks, ok := userMsg.Content.([]claudecode.ContentBlock)
+	if !ok {
+		t.Fatalf("Expected Content to be []ContentBlock, got %T", userMsg.Content)
+	}
+	
+	// Verify first text block preserves newlines
+	textBlock, ok := blocks[0].(*claudecode.TextBlock)
+	if !ok {
+		t.Fatalf("Expected first block to be TextBlock, got %T", blocks[0])
+	}
+	
+	expectedText := "Line 1\nLine 2\nLine 3"
+	if textBlock.Text != expectedText {
+		t.Errorf("Expected text with newlines '%s', got '%s'", expectedText, textBlock.Text)
+	}
+	
+	// Verify tool use block with multiline input
+	toolBlock, ok := blocks[1].(*claudecode.ToolUseBlock)
+	if !ok {
+		t.Fatalf("Expected second block to be ToolUseBlock, got %T", blocks[1])
+	}
+	
+	script, ok := toolBlock.Input["script"].(string)
+	if !ok {
+		t.Fatalf("Expected script to be string, got %T", toolBlock.Input["script"])
+	}
+	
+	expectedScript := "function test() {\n  console.log('hello');\n  return 'world';\n}"
+	if script != expectedScript {
+		t.Errorf("Expected script with newlines, got '%s'", script)
+	}
+	
+	// Test 2: Multiple JSON objects with complex line boundaries in single input
+	complexMultiJSON := `{"type": "system", "subtype": "start", "data": "first\nsecond"}
+	{"type": "user", "message": {"content": [{"type": "text", "text": "A\nB\nC"}]}}
+	{"type": "system", "subtype": "end", "multiline": "X\nY\nZ"}`
+	
+	messages, err = parser.ProcessLine(complexMultiJSON)
+	if err != nil {
+		t.Fatalf("Failed to parse multiple JSON with line boundaries: %v", err)
+	}
+	
+	if len(messages) != 3 {
+		t.Fatalf("Expected 3 messages, got %d", len(messages))
+	}
+	
+	// Verify first system message
+	systemMsg1, ok := messages[0].(*claudecode.SystemMessage)
+	if !ok {
+		t.Fatalf("Expected first message to be SystemMessage, got %T", messages[0])
+	}
+	
+	if systemMsg1.Subtype != "start" {
+		t.Errorf("Expected subtype 'start', got '%s'", systemMsg1.Subtype)
+	}
+	
+	// Verify user message in the middle
+	userMsg2, ok := messages[1].(*claudecode.UserMessage)
+	if !ok {
+		t.Fatalf("Expected second message to be UserMessage, got %T", messages[1])
+	}
+	
+	blocks2, ok := userMsg2.Content.([]claudecode.ContentBlock)
+	if !ok {
+		t.Fatalf("Expected Content to be []ContentBlock, got %T", userMsg2.Content)
+	}
+	
+	textBlock2, ok := blocks2[0].(*claudecode.TextBlock)
+	if !ok {
+		t.Fatalf("Expected TextBlock, got %T", blocks2[0])
+	}
+	
+	expectedText2 := "A\nB\nC"
+	if textBlock2.Text != expectedText2 {
+		t.Errorf("Expected text '%s', got '%s'", expectedText2, textBlock2.Text)
+	}
+	
+	// Verify final system message
+	systemMsg3, ok := messages[2].(*claudecode.SystemMessage)
+	if !ok {
+		t.Fatalf("Expected third message to be SystemMessage, got %T", messages[2])
+	}
+	
+	if systemMsg3.Subtype != "end" {
+		t.Errorf("Expected subtype 'end', got '%s'", systemMsg3.Subtype)
+	}
+	
+	// Test 3: JSON spanning multiple actual lines (fed through ProcessLine)
+	parser.Reset()
+	
+	// Simulate a JSON object that spans multiple "lines" as received from stream
+	jsonParts := []string{
+		`{"type": "assistant",`,
+		` "message": {`,
+		`   "content": [`,
+		`     {"type": "text", "text": "Multi\nLine\nResponse"},`,
+		`     {"type": "thinking", "thinking": "Step 1\nStep 2\nStep 3"}`,
+		`   ],`,
+		`   "model": "claude-3-5-sonnet-20241022"`,
+		` }`,
+		`}`,
+	}
+	
+	var finalMessage claudecode.Message
+	for i, part := range jsonParts {
+		messages, err := parser.ProcessLine(part)
+		if err != nil {
+			t.Fatalf("Error processing part %d: %v", i, err)
+		}
+		
+		if i < len(jsonParts)-1 {
+			// Intermediate parts should not produce messages (except last one)
+			if len(messages) != 0 {
+				t.Fatalf("Unexpected message at part %d", i)
+			}
+		} else {
+			// Final part should complete the message
+			if len(messages) != 1 {
+				t.Fatalf("Expected 1 message at final part, got %d", len(messages))
+			}
+			finalMessage = messages[0]
+		}
+	}
+	
+	// Verify the completed message
+	assistantMsg, ok := finalMessage.(*claudecode.AssistantMessage)
+	if !ok {
+		t.Fatalf("Expected AssistantMessage, got %T", finalMessage)
+	}
+	
+	if len(assistantMsg.Content) != 2 {
+		t.Fatalf("Expected 2 content blocks, got %d", len(assistantMsg.Content))
+	}
+	
+	// Verify text block preserves newlines
+	textBlock3, ok := assistantMsg.Content[0].(*claudecode.TextBlock)
+	if !ok {
+		t.Fatalf("Expected first block to be TextBlock, got %T", assistantMsg.Content[0])
+	}
+	
+	expectedText3 := "Multi\nLine\nResponse"
+	if textBlock3.Text != expectedText3 {
+		t.Errorf("Expected text '%s', got '%s'", expectedText3, textBlock3.Text)
+	}
+	
+	// Verify thinking block preserves newlines
+	thinkingBlock, ok := assistantMsg.Content[1].(*claudecode.ThinkingBlock)
+	if !ok {
+		t.Fatalf("Expected second block to be ThinkingBlock, got %T", assistantMsg.Content[1])
+	}
+	
+	expectedThinking := "Step 1\nStep 2\nStep 3"
+	if thinkingBlock.Thinking != expectedThinking {
+		t.Errorf("Expected thinking '%s', got '%s'", expectedThinking, thinkingBlock.Thinking)
+	}
+}
+
+// TestBufferSizeTracking tests T071: Buffer Size Tracking
+func TestBufferSizeTracking(t *testing.T) {
+	parser := New()
+	
+	// Test 1: Initial buffer size should be 0
+	if parser.BufferSize() != 0 {
+		t.Errorf("Expected initial buffer size 0, got %d", parser.BufferSize())
+	}
+	
+	// Test 2: Buffer size should increase as partial JSON is added
+	partialJSON := `{"type": "user"`
+	
+	msg, err := parser.processJSONLine(partialJSON)
+	if err != nil {
+		t.Fatalf("Unexpected error for partial JSON: %v", err)
+	}
+	
+	if msg != nil {
+		t.Fatal("Expected no message for partial JSON")
+	}
+	
+	expectedSize := len(partialJSON)
+	if parser.BufferSize() != expectedSize {
+		t.Errorf("Expected buffer size %d after partial JSON, got %d", expectedSize, parser.BufferSize())
+	}
+	
+	// Test 3: Buffer size should continue growing with more partial content
+	additionalPartial := `, "message": {"content"`
+	
+	msg, err = parser.processJSONLine(additionalPartial)
+	if err != nil {
+		t.Fatalf("Unexpected error for additional partial JSON: %v", err)
+	}
+	
+	if msg != nil {
+		t.Fatal("Expected no message for additional partial JSON")
+	}
+	
+	expectedSize = len(partialJSON + additionalPartial)
+	if parser.BufferSize() != expectedSize {
+		t.Errorf("Expected buffer size %d after additional partial, got %d", expectedSize, parser.BufferSize())
+	}
+	
+	// Test 4: Buffer size should reset to 0 after successful parse
+	completingJSON := `: [{"type": "text", "text": "hello"}]}}`
+	
+	msg, err = parser.processJSONLine(completingJSON)
+	if err != nil {
+		t.Fatalf("Failed to complete JSON: %v", err)
+	}
+	
+	if msg == nil {
+		t.Fatal("Expected message after completing JSON")
+	}
+	
+	if parser.BufferSize() != 0 {
+		t.Errorf("Expected buffer size 0 after successful parse, got %d", parser.BufferSize())
+	}
+	
+	// Test 5: Buffer size tracking with Reset() method
+	parser.Reset()
+	
+	if parser.BufferSize() != 0 {
+		t.Errorf("Expected buffer size 0 after Reset(), got %d", parser.BufferSize())
+	}
+	
+	// Add some content
+	testJSON := `{"type": "incomplete`
+	
+	msg, err = parser.processJSONLine(testJSON)
+	if err != nil {
+		t.Fatalf("Unexpected error for test JSON: %v", err)
+	}
+	
+	if msg != nil {
+		t.Fatal("Expected no message for incomplete JSON")
+	}
+	
+	if parser.BufferSize() != len(testJSON) {
+		t.Errorf("Expected buffer size %d, got %d", len(testJSON), parser.BufferSize())
+	}
+	
+	// Reset should clear it
+	parser.Reset()
+	
+	if parser.BufferSize() != 0 {
+		t.Errorf("Expected buffer size 0 after second Reset(), got %d", parser.BufferSize())
+	}
+	
+	// Test 6: Buffer size tracking with overflow error
+	parser.Reset()
+	
+	// Create a string that will exceed buffer limit
+	largeString := strings.Repeat("x", MaxBufferSize+100)
+	
+	_, err = parser.processJSONLine(largeString)
+	if err == nil {
+		t.Fatal("Expected error for buffer overflow")
+	}
+	
+	// Buffer should be reset to 0 after overflow error
+	if parser.BufferSize() != 0 {
+		t.Errorf("Expected buffer size 0 after overflow error, got %d", parser.BufferSize())
+	}
+	
+	// Test 7: Accurate size tracking with various character encodings
+	parser.Reset()
+	
+	unicodeJSON := `{"type": "user", "content": "Hello 🌍 世界"`
+	unicodeSize := len(unicodeJSON) // byte length, not rune length
+	
+	msg, err = parser.processJSONLine(unicodeJSON)
+	if err != nil {
+		t.Fatalf("Unexpected error for unicode JSON: %v", err)
+	}
+	
+	if msg != nil {
+		t.Fatal("Expected no message for incomplete unicode JSON")
+	}
+	
+	if parser.BufferSize() != unicodeSize {
+		t.Errorf("Expected buffer size %d for unicode content, got %d", unicodeSize, parser.BufferSize())
+	}
+	
+	// Test 8: Thread-safe buffer size tracking
+	parser.Reset()
+	
+	var wg sync.WaitGroup
+	const numGoroutines = 5
+	
+	// All goroutines will add to buffer concurrently
+	for i := 0; i < numGoroutines; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			
+			partialData := fmt.Sprintf(`{"part_%d": "data"`, id)
+			
+			// This will add to buffer but not complete JSON
+			_, err := parser.processJSONLine(partialData)
+			if err != nil {
+				t.Errorf("Goroutine %d: unexpected error: %v", id, err)
+			}
+		}(i)
+	}
+	
+	wg.Wait()
+	
+	// Buffer should contain all the partial data
+	finalSize := parser.BufferSize()
+	if finalSize == 0 {
+		t.Error("Expected buffer to contain data from all goroutines, got size 0")
+	}
+	
+	// Buffer should be consistent (no corruption from concurrent access)
+	if finalSize < 0 {
+		t.Errorf("Buffer size should not be negative, got %d", finalSize)
+	}
+}
+
+// TestJSONEscapeSequenceHandling tests T074: JSON Escape Sequence Handling
+func TestJSONEscapeSequenceHandling(t *testing.T) {
+	parser := New()
+	
+	// Test 1: Basic escape sequences in text content
+	escapedJSON := `{"type": "user", "message": {"content": [{"type": "text", "text": "Line1\nLine2\tTabbed\"Quoted\"\\Backslash"}]}}`
+	
+	messages, err := parser.ProcessLine(escapedJSON)
+	if err != nil {
+		t.Fatalf("Failed to parse JSON with basic escape sequences: %v", err)
+	}
+	
+	if len(messages) != 1 {
+		t.Fatalf("Expected 1 message, got %d", len(messages))
+	}
+	
+	userMsg, ok := messages[0].(*claudecode.UserMessage)
+	if !ok {
+		t.Fatalf("Expected UserMessage, got %T", messages[0])
+	}
+	
+	blocks, ok := userMsg.Content.([]claudecode.ContentBlock)
+	if !ok {
+		t.Fatalf("Expected Content to be []ContentBlock, got %T", userMsg.Content)
+	}
+	
+	textBlock, ok := blocks[0].(*claudecode.TextBlock)
+	if !ok {
+		t.Fatalf("Expected TextBlock, got %T", blocks[0])
+	}
+	
+	expectedText := "Line1\nLine2\tTabbed\"Quoted\"\\Backslash"
+	if textBlock.Text != expectedText {
+		t.Errorf("Expected text with escape sequences '%s', got '%s'", expectedText, textBlock.Text)
+	}
+	
+	// Test 2: Escape sequences in tool use input
+	toolEscapeJSON := `{"type": "user", "message": {"content": [{"type": "tool_use", "id": "tool_123", "name": "Process", "input": {"script": "if (condition) {\n  console.log(\"Hello\\nWorld\");\n  return \"test\\ttab\";\n}"}}]}}`
+	
+	messages, err = parser.ProcessLine(toolEscapeJSON)
+	if err != nil {
+		t.Fatalf("Failed to parse JSON with tool escape sequences: %v", err)
+	}
+	
+	userMsg2, ok := messages[0].(*claudecode.UserMessage)
+	if !ok {
+		t.Fatalf("Expected UserMessage, got %T", messages[0])
+	}
+	
+	blocks2, ok := userMsg2.Content.([]claudecode.ContentBlock)
+	if !ok {
+		t.Fatalf("Expected Content to be []ContentBlock, got %T", userMsg2.Content)
+	}
+	
+	toolBlock, ok := blocks2[0].(*claudecode.ToolUseBlock)
+	if !ok {
+		t.Fatalf("Expected ToolUseBlock, got %T", blocks2[0])
+	}
+	
+	script, ok := toolBlock.Input["script"].(string)
+	if !ok {
+		t.Fatalf("Expected script to be string, got %T", toolBlock.Input["script"])
+	}
+	
+	expectedScript := "if (condition) {\n  console.log(\"Hello\\nWorld\");\n  return \"test\\ttab\";\n}"
+	if script != expectedScript {
+		t.Errorf("Expected script with escape sequences, got '%s'", script)
+	}
+	
+	// Test 3: Complex escape sequences including unicode escapes
+	complexEscapeJSON := `{"type": "system", "subtype": "test", "data": "Unicode: \u00E9\u00F1\u00FC and escapes: \\n\\t\\r\\b\\f"}`
+	
+	messages, err = parser.ProcessLine(complexEscapeJSON)
+	if err != nil {
+		t.Fatalf("Failed to parse JSON with complex escape sequences: %v", err)
+	}
+	
+	systemMsg, ok := messages[0].(*claudecode.SystemMessage)
+	if !ok {
+		t.Fatalf("Expected SystemMessage, got %T", messages[0])
+	}
+	
+	dataValue, ok := systemMsg.Data["data"].(string)
+	if !ok {
+		t.Fatalf("Expected data to be string, got %T", systemMsg.Data["data"])
+	}
+	
+	expectedData := "Unicode: éñü and escapes: \\n\\t\\r\\b\\f"
+	if dataValue != expectedData {
+		t.Errorf("Expected data with unicode escapes '%s', got '%s'", expectedData, dataValue)
+	}
+	
+	// Test 4: Escape sequences in partial JSON (speculative parsing)
+	parser.Reset()
+	
+	partialEscapeJSON1 := `{"type": "user", "message": {"content": [{"type": "text", "text": "Start\nMiddle`
+	partialEscapeJSON2 := `\tEnd\"Quote"}]}}`
+	
+	// First part should not produce message
+	msg1, err := parser.processJSONLine(partialEscapeJSON1)
+	if err != nil {
+		t.Fatalf("Unexpected error for first partial escape JSON: %v", err)
+	}
+	
+	if msg1 != nil {
+		t.Fatal("Expected no message for first partial escape JSON")
+	}
+	
+	// Second part should complete the message
+	msg2, err := parser.processJSONLine(partialEscapeJSON2)
+	if err != nil {
+		t.Fatalf("Failed to complete escape JSON: %v", err)
+	}
+	
+	if msg2 == nil {
+		t.Fatal("Expected message after completing escape JSON")
+	}
+	
+	userMsg3, ok := msg2.(*claudecode.UserMessage)
+	if !ok {
+		t.Fatalf("Expected UserMessage, got %T", msg2)
+	}
+	
+	blocks3, ok := userMsg3.Content.([]claudecode.ContentBlock)
+	if !ok {
+		t.Fatalf("Expected Content to be []ContentBlock, got %T", userMsg3.Content)
+	}
+	
+	textBlock2, ok := blocks3[0].(*claudecode.TextBlock)
+	if !ok {
+		t.Fatalf("Expected TextBlock, got %T", blocks3[0])
+	}
+	
+	expectedText2 := "Start\nMiddle\tEnd\"Quote"
+	if textBlock2.Text != expectedText2 {
+		t.Errorf("Expected text with partial escape sequences '%s', got '%s'", expectedText2, textBlock2.Text)
+	}
+	
+	// Test 5: Malformed escape sequences should still parse (JSON parser handles it)
+	malformedEscapeJSON := `{"type": "system", "subtype": "test", "invalid_escape": "This has \\z invalid escape"}`
+	
+	messages, err = parser.ProcessLine(malformedEscapeJSON)
+	if err != nil {
+		t.Fatalf("Failed to parse JSON with malformed escape (Go's JSON parser should handle): %v", err)
+	}
+	
+	systemMsg2, ok := messages[0].(*claudecode.SystemMessage)
+	if !ok {
+		t.Fatalf("Expected SystemMessage, got %T", messages[0])
+	}
+	
+	invalidEscape, ok := systemMsg2.Data["invalid_escape"].(string)
+	if !ok {
+		t.Fatalf("Expected invalid_escape to be string, got %T", systemMsg2.Data["invalid_escape"])
+	}
+	
+	// Go's JSON parser will preserve the literal backslash for invalid escapes
+	expectedInvalid := "This has \\z invalid escape"
+	if invalidEscape != expectedInvalid {
+		t.Errorf("Expected malformed escape to be preserved '%s', got '%s'", expectedInvalid, invalidEscape)
+	}
+}
+
+// TestUnicodeStringHandling tests T075: Unicode String Handling
+func TestUnicodeStringHandling(t *testing.T) {
+	parser := New()
+	
+	// Test 1: Basic Unicode characters in text content
+	unicodeJSON := `{"type": "user", "message": {"content": [{"type": "text", "text": "Hello 世界! 🌍 Café naïve résumé"}]}}`
+	
+	messages, err := parser.ProcessLine(unicodeJSON)
+	if err != nil {
+		t.Fatalf("Failed to parse JSON with Unicode characters: %v", err)
+	}
+	
+	if len(messages) != 1 {
+		t.Fatalf("Expected 1 message, got %d", len(messages))
+	}
+	
+	userMsg, ok := messages[0].(*claudecode.UserMessage)
+	if !ok {
+		t.Fatalf("Expected UserMessage, got %T", messages[0])
+	}
+	
+	blocks, ok := userMsg.Content.([]claudecode.ContentBlock)
+	if !ok {
+		t.Fatalf("Expected Content to be []ContentBlock, got %T", userMsg.Content)
+	}
+	
+	textBlock, ok := blocks[0].(*claudecode.TextBlock)
+	if !ok {
+		t.Fatalf("Expected TextBlock, got %T", blocks[0])
+	}
+	
+	expectedText := "Hello 世界! 🌍 Café naïve résumé"
+	if textBlock.Text != expectedText {
+		t.Errorf("Expected Unicode text '%s', got '%s'", expectedText, textBlock.Text)
+	}
+	
+	// Test 2: Unicode in tool names and input
+	unicodeToolJSON := `{"type": "user", "message": {"content": [{"type": "tool_use", "id": "tool_123", "name": "处理文件", "input": {"文件名": "测试.txt", "内容": "包含中文的内容"}}]}}`
+	
+	messages, err = parser.ProcessLine(unicodeToolJSON)
+	if err != nil {
+		t.Fatalf("Failed to parse JSON with Unicode in tool data: %v", err)
+	}
+	
+	userMsg2, ok := messages[0].(*claudecode.UserMessage)
+	if !ok {
+		t.Fatalf("Expected UserMessage, got %T", messages[0])
+	}
+	
+	blocks2, ok := userMsg2.Content.([]claudecode.ContentBlock)
+	if !ok {
+		t.Fatalf("Expected Content to be []ContentBlock, got %T", userMsg2.Content)
+	}
+	
+	toolBlock, ok := blocks2[0].(*claudecode.ToolUseBlock)
+	if !ok {
+		t.Fatalf("Expected ToolUseBlock, got %T", blocks2[0])
+	}
+	
+	if toolBlock.Name != "处理文件" {
+		t.Errorf("Expected Unicode tool name '处理文件', got '%s'", toolBlock.Name)
+	}
+	
+	fileName, ok := toolBlock.Input["文件名"].(string)
+	if !ok || fileName != "测试.txt" {
+		t.Errorf("Expected Unicode input key with value '测试.txt', got %v", fileName)
+	}
+	
+	content, ok := toolBlock.Input["内容"].(string)
+	if !ok || content != "包含中文的内容" {
+		t.Errorf("Expected Unicode content '包含中文的内容', got %v", content)
+	}
+	
+	// Test 3: Mixed Unicode with escape sequences
+	mixedUnicodeJSON := `{"type": "system", "subtype": "test", "data": "Mixed: 🎉\n中文\t日本語\r한국어"}`
+	
+	messages, err = parser.ProcessLine(mixedUnicodeJSON)
+	if err != nil {
+		t.Fatalf("Failed to parse JSON with mixed Unicode and escapes: %v", err)
+	}
+	
+	systemMsg, ok := messages[0].(*claudecode.SystemMessage)
+	if !ok {
+		t.Fatalf("Expected SystemMessage, got %T", messages[0])
+	}
+	
+	dataValue, ok := systemMsg.Data["data"].(string)
+	if !ok {
+		t.Fatalf("Expected data to be string, got %T", systemMsg.Data["data"])
+	}
+	
+	expectedData := "Mixed: 🎉\n中文\t日本語\r한국어"
+	if dataValue != expectedData {
+		t.Errorf("Expected mixed Unicode data '%s', got '%s'", expectedData, dataValue)
+	}
+	
+	// Test 4: Unicode in partial JSON (speculative parsing)
+	parser.Reset()
+	
+	partialUnicode1 := `{"type": "user", "message": {"content": [{"type": "text", "text": "Start 🌟 中文`
+	partialUnicode2 := ` 继续 End 🏁"}]}}`
+	
+	// First part should not produce message
+	msg1, err := parser.processJSONLine(partialUnicode1)
+	if err != nil {
+		t.Fatalf("Unexpected error for first partial Unicode JSON: %v", err)
+	}
+	
+	if msg1 != nil {
+		t.Fatal("Expected no message for first partial Unicode JSON")
+	}
+	
+	// Second part should complete the message
+	msg2, err := parser.processJSONLine(partialUnicode2)
+	if err != nil {
+		t.Fatalf("Failed to complete Unicode JSON: %v", err)
+	}
+	
+	if msg2 == nil {
+		t.Fatal("Expected message after completing Unicode JSON")
+	}
+	
+	userMsg3, ok := msg2.(*claudecode.UserMessage)
+	if !ok {
+		t.Fatalf("Expected UserMessage, got %T", msg2)
+	}
+	
+	blocks3, ok := userMsg3.Content.([]claudecode.ContentBlock)
+	if !ok {
+		t.Fatalf("Expected Content to be []ContentBlock, got %T", userMsg3.Content)
+	}
+	
+	textBlock2, ok := blocks3[0].(*claudecode.TextBlock)
+	if !ok {
+		t.Fatalf("Expected TextBlock, got %T", blocks3[0])
+	}
+	
+	expectedText2 := "Start 🌟 中文 继续 End 🏁"
+	if textBlock2.Text != expectedText2 {
+		t.Errorf("Expected partial Unicode text '%s', got '%s'", expectedText2, textBlock2.Text)
+	}
+	
+	// Test 5: Unicode buffer size calculation (bytes vs runes)
+	parser.Reset()
+	
+	// Test that buffer size is calculated in bytes, not runes
+	unicodePartial := "Hello 世界" // This is more bytes than runes due to UTF-8 encoding
+	unicodeSizeBytes := len(unicodePartial)
+	unicodeSizeRunes := len([]rune(unicodePartial))
+	
+	// Should be different - bytes > runes for Unicode
+	if unicodeSizeBytes <= unicodeSizeRunes {
+		t.Errorf("Test setup error: expected byte length (%d) > rune length (%d)", unicodeSizeBytes, unicodeSizeRunes)
+	}
+	
+	incompleteUnicodeJSON := fmt.Sprintf(`{"type": "user", "content": "%s`, unicodePartial)
+	
+	msg, err := parser.processJSONLine(incompleteUnicodeJSON)
+	if err != nil {
+		t.Fatalf("Unexpected error for incomplete Unicode JSON: %v", err)
+	}
+	
+	if msg != nil {
+		t.Fatal("Expected no message for incomplete Unicode JSON")
+	}
+	
+	// Buffer size should be in bytes, not runes
+	expectedBufferSize := len(incompleteUnicodeJSON)
+	if parser.BufferSize() != expectedBufferSize {
+		t.Errorf("Expected buffer size %d bytes, got %d", expectedBufferSize, parser.BufferSize())
+	}
+	
+	// Test 6: Various Unicode ranges
+	parser.Reset()
+	
+	variousUnicodeJSON := `{"type": "system", "subtype": "unicode_test", "data": {
+		"latin": "àáâãäå",
+		"greek": "αβγδε",
+		"cyrillic": "абвгд",
+		"cjk": "你好世界",
+		"emoji": "😀😃😄😁",
+		"symbols": "∞∑∫∂∆",
+		"arrows": "←↑→↓↔"
+	}}`
+	
+	messages, err = parser.ProcessLine(variousUnicodeJSON)
+	if err != nil {
+		t.Fatalf("Failed to parse JSON with various Unicode ranges: %v", err)
+	}
+	
+	systemMsg2, ok := messages[0].(*claudecode.SystemMessage)
+	if !ok {
+		t.Fatalf("Expected SystemMessage, got %T", messages[0])
+	}
+	
+	data, ok := systemMsg2.Data["data"].(map[string]any)
+	if !ok {
+		t.Fatalf("Expected data to be map, got %T", systemMsg2.Data["data"])
+	}
+	
+	// Verify each Unicode range was preserved
+	testCases := map[string]string{
+		"latin":     "àáâãäå",
+		"greek":     "αβγδε",
+		"cyrillic":  "абвгд",
+		"cjk":       "你好世界",
+		"emoji":     "😀😃😄😁",
+		"symbols":   "∞∑∫∂∆",
+		"arrows":    "←↑→↓↔",
+	}
+	
+	for key, expected := range testCases {
+		actual, ok := data[key].(string)
+		if !ok {
+			t.Errorf("Expected %s to be string, got %T", key, data[key])
+			continue
+		}
+		if actual != expected {
+			t.Errorf("Unicode range %s: expected '%s', got '%s'", key, expected, actual)
+		}
+	}
+}
+
+// TestEmptyMessageHandling tests T076: Empty Message Handling
+func TestEmptyMessageHandling(t *testing.T) {
+	parser := New()
+	
+	// Test 1: Empty line should return no messages
+	messages, err := parser.ProcessLine("")
+	if err != nil {
+		t.Fatalf("Unexpected error for empty line: %v", err)
+	}
+	
+	if len(messages) != 0 {
+		t.Fatalf("Expected 0 messages for empty line, got %d", len(messages))
+	}
+	
+	// Test 2: Whitespace-only line should return no messages
+	whitespaceLines := []string{
+		"   ",
+		"\t",
+		"\n",
+		" \t \n ",
+		"\r\n",
+	}
+	
+	for i, line := range whitespaceLines {
+		messages, err := parser.ProcessLine(line)
+		if err != nil {
+			t.Fatalf("Unexpected error for whitespace line %d: %v", i, err)
+		}
+		
+		if len(messages) != 0 {
+			t.Errorf("Whitespace line %d: expected 0 messages, got %d", i, len(messages))
+		}
+	}
+	
+	// Test 3: Mixed empty and valid lines
+	mixedInput := `
+	
+	{"type": "system", "subtype": "start"}
+	
+	
+	{"type": "user", "message": {"content": [{"type": "text", "text": "Hello"}]}}
+	
+	   
+	{"type": "system", "subtype": "end"}
+	
+	`
+	
+	messages, err = parser.ProcessLine(mixedInput)
+	if err != nil {
+		t.Fatalf("Failed to parse mixed empty and valid lines: %v", err)
+	}
+	
+	// Should only get the 3 valid messages, ignoring empty lines
+	if len(messages) != 3 {
+		t.Fatalf("Expected 3 messages from mixed input, got %d", len(messages))
+	}
+	
+	// Test 4: Empty lines in middle of JSON should be handled (as part of split logic)
+	multilineInput := `{"type": "system", "subtype": "test1"}
+
+{"type": "system", "subtype": "test2"}`
+	
+	messages, err = parser.ProcessLine(multilineInput)
+	if err != nil {
+		t.Fatalf("Failed to parse multiline with empty line: %v", err)
+	}
+	
+	if len(messages) != 2 {
+		t.Fatalf("Expected 2 messages from multiline input, got %d", len(messages))
+	}
+	
+	systemMsg1, ok := messages[0].(*claudecode.SystemMessage)
+	if !ok || systemMsg1.Subtype != "test1" {
+		t.Errorf("Expected first message to be SystemMessage with subtype 'test1'")
+	}
+	
+	systemMsg2, ok := messages[1].(*claudecode.SystemMessage)
+	if !ok || systemMsg2.Subtype != "test2" {
+		t.Errorf("Expected second message to be SystemMessage with subtype 'test2'")
+	}
+	
+	// Test 5: Empty message followed by partial JSON
+	parser.Reset()
+	
+	// First process an empty line
+	messages, err = parser.ProcessLine("   ")
+	if err != nil {
+		t.Fatalf("Unexpected error for empty line: %v", err)
+	}
+	
+	if len(messages) != 0 {
+		t.Fatal("Expected no messages for empty line")
+	}
+	
+	// Buffer should still be empty
+	if parser.BufferSize() != 0 {
+		t.Errorf("Expected buffer size 0 after empty line, got %d", parser.BufferSize())
+	}
+	
+	// Then process a partial JSON
+	partialJSON := `{"type": "user"`
+	msg, err := parser.processJSONLine(partialJSON)
+	if err != nil {
+		t.Fatalf("Unexpected error for partial JSON: %v", err)
+	}
+	
+	if msg != nil {
+		t.Fatal("Expected no message for partial JSON")
+	}
+	
+	// Buffer should contain the partial JSON
+	if parser.BufferSize() != len(partialJSON) {
+		t.Errorf("Expected buffer size %d after partial JSON, got %d", len(partialJSON), parser.BufferSize())
 	}
 }
 

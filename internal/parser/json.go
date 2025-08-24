@@ -51,8 +51,8 @@ func (p *Parser) ProcessLine(line string) ([]claudecode.Message, error) {
 			continue
 		}
 
-		// Process each JSON line with speculative parsing
-		msg, err := p.processJSONLine(jsonLine)
+		// Process each JSON line with speculative parsing (unlocked version)
+		msg, err := p.processJSONLineUnlocked(jsonLine)
 		if err != nil {
 			return messages, err
 		}
@@ -106,6 +106,15 @@ func (p *Parser) BufferSize() int {
 // processJSONLine attempts to parse accumulated buffer as JSON using speculative parsing.
 // This is the core of the speculative parsing strategy from the Python SDK.
 func (p *Parser) processJSONLine(jsonLine string) (claudecode.Message, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	
+	return p.processJSONLineUnlocked(jsonLine)
+}
+
+// processJSONLineUnlocked is the unlocked version of processJSONLine.
+// Must be called with mutex already held.
+func (p *Parser) processJSONLineUnlocked(jsonLine string) (claudecode.Message, error) {
 	p.buffer.WriteString(jsonLine)
 
 	// Check buffer size limit
