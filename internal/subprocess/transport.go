@@ -2,60 +2,344 @@
 package subprocess
 
 import (
+	"bufio"
 	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"os"
 	"os/exec"
+	"strings"
+	"sync"
+	"syscall"
+	"time"
+
+	claudecode "github.com/severity1/claude-code-sdk-go"
+	"github.com/severity1/claude-code-sdk-go/internal/cli"
+	"github.com/severity1/claude-code-sdk-go/internal/parser"
 )
 
 // Transport implements the Transport interface using subprocess communication.
 type Transport struct {
+	// Process management
 	cmd        *exec.Cmd
 	cliPath    string
-	options    interface{} // TODO: Import proper Options type
+	options    *claudecode.Options
 	closeStdin bool
-	connected  bool
+
+	// Connection state
+	connected bool
+	mu        sync.RWMutex
+
+	// I/O streams
+	stdin  io.WriteCloser
+	stdout io.ReadCloser
+	stderr *os.File
+
+	// Message parsing
+	parser *parser.Parser
+
+	// Channels for communication
+	msgChan chan claudecode.Message
+	errChan chan error
+
+	// Control and cleanup
+	ctx    context.Context
+	cancel context.CancelFunc
+	wg     sync.WaitGroup
 }
 
 // New creates a new subprocess transport.
-func New(cliPath string, options interface{}, closeStdin bool) *Transport {
+func New(cliPath string, options *claudecode.Options, closeStdin bool) *Transport {
 	return &Transport{
 		cliPath:    cliPath,
 		options:    options,
 		closeStdin: closeStdin,
+		parser:     parser.New(),
 	}
+}
+
+// IsConnected returns whether the transport is currently connected.
+func (t *Transport) IsConnected() bool {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	return t.connected && t.cmd != nil && t.cmd.Process != nil
 }
 
 // Connect starts the Claude CLI subprocess.
 func (t *Transport) Connect(ctx context.Context) error {
-	// TODO: Implement subprocess connection logic
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	if t.connected {
+		return fmt.Errorf("transport already connected")
+	}
+
+	// Build command with all options
+	args := cli.BuildCommand(t.cliPath, t.options, t.closeStdin)
+	t.cmd = exec.CommandContext(ctx, args[0], args[1:]...)
+
+	// Set up environment
+	t.cmd.Env = append(os.Environ(), "CLAUDE_CODE_ENTRYPOINT=sdk-go")
+
+	// Set working directory if specified
+	if t.options != nil && t.options.Cwd != nil {
+		if err := cli.ValidateWorkingDirectory(*t.options.Cwd); err != nil {
+			return err
+		}
+		t.cmd.Dir = *t.options.Cwd
+	}
+
+	// Set up I/O pipes
+	var err error
+	t.stdin, err = t.cmd.StdinPipe()
+	if err != nil {
+		return fmt.Errorf("failed to create stdin pipe: %w", err)
+	}
+
+	t.stdout, err = t.cmd.StdoutPipe()
+	if err != nil {
+		return fmt.Errorf("failed to create stdout pipe: %w", err)
+	}
+
+	// Isolate stderr using temporary file to prevent deadlocks
+	t.stderr, err = os.CreateTemp("", "claude_stderr_*.log")
+	if err != nil {
+		return fmt.Errorf("failed to create stderr file: %w", err)
+	}
+	t.cmd.Stderr = t.stderr
+
+	// Start the process
+	if err := t.cmd.Start(); err != nil {
+		t.cleanup()
+		return claudecode.NewConnectionError(
+			fmt.Sprintf("failed to start Claude CLI: %v", err),
+			err,
+		)
+	}
+
+	// Set up context for goroutine management
+	t.ctx, t.cancel = context.WithCancel(ctx)
+
+	// Initialize channels
+	t.msgChan = make(chan claudecode.Message, 10)
+	t.errChan = make(chan error, 10)
+
+	// Start I/O handling goroutines
+	t.wg.Add(1)
+	go t.handleStdout()
+
+	// Close stdin for one-shot mode
+	if t.closeStdin {
+		t.stdin.Close()
+		t.stdin = nil
+	}
+
 	t.connected = true
 	return nil
 }
 
 // SendMessage sends a message to the CLI subprocess.
-func (t *Transport) SendMessage(ctx context.Context, message interface{}) error {
-	// TODO: Implement message sending logic
+func (t *Transport) SendMessage(ctx context.Context, message claudecode.StreamMessage) error {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+
+	if !t.connected || t.stdin == nil {
+		return fmt.Errorf("transport not connected or stdin closed")
+	}
+
+	// Check context cancellation
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+
+	// Serialize message to JSON
+	data, err := json.Marshal(message)
+	if err != nil {
+		return fmt.Errorf("failed to marshal message: %w", err)
+	}
+
+	// Send with newline
+	_, err = t.stdin.Write(append(data, '\n'))
+	if err != nil {
+		return fmt.Errorf("failed to write message: %w", err)
+	}
+
 	return nil
 }
 
 // ReceiveMessages returns channels for receiving messages and errors.
-func (t *Transport) ReceiveMessages(ctx context.Context) (<-chan interface{}, <-chan error) {
-	// TODO: Implement message receiving logic
-	msgChan := make(chan interface{})
-	errChan := make(chan error)
-	close(msgChan)
-	close(errChan)
-	return msgChan, errChan
+func (t *Transport) ReceiveMessages(ctx context.Context) (<-chan claudecode.Message, <-chan error) {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+
+	if !t.connected {
+		// Return closed channels if not connected
+		msgChan := make(chan claudecode.Message)
+		errChan := make(chan error)
+		close(msgChan)
+		close(errChan)
+		return msgChan, errChan
+	}
+
+	return t.msgChan, t.errChan
 }
 
 // Interrupt sends an interrupt signal to the subprocess.
 func (t *Transport) Interrupt(ctx context.Context) error {
-	// TODO: Implement interrupt logic
-	return nil
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+
+	if !t.connected || t.cmd == nil || t.cmd.Process == nil {
+		return fmt.Errorf("process not running")
+	}
+
+	// Send interrupt signal (platform-specific)
+	return t.cmd.Process.Signal(os.Interrupt)
 }
 
 // Close terminates the subprocess connection.
 func (t *Transport) Close() error {
-	// TODO: Implement cleanup logic
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	if !t.connected {
+		return nil // Already closed
+	}
+
 	t.connected = false
-	return nil
+
+	// Cancel context to stop goroutines
+	if t.cancel != nil {
+		t.cancel()
+	}
+
+	// Close stdin if open
+	if t.stdin != nil {
+		t.stdin.Close()
+		t.stdin = nil
+	}
+
+	// Wait for goroutines to finish
+	t.wg.Wait()
+
+	// Terminate process with 5-second timeout
+	var err error
+	if t.cmd != nil && t.cmd.Process != nil {
+		err = t.terminateProcess()
+	}
+
+	// Cleanup resources
+	t.cleanup()
+
+	return err
+}
+
+// handleStdout processes stdout in a separate goroutine
+func (t *Transport) handleStdout() {
+	defer t.wg.Done()
+	defer close(t.msgChan)
+	defer close(t.errChan)
+
+	scanner := bufio.NewScanner(t.stdout)
+
+	for scanner.Scan() {
+		select {
+		case <-t.ctx.Done():
+			return
+		default:
+		}
+
+		line := scanner.Text()
+		if line == "" {
+			continue
+		}
+
+		// Parse line with the parser
+		messages, err := t.parser.ProcessLine(line)
+		if err != nil {
+			select {
+			case t.errChan <- err:
+			case <-t.ctx.Done():
+				return
+			}
+			continue
+		}
+
+		// Send parsed messages
+		for _, msg := range messages {
+			if msg != nil {
+				select {
+				case t.msgChan <- msg:
+				case <-t.ctx.Done():
+					return
+				}
+			}
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		select {
+		case t.errChan <- fmt.Errorf("stdout scanner error: %w", err):
+		case <-t.ctx.Done():
+		}
+	}
+}
+
+// terminateProcess implements the 5-second SIGTERM → SIGKILL sequence
+func (t *Transport) terminateProcess() error {
+	if t.cmd == nil || t.cmd.Process == nil {
+		return nil
+	}
+
+	// Send SIGTERM
+	if err := t.cmd.Process.Signal(syscall.SIGTERM); err != nil {
+		// If SIGTERM fails, try SIGKILL immediately
+		t.cmd.Process.Kill()
+		return nil // Don't return error for expected termination
+	}
+
+	// Wait exactly 5 seconds
+	done := make(chan error, 1)
+	go func() {
+		done <- t.cmd.Wait()
+	}()
+
+	select {
+	case err := <-done:
+		// Normal termination or expected signals are not errors
+		if err != nil {
+			// Check if it's an expected exit signal
+			if strings.Contains(err.Error(), "signal:") {
+				return nil // Expected signal termination
+			}
+		}
+		return err
+	case <-time.After(5 * time.Second):
+		// Force kill after 5 seconds
+		if killErr := t.cmd.Process.Kill(); killErr != nil {
+			return killErr
+		}
+		<-done // Wait for the process to actually exit
+		return nil
+	}
+}
+
+// cleanup cleans up all resources
+func (t *Transport) cleanup() {
+	if t.stdout != nil {
+		t.stdout.Close()
+		t.stdout = nil
+	}
+
+	if t.stderr != nil {
+		t.stderr.Close()
+		os.Remove(t.stderr.Name()) // Clean up temp file
+		t.stderr = nil
+	}
+
+	// Reset state
+	t.cmd = nil
 }

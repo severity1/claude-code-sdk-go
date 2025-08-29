@@ -108,7 +108,7 @@ func (p *Parser) BufferSize() int {
 func (p *Parser) processJSONLine(jsonLine string) (claudecode.Message, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	
+
 	return p.processJSONLineUnlocked(jsonLine)
 }
 

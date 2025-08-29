@@ -2,7 +2,7 @@
 
 Go SDK for programmatic interaction with Claude Code CLI. Provides streaming query capabilities with 100% API parity to the [Python SDK](https://docs.anthropic.com/en/docs/claude-code/sdk).
 
-**🚧 Early Development**: 14/181 tasks complete (8%). API may change during development.
+**🚧 Active Development**: Core infrastructure complete, APIs in development.
 
 ## Installation
 
@@ -50,12 +50,16 @@ func main() {
 }
 ```
 
-## Development Progress
+## Development Status
 
-Following Test-Driven Development (TDD) methodology with [Python SDK](https://docs.anthropic.com/en/docs/claude-code/sdk) as reference:
+Built using Test-Driven Development (TDD) methodology with [Python SDK](https://docs.anthropic.com/en/docs/claude-code/sdk) as reference.
 
-- **Phase 1**: Foundation Types & Errors (14/34 tasks - 41%)
-- **Overall**: 14/181 tasks complete (8%)
+**Core Infrastructure Complete:**
+- ✅ Type system with full message and content block support
+- ✅ Comprehensive error handling with structured error types  
+- ✅ JSON message parsing and validation
+- ✅ CLI discovery and subprocess transport
+- 🚧 Query and Client APIs (in development)
 
 See [TDD_IMPLEMENTATION_TASKS.md](TDD_IMPLEMENTATION_TASKS.md) for detailed progress tracking.
 
