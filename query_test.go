@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 )
@@ -225,8 +226,8 @@ func TestQueryStreamInput(t *testing.T) {
 	}
 
 	// Verify the transport received both messages
-	if len(transport.receivedMessages) != 2 {
-		t.Errorf("Expected transport to receive 2 messages, got %d", len(transport.receivedMessages))
+	if transport.ReceivedMessageCount() != 2 {
+		t.Errorf("Expected transport to receive 2 messages, got %d", transport.ReceivedMessageCount())
 	}
 }
 
@@ -296,6 +297,7 @@ func TestQueryStreamResourceCleanup(t *testing.T) {
 
 // mockStreamTransport implements Transport interface for stream testing
 type mockStreamTransport struct {
+	mu               sync.RWMutex
 	connected        bool
 	msgChan          chan Message
 	errChan          chan error
@@ -304,6 +306,9 @@ type mockStreamTransport struct {
 }
 
 func (m *mockStreamTransport) Connect(ctx context.Context) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	
 	m.connected = true
 	m.msgChan = make(chan Message, 10)
 	m.errChan = make(chan error, 10)
@@ -332,6 +337,9 @@ func (m *mockStreamTransport) Connect(ctx context.Context) error {
 }
 
 func (m *mockStreamTransport) SendMessage(ctx context.Context, message StreamMessage) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	
 	if !m.connected {
 		return fmt.Errorf("not connected")
 	}
@@ -341,6 +349,9 @@ func (m *mockStreamTransport) SendMessage(ctx context.Context, message StreamMes
 }
 
 func (m *mockStreamTransport) ReceiveMessages(ctx context.Context) (<-chan Message, <-chan error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	
 	return m.msgChan, m.errChan
 }
 
@@ -349,8 +360,18 @@ func (m *mockStreamTransport) Interrupt(ctx context.Context) error {
 }
 
 func (m *mockStreamTransport) Close() error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	
 	m.connected = false
 	return nil
+}
+
+func (m *mockStreamTransport) ReceivedMessageCount() int {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	
+	return len(m.receivedMessages)
 }
 
 // Test transport error handling during query
@@ -1173,7 +1194,7 @@ func TestQueryContextCancellation(t *testing.T) {
 		time.Sleep(50 * time.Millisecond)
 		
 		// Verify transport received the context cancellation
-		if !transport.contextCancelled {
+		if !transport.IsContextCancelled() {
 			t.Error("Expected transport to detect context cancellation")
 		}
 	})
@@ -1266,6 +1287,7 @@ func (s *slowTransport) Close() error {
 
 // contextAwareTransport tracks context cancellation
 type contextAwareTransport struct {
+	mu                sync.RWMutex
 	connected         bool
 	contextCancelled  bool
 	msgChan           chan Message
@@ -1273,9 +1295,11 @@ type contextAwareTransport struct {
 }
 
 func (c *contextAwareTransport) Connect(ctx context.Context) error {
+	c.mu.Lock()
 	c.connected = true
 	c.msgChan = make(chan Message, 1)
 	c.errChan = make(chan error, 1)
+	c.mu.Unlock()
 
 	go func() {
 		defer close(c.msgChan)
@@ -1285,7 +1309,9 @@ func (c *contextAwareTransport) Connect(ctx context.Context) error {
 		case <-time.After(100 * time.Millisecond):
 			// This shouldn't happen in our test
 		case <-ctx.Done():
+			c.mu.Lock()
 			c.contextCancelled = true
+			c.mu.Unlock()
 			c.errChan <- ctx.Err()
 		}
 	}()
@@ -1296,7 +1322,9 @@ func (c *contextAwareTransport) Connect(ctx context.Context) error {
 func (c *contextAwareTransport) SendMessage(ctx context.Context, message StreamMessage) error {
 	select {
 	case <-ctx.Done():
+		c.mu.Lock()
 		c.contextCancelled = true
+		c.mu.Unlock()
 		return ctx.Err()
 	default:
 		return nil
@@ -1304,6 +1332,9 @@ func (c *contextAwareTransport) SendMessage(ctx context.Context, message StreamM
 }
 
 func (c *contextAwareTransport) ReceiveMessages(ctx context.Context) (<-chan Message, <-chan error) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	
 	return c.msgChan, c.errChan
 }
 
@@ -1312,8 +1343,18 @@ func (c *contextAwareTransport) Interrupt(ctx context.Context) error {
 }
 
 func (c *contextAwareTransport) Close() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	
 	c.connected = false
 	return nil
+}
+
+func (c *contextAwareTransport) IsContextCancelled() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	
+	return c.contextCancelled
 }
 
 // Helper function to check if an error is or contains a specific context error

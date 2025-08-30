@@ -3,6 +3,7 @@ package claudecode
 import (
 	"context"
 	"fmt"
+	"sync"
 )
 
 // InternalClient handles the internal logic for query and client operations
@@ -61,13 +62,18 @@ type queryIterator struct {
 	started   bool
 	msgChan   <-chan Message
 	errChan   <-chan error
+	mu        sync.RWMutex
 	closed    bool
+	closeOnce sync.Once
 }
 
 func (qi *queryIterator) Next(ctx context.Context) (Message, error) {
+	qi.mu.RLock()
 	if qi.closed {
+		qi.mu.RUnlock()
 		return nil, ErrNoMoreMessages
 	}
+	qi.mu.RUnlock()
 
 	if !qi.started {
 		// Start the transport and send the query
@@ -81,25 +87,36 @@ func (qi *queryIterator) Next(ctx context.Context) (Message, error) {
 	select {
 	case msg, ok := <-qi.msgChan:
 		if !ok {
+			qi.mu.Lock()
 			qi.closed = true
+			qi.mu.Unlock()
 			return nil, ErrNoMoreMessages
 		}
 		return msg, nil
 	case err := <-qi.errChan:
+		qi.mu.Lock()
 		qi.closed = true
+		qi.mu.Unlock()
 		return nil, err
 	case <-ctx.Done():
+		qi.mu.Lock()
 		qi.closed = true
+		qi.mu.Unlock()
 		return nil, ctx.Err()
 	}
 }
 
 func (qi *queryIterator) Close() error {
-	qi.closed = true
-	if qi.transport != nil {
-		return qi.transport.Close()
-	}
-	return nil
+	var err error
+	qi.closeOnce.Do(func() {
+		qi.mu.Lock()
+		qi.closed = true
+		qi.mu.Unlock()
+		if qi.transport != nil {
+			err = qi.transport.Close()
+		}
+	})
+	return err
 }
 
 func (qi *queryIterator) start() error {
@@ -136,13 +153,18 @@ type streamIterator struct {
 	started   bool
 	msgChan   <-chan Message
 	errChan   <-chan error
+	mu        sync.RWMutex
 	closed    bool
+	closeOnce sync.Once
 }
 
 func (si *streamIterator) Next(ctx context.Context) (Message, error) {
+	si.mu.RLock()
 	if si.closed {
+		si.mu.RUnlock()
 		return nil, ErrNoMoreMessages
 	}
+	si.mu.RUnlock()
 
 	if !si.started {
 		// Start the transport
@@ -156,25 +178,36 @@ func (si *streamIterator) Next(ctx context.Context) (Message, error) {
 	select {
 	case msg, ok := <-si.msgChan:
 		if !ok {
+			si.mu.Lock()
 			si.closed = true
+			si.mu.Unlock()
 			return nil, ErrNoMoreMessages
 		}
 		return msg, nil
 	case err := <-si.errChan:
+		si.mu.Lock()
 		si.closed = true
+		si.mu.Unlock()
 		return nil, err
 	case <-ctx.Done():
+		si.mu.Lock()
 		si.closed = true
+		si.mu.Unlock()
 		return nil, ctx.Err()
 	}
 }
 
 func (si *streamIterator) Close() error {
-	si.closed = true
-	if si.transport != nil {
-		return si.transport.Close()
-	}
-	return nil
+	var err error
+	si.closeOnce.Do(func() {
+		si.mu.Lock()
+		si.closed = true
+		si.mu.Unlock()
+		if si.transport != nil {
+			err = si.transport.Close()
+		}
+	})
+	return err
 }
 
 func (si *streamIterator) start() error {
@@ -192,7 +225,7 @@ func (si *streamIterator) start() error {
 	go func() {
 		defer func() {
 			// Close the transport when we're done sending messages
-			si.transport.Close()
+			si.Close()
 		}()
 
 		for {
