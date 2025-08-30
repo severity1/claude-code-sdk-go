@@ -59,7 +59,7 @@ Built using Test-Driven Development (TDD) methodology with [Python SDK](https://
 - ✅ Comprehensive error handling with structured error types  
 - ✅ JSON message parsing and validation
 - ✅ CLI discovery and subprocess transport
-- 🚧 Query and Client APIs (in development)
+- 🚧 Query and Client APIs (core features complete, advanced features in development)
 
 See [TDD_IMPLEMENTATION_TASKS.md](TDD_IMPLEMENTATION_TASKS.md) for detailed progress tracking.
 

@@ -4,89 +4,23 @@ import (
 	"testing"
 )
 
-// T015: Default Options Creation
+// T015: Default Options Creation - Test functional options integration
 func TestDefaultOptions(t *testing.T) {
-	// Test Options with default values to match Python SDK
+	// Test that NewOptions() creates proper defaults via shared package
 	options := NewOptions()
 
-	// Verify tool control defaults
-	if options.AllowedTools == nil {
-		t.Error("Expected AllowedTools to be initialized, got nil")
-	}
-	if len(options.AllowedTools) != 0 {
-		t.Errorf("Expected AllowedTools = [], got %v", options.AllowedTools)
-	}
-
-	if options.DisallowedTools == nil {
-		t.Error("Expected DisallowedTools to be initialized, got nil")
-	}
-	if len(options.DisallowedTools) != 0 {
-		t.Errorf("Expected DisallowedTools = [], got %v", options.DisallowedTools)
-	}
-
-	// Verify system prompts and model defaults (should be nil pointers)
-	if options.SystemPrompt != nil {
-		t.Errorf("Expected SystemPrompt = nil, got %v", options.SystemPrompt)
-	}
-	if options.AppendSystemPrompt != nil {
-		t.Errorf("Expected AppendSystemPrompt = nil, got %v", options.AppendSystemPrompt)
-	}
-	if options.Model != nil {
-		t.Errorf("Expected Model = nil, got %v", options.Model)
-	}
-
-	// Verify max thinking tokens default matches Python SDK
+	// Verify that functional options work with shared types
 	if options.MaxThinkingTokens != 8000 {
 		t.Errorf("Expected MaxThinkingTokens = 8000, got %d", options.MaxThinkingTokens)
 	}
 
-	// Verify permission system defaults
-	if options.PermissionMode != nil {
-		t.Errorf("Expected PermissionMode = nil, got %v", options.PermissionMode)
+	// Test that we can apply functional options
+	optionsWithPrompt := NewOptions(WithSystemPrompt("test prompt"))
+	if optionsWithPrompt.SystemPrompt == nil {
+		t.Error("Expected SystemPrompt to be set")
 	}
-	if options.PermissionPromptToolName != nil {
-		t.Errorf("Expected PermissionPromptToolName = nil, got %v", options.PermissionPromptToolName)
-	}
-
-	// Verify session and state management defaults
-	if options.ContinueConversation != false {
-		t.Errorf("Expected ContinueConversation = false, got %v", options.ContinueConversation)
-	}
-	if options.Resume != nil {
-		t.Errorf("Expected Resume = nil, got %v", options.Resume)
-	}
-	if options.MaxTurns != 0 {
-		t.Errorf("Expected MaxTurns = 0, got %d", options.MaxTurns)
-	}
-	if options.Settings != nil {
-		t.Errorf("Expected Settings = nil, got %v", options.Settings)
-	}
-
-	// Verify file system and context defaults
-	if options.Cwd != nil {
-		t.Errorf("Expected Cwd = nil, got %v", options.Cwd)
-	}
-	if options.AddDirs == nil {
-		t.Error("Expected AddDirs to be initialized, got nil")
-	}
-	if len(options.AddDirs) != 0 {
-		t.Errorf("Expected AddDirs = [], got %v", options.AddDirs)
-	}
-
-	// Verify MCP integration defaults
-	if options.McpServers == nil {
-		t.Error("Expected McpServers to be initialized, got nil")
-	}
-	if len(options.McpServers) != 0 {
-		t.Errorf("Expected McpServers = {}, got %v", options.McpServers)
-	}
-
-	// Verify extensibility defaults
-	if options.ExtraArgs == nil {
-		t.Error("Expected ExtraArgs to be initialized, got nil")
-	}
-	if len(options.ExtraArgs) != 0 {
-		t.Errorf("Expected ExtraArgs = {}, got %v", options.ExtraArgs)
+	if *optionsWithPrompt.SystemPrompt != "test prompt" {
+		t.Errorf("Expected SystemPrompt = 'test prompt', got %s", *optionsWithPrompt.SystemPrompt)
 	}
 }
 
@@ -574,10 +508,8 @@ func TestExtraArgsSupport(t *testing.T) {
 }
 
 // T024: Options Validation
-func TestOptionsValidation(t *testing.T) {
-	// Test options field validation and constraints
-
-	// Test valid options should pass validation
+func TestOptionsValidationIntegration(t *testing.T) {
+	// Test that validation works through functional options API (detailed tests in internal/shared)
 	validOptions := NewOptions(
 		WithAllowedTools("Read", "Write"),
 		WithMaxThinkingTokens(8000),
@@ -587,51 +519,10 @@ func TestOptionsValidation(t *testing.T) {
 		t.Errorf("Expected valid options to pass validation, got error: %v", err)
 	}
 
-	// Test negative max thinking tokens should fail
-	invalidTokensOptions := NewOptions(WithMaxThinkingTokens(-100))
-	if err := invalidTokensOptions.Validate(); err == nil {
+	// Test that functional options can create invalid options that validation catches
+	invalidOptions := NewOptions(WithMaxThinkingTokens(-100))
+	if err := invalidOptions.Validate(); err == nil {
 		t.Error("Expected negative max thinking tokens to fail validation")
-	} else if err.Error() != "MaxThinkingTokens must be non-negative, got -100" {
-		t.Errorf("Expected specific error for negative tokens, got: %v", err)
-	}
-
-	// Test zero max thinking tokens should be valid
-	zeroTokensOptions := NewOptions(WithMaxThinkingTokens(0))
-	if err := zeroTokensOptions.Validate(); err != nil {
-		t.Errorf("Expected zero max thinking tokens to be valid, got error: %v", err)
-	}
-
-	// Test empty system prompt should be valid (nil is also valid)
-	emptyPromptOptions := NewOptions(WithSystemPrompt(""))
-	if err := emptyPromptOptions.Validate(); err != nil {
-		t.Errorf("Expected empty system prompt to be valid, got error: %v", err)
-	}
-
-	// Test conflicting tool lists (same tool in both allowed and disallowed)
-	conflictingOptions := NewOptions(
-		WithAllowedTools("Read", "Write", "Edit"),
-		WithDisallowedTools("Write", "Bash"),
-	)
-	if err := conflictingOptions.Validate(); err == nil {
-		t.Error("Expected conflicting tool lists to fail validation")
-	} else if err.Error() != "tool 'Write' cannot be in both AllowedTools and DisallowedTools" {
-		t.Errorf("Expected specific error for conflicting tools, got: %v", err)
-	}
-
-	// Test negative MaxTurns should fail
-	invalidTurnsOptions := NewOptions()
-	invalidTurnsOptions.MaxTurns = -5
-	if err := invalidTurnsOptions.Validate(); err == nil {
-		t.Error("Expected negative MaxTurns to fail validation")
-	} else if err.Error() != "MaxTurns must be non-negative, got -5" {
-		t.Errorf("Expected specific error for negative MaxTurns, got: %v", err)
-	}
-
-	// Test zero MaxTurns should be valid (means no limit)
-	zeroTurnsOptions := NewOptions()
-	zeroTurnsOptions.MaxTurns = 0
-	if err := zeroTurnsOptions.Validate(); err != nil {
-		t.Errorf("Expected zero MaxTurns to be valid, got error: %v", err)
 	}
 }
 

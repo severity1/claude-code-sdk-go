@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	claudecode "github.com/severity1/claude-code-sdk-go"
+	"github.com/severity1/claude-code-sdk-go/internal/shared"
 )
 
 // T098: Subprocess Connection 🔴 RED
@@ -16,7 +16,7 @@ func TestSubprocessConnection(t *testing.T) {
 	// Establish subprocess connection to Claude CLI
 
 	tempCLI := createMockCLI(t)
-	options := &claudecode.Options{}
+	options := &shared.Options{}
 
 	transport := New(tempCLI, options, false)
 
@@ -40,7 +40,7 @@ func TestSubprocessDisconnection(t *testing.T) {
 	// Cleanly disconnect from subprocess
 
 	tempCLI := createMockCLI(t)
-	options := &claudecode.Options{}
+	options := &shared.Options{}
 
 	transport := New(tempCLI, options, false)
 
@@ -72,7 +72,7 @@ func TestFiveSecondTerminationSequence(t *testing.T) {
 	// Implement SIGTERM → wait 5s → SIGKILL sequence
 
 	tempCLI := createLongRunningMockCLI(t)
-	options := &claudecode.Options{}
+	options := &shared.Options{}
 
 	transport := New(tempCLI, options, false)
 
@@ -111,7 +111,7 @@ func TestProcessLifecycleManagement(t *testing.T) {
 	// Manage complete process lifecycle
 
 	tempCLI := createMockCLI(t)
-	options := &claudecode.Options{}
+	options := &shared.Options{}
 
 	transport := New(tempCLI, options, false)
 
@@ -154,7 +154,7 @@ func TestStdinMessageSending(t *testing.T) {
 	// Send JSON messages to subprocess stdin
 
 	tempCLI := createMockCLI(t)
-	options := &claudecode.Options{}
+	options := &shared.Options{}
 
 	transport := New(tempCLI, options, false)
 
@@ -166,7 +166,7 @@ func TestStdinMessageSending(t *testing.T) {
 	defer transport.Close()
 
 	// Create test message
-	message := claudecode.StreamMessage{
+	message := shared.StreamMessage{
 		Type:      "user",
 		SessionID: "test-session",
 	}
@@ -183,7 +183,7 @@ func TestStdoutMessageReceiving(t *testing.T) {
 	// Receive JSON messages from subprocess stdout
 
 	tempCLI := createMockCLI(t)
-	options := &claudecode.Options{}
+	options := &shared.Options{}
 
 	transport := New(tempCLI, options, false)
 
@@ -221,7 +221,7 @@ func TestStderrIsolation(t *testing.T) {
 	// Isolate stderr using temporary files
 
 	tempCLI := createMockCLI(t)
-	options := &claudecode.Options{}
+	options := &shared.Options{}
 
 	transport := New(tempCLI, options, false)
 
@@ -246,7 +246,7 @@ func TestEnvironmentVariableSetting(t *testing.T) {
 	// Set CLAUDE_CODE_ENTRYPOINT environment variable
 
 	tempCLI := createEnvironmentCheckCLI(t)
-	options := &claudecode.Options{}
+	options := &shared.Options{}
 
 	transport := New(tempCLI, options, false)
 
@@ -271,7 +271,7 @@ func TestConcurrentIOHandling(t *testing.T) {
 	// Handle stdin/stdout concurrently with goroutines
 
 	tempCLI := createMockCLI(t)
-	options := &claudecode.Options{}
+	options := &shared.Options{}
 
 	transport := New(tempCLI, options, false)
 
@@ -286,8 +286,8 @@ func TestConcurrentIOHandling(t *testing.T) {
 	msgChan, errChan := transport.ReceiveMessages(ctx)
 
 	// Send messages concurrently
-	message1 := claudecode.StreamMessage{Type: "user", SessionID: "session1"}
-	message2 := claudecode.StreamMessage{Type: "user", SessionID: "session2"}
+	message1 := shared.StreamMessage{Type: "user", SessionID: "session1"}
+	message2 := shared.StreamMessage{Type: "user", SessionID: "session2"}
 
 	go func() {
 		transport.SendMessage(ctx, message1)
@@ -312,7 +312,7 @@ func TestProcessErrorHandling(t *testing.T) {
 	// Handle subprocess errors and exit codes
 
 	tempCLI := createFailingCLI(t)
-	options := &claudecode.Options{}
+	options := &shared.Options{}
 
 	transport := New(tempCLI, options, false)
 
@@ -351,7 +351,7 @@ func TestMessageChannelManagement(t *testing.T) {
 	// Manage message and error channels
 
 	tempCLI := createMockCLI(t)
-	options := &claudecode.Options{}
+	options := &shared.Options{}
 
 	transport := New(tempCLI, options, false)
 
@@ -383,7 +383,7 @@ func TestBackpressureHandling(t *testing.T) {
 	// Handle backpressure in message channels
 
 	tempCLI := createMockCLI(t)
-	options := &claudecode.Options{}
+	options := &shared.Options{}
 
 	transport := New(tempCLI, options, false)
 
@@ -396,7 +396,7 @@ func TestBackpressureHandling(t *testing.T) {
 
 	// Send multiple messages rapidly to test backpressure
 	for i := 0; i < 10; i++ {
-		message := claudecode.StreamMessage{
+		message := shared.StreamMessage{
 			Type:      "user",
 			SessionID: "session",
 		}
@@ -423,7 +423,7 @@ func TestContextCancellation(t *testing.T) {
 	// Support context cancellation throughout transport
 
 	tempCLI := createMockCLI(t)
-	options := &claudecode.Options{}
+	options := &shared.Options{}
 
 	transport := New(tempCLI, options, false)
 
@@ -440,7 +440,7 @@ func TestContextCancellation(t *testing.T) {
 	time.Sleep(200 * time.Millisecond)
 
 	// Operations should respect cancelled context
-	message := claudecode.StreamMessage{Type: "user", SessionID: "session"}
+	message := shared.StreamMessage{Type: "user", SessionID: "session"}
 	err = transport.SendMessage(ctx, message)
 
 	// Should get context error
@@ -454,7 +454,7 @@ func TestResourceCleanup(t *testing.T) {
 	// Clean up all resources on shutdown
 
 	tempCLI := createMockCLI(t)
-	options := &claudecode.Options{}
+	options := &shared.Options{}
 
 	transport := New(tempCLI, options, false)
 
@@ -485,7 +485,7 @@ func TestProcessStateTracking(t *testing.T) {
 	// Track subprocess connection state
 
 	tempCLI := createMockCLI(t)
-	options := &claudecode.Options{}
+	options := &shared.Options{}
 
 	transport := New(tempCLI, options, false)
 
@@ -518,7 +518,7 @@ func TestInterruptSignalHandling(t *testing.T) {
 	// Handle interrupt signals to subprocess
 
 	tempCLI := createMockCLI(t)
-	options := &claudecode.Options{}
+	options := &shared.Options{}
 
 	transport := New(tempCLI, options, false)
 
@@ -546,7 +546,7 @@ func TestMessageOrderingGuarantees(t *testing.T) {
 	// Maintain message ordering through transport
 
 	tempCLI := createMockCLI(t)
-	options := &claudecode.Options{}
+	options := &shared.Options{}
 
 	transport := New(tempCLI, options, false)
 
@@ -558,7 +558,7 @@ func TestMessageOrderingGuarantees(t *testing.T) {
 	defer transport.Close()
 
 	// Send messages in sequence
-	messages := []claudecode.StreamMessage{
+	messages := []shared.StreamMessage{
 		{Type: "user", SessionID: "session1"},
 		{Type: "user", SessionID: "session2"},
 		{Type: "user", SessionID: "session3"},
@@ -580,7 +580,7 @@ func TestTransportReconnection(t *testing.T) {
 	// Handle transport reconnection scenarios
 
 	tempCLI := createMockCLI(t)
-	options := &claudecode.Options{}
+	options := &shared.Options{}
 
 	transport := New(tempCLI, options, false)
 
@@ -612,7 +612,7 @@ func TestPerformanceUnderLoad(t *testing.T) {
 	// Maintain performance under high message throughput
 
 	tempCLI := createMockCLI(t)
-	options := &claudecode.Options{}
+	options := &shared.Options{}
 
 	transport := New(tempCLI, options, false)
 
@@ -628,7 +628,7 @@ func TestPerformanceUnderLoad(t *testing.T) {
 	messageCount := 100
 
 	for i := 0; i < messageCount; i++ {
-		message := claudecode.StreamMessage{
+		message := shared.StreamMessage{
 			Type:      "user",
 			SessionID: "load-test",
 		}
@@ -652,7 +652,7 @@ func TestMemoryUsageOptimization(t *testing.T) {
 	// Optimize memory usage in transport layer
 
 	tempCLI := createMockCLI(t)
-	options := &claudecode.Options{}
+	options := &shared.Options{}
 
 	transport := New(tempCLI, options, false)
 
@@ -668,7 +668,7 @@ func TestMemoryUsageOptimization(t *testing.T) {
 
 	// Send and receive messages
 	for i := 0; i < 10; i++ {
-		message := claudecode.StreamMessage{
+		message := shared.StreamMessage{
 			Type:      "user",
 			SessionID: "memory-test",
 		}
@@ -686,7 +686,7 @@ func TestErrorRecovery(t *testing.T) {
 	// Recover from transport errors gracefully
 
 	tempCLI := createMockCLI(t)
-	options := &claudecode.Options{}
+	options := &shared.Options{}
 
 	transport := New(tempCLI, options, false)
 
@@ -702,13 +702,13 @@ func TestErrorRecovery(t *testing.T) {
 	cancel() // Cancel immediately
 
 	// Should handle cancelled context gracefully
-	err = transport.SendMessage(cancelledCtx, claudecode.StreamMessage{Type: "user"})
+	err = transport.SendMessage(cancelledCtx, shared.StreamMessage{Type: "user"})
 	if err == nil {
 		t.Log("SendMessage with cancelled context - error expected but got nil")
 	}
 
 	// Should still be functional with good context
-	err = transport.SendMessage(ctx, claudecode.StreamMessage{Type: "user"})
+	err = transport.SendMessage(ctx, shared.StreamMessage{Type: "user"})
 	if err != nil && !strings.Contains(err.Error(), "closed") {
 		t.Errorf("Should recover from error: %v", err)
 	}
@@ -719,7 +719,7 @@ func TestSubprocessSecurity(t *testing.T) {
 	// Ensure subprocess runs with minimal permissions
 
 	tempCLI := createMockCLI(t)
-	options := &claudecode.Options{}
+	options := &shared.Options{}
 
 	transport := New(tempCLI, options, false)
 
@@ -744,7 +744,7 @@ func TestPlatformCompatibility(t *testing.T) {
 	// Work across Windows, macOS, and Linux
 
 	tempCLI := createMockCLI(t)
-	options := &claudecode.Options{}
+	options := &shared.Options{}
 
 	transport := New(tempCLI, options, false)
 

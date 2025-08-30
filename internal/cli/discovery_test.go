@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	claudecode "github.com/severity1/claude-code-sdk-go"
+	"github.com/severity1/claude-code-sdk-go/internal/shared"
 )
 
 // T083: CLI Not Found Error 🔴 RED
@@ -61,7 +61,7 @@ func TestBuildBasicCommand(t *testing.T) {
 	// Build basic CLI command with required flags
 
 	cliPath := "/usr/local/bin/claude"
-	options := &claudecode.Options{}
+	options := &shared.Options{}
 
 	// Test one-shot mode (closeStdin = true)
 	cmd := BuildCommand(cliPath, options, true)
@@ -102,21 +102,21 @@ func TestCLIPathAcceptsPath(t *testing.T) {
 
 	// Test with absolute path
 	absPath := "/usr/local/bin/claude"
-	cmd := BuildCommand(absPath, &claudecode.Options{}, true)
+	cmd := BuildCommand(absPath, &shared.Options{}, true)
 	if cmd[0] != absPath {
 		t.Errorf("Expected absolute path %s, got %s", absPath, cmd[0])
 	}
 
 	// Test with relative path
 	relPath := "./claude"
-	cmd = BuildCommand(relPath, &claudecode.Options{}, true)
+	cmd = BuildCommand(relPath, &shared.Options{}, true)
 	if cmd[0] != relPath {
 		t.Errorf("Expected relative path %s, got %s", relPath, cmd[0])
 	}
 
 	// Test with messy path (should preserve original path as given)
 	messyPath := "/usr/local/bin/../bin/./claude"
-	cmd = BuildCommand(messyPath, &claudecode.Options{}, true)
+	cmd = BuildCommand(messyPath, &shared.Options{}, true)
 	if cmd[0] != messyPath {
 		t.Errorf("Expected messy path %s to be preserved, got %s", messyPath, cmd[0])
 	}
@@ -209,12 +209,12 @@ func TestCommandBuildingAllOptions(t *testing.T) {
 	systemPrompt := "You are a helpful assistant"
 	appendPrompt := "Additional context"
 	model := "claude-3-sonnet"
-	permissionMode := claudecode.PermissionModeAcceptEdits
+	permissionMode := shared.PermissionModeAcceptEdits
 	resume := "session123"
 	settings := "/path/to/settings.json"
 	cwd := "/workspace"
 
-	options := &claudecode.Options{
+	options := &shared.Options{
 		AllowedTools:         []string{"Read", "Write"},
 		DisallowedTools:      []string{"Bash", "Delete"},
 		SystemPrompt:         &systemPrompt,
@@ -228,7 +228,7 @@ func TestCommandBuildingAllOptions(t *testing.T) {
 		Settings:             &settings,
 		Cwd:                  &cwd,
 		AddDirs:              []string{"/extra/dir1", "/extra/dir2"},
-		McpServers:           make(map[string]claudecode.McpServerConfig),
+		McpServers:           make(map[string]shared.McpServerConfig),
 		ExtraArgs:            map[string]*string{"custom-flag": nil, "with-value": &[]string{"test"}[0]},
 	}
 
@@ -294,7 +294,7 @@ func TestExtraArgsSupport(t *testing.T) {
 	cliPath := "/usr/local/bin/claude"
 
 	// Test boolean flags (nil value)
-	options := &claudecode.Options{
+	options := &shared.Options{
 		ExtraArgs: map[string]*string{
 			"debug":    nil,
 			"trace":    nil,
@@ -317,7 +317,7 @@ func TestExtraArgsSupport(t *testing.T) {
 	// Test flags with values
 	value1 := "info"
 	value2 := "/tmp/custom"
-	options = &claudecode.Options{
+	options = &shared.Options{
 		ExtraArgs: map[string]*string{
 			"log-level":  &value1,
 			"custom-dir": &value2,
@@ -339,7 +339,7 @@ func TestCloseStdinFlagHandling(t *testing.T) {
 	// Handle --print vs --input-format based on closeStdin
 
 	cliPath := "/usr/local/bin/claude"
-	options := &claudecode.Options{}
+	options := &shared.Options{}
 
 	// Test one-shot mode (closeStdin = true) should use --print
 	oneShot := BuildCommand(cliPath, options, true)

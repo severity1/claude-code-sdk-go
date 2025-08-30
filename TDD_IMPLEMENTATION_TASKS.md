@@ -4,6 +4,10 @@
 
 This file tracks the Test-Driven Development (TDD) implementation of the Claude Code SDK for Go, ensuring 100% behavioral parity with the Python SDK reference implementation located at `../claude-code-sdk-python/`.
 
+### Architectural Changes
+
+**Import Cycle Resolution**: The project now uses an `internal/shared/` package to resolve circular dependencies between the main package and internal packages. This allows internal packages to access core types (Options, Message types, Error types, StreamMessage) without importing the main package, maintaining clean Go module architecture while preserving public API compatibility through type aliases.
+
 ## TDD Progress Legend
 
 - 🔴 **RED**: Write failing test first
@@ -14,8 +18,8 @@ This file tracks the Test-Driven Development (TDD) implementation of the Claude 
 ## Test Parity Summary
 
 **Total Python SDK Tests**: 83 tests across 8 test files  
-**Total Go TDD Tasks**: 173 tasks (8 unnecessary tasks removed, optimized for Go)  
-**Current Progress**: 112/173 (65%)
+**Total Go TDD Tasks**: 181 tasks (optimized for Go with shared types architecture)  
+**Current Progress**: 133/181 (73%)
 
 ### Python SDK Test Coverage Analysis
 - `test_types.py`: 12 tests → Core types, content blocks, options
@@ -1120,7 +1124,7 @@ This file tracks the Test-Driven Development (TDD) implementation of the Claude 
 - **Phase 1**: 34/34 (100%) - Foundation Types & Errors ✅ COMPLETE
 - **Phase 2**: 40/40 (100%) - Message Parsing & Validation ✅ COMPLETE  
 - **Phase 3**: 38/38 (100%) - Transport & CLI Integration ✅ COMPLETE
-- **Phase 4**: 20/43 (47%) - Core APIs 🔵 CORE COMPLETE
+- **Phase 4**: 20/43 (47%) - Core APIs 🔵 CORE COMPLETE (with shared types architecture)
 - **Phase 5**: 0/18 (0%) - Integration & Advanced Features
 
 ### Next Recommended Tasks (Phase 4)
