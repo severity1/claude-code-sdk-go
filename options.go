@@ -43,6 +43,9 @@ type Options struct {
 
 	// Extensibility
 	ExtraArgs map[string]*string `json:"extra_args,omitempty"`
+
+	// CLI Path (for testing and custom installations)
+	CLIPath *string `json:"cli_path,omitempty"`
 }
 
 // McpServerType represents the type of MCP server.
@@ -205,6 +208,27 @@ func WithSettings(settings string) Option {
 func WithExtraArgs(args map[string]*string) Option {
 	return func(o *Options) {
 		o.ExtraArgs = args
+	}
+}
+
+// WithCLIPath sets a custom CLI path.
+func WithCLIPath(path string) Option {
+	return func(o *Options) {
+		o.CLIPath = &path
+	}
+}
+
+// WithTransport sets a custom transport for testing.
+// Since Transport is not part of Options struct, this is handled in client creation.
+func WithTransport(transport Transport) Option {
+	return func(o *Options) {
+		// This will be handled in client implementation
+		// For now, we'll use a special marker in ExtraArgs
+		if o.ExtraArgs == nil {
+			o.ExtraArgs = make(map[string]*string)
+		}
+		marker := "custom_transport"
+		o.ExtraArgs["__transport_marker__"] = &marker
 	}
 }
 
