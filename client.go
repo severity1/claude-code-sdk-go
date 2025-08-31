@@ -3,6 +3,7 @@ package claudecode
 import (
 	"context"
 	"fmt"
+	"os"
 	"sync"
 )
 
@@ -53,10 +54,59 @@ func NewClientWithTransport(transport Transport, opts ...Option) Client {
 	}
 }
 
+// validateOptions validates the client configuration options
+func (c *ClientImpl) validateOptions() error {
+	if c.options == nil {
+		return nil // Nil options are acceptable (use defaults)
+	}
+	
+	// Validate working directory
+	if c.options.Cwd != nil {
+		if _, err := os.Stat(*c.options.Cwd); os.IsNotExist(err) {
+			return fmt.Errorf("working directory does not exist: %s", *c.options.Cwd)
+		}
+	}
+	
+	// Validate max turns
+	if c.options.MaxTurns < 0 {
+		return fmt.Errorf("max_turns must be non-negative, got: %d", c.options.MaxTurns)
+	}
+	
+	// Validate permission mode
+	if c.options.PermissionMode != nil {
+		validModes := map[PermissionMode]bool{
+			PermissionModeDefault:           true,
+			PermissionModeAcceptEdits:       true,
+			PermissionModePlan:              true,
+			PermissionModeBypassPermissions: true,
+		}
+		if !validModes[*c.options.PermissionMode] {
+			return fmt.Errorf("invalid permission mode: %s", string(*c.options.PermissionMode))
+		}
+	}
+	
+	return nil
+}
+
 // Connect establishes a connection to the Claude Code CLI.
 func (c *ClientImpl) Connect(ctx context.Context, prompt ...StreamMessage) error {
+	// Check context before acquiring lock
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	
+	// Check context again after acquiring lock
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	
+	// Validate configuration before connecting
+	if err := c.validateOptions(); err != nil {
+		return fmt.Errorf("invalid configuration: %w", err)
+	}
 	
 	// Use custom transport if provided, otherwise create default
 	if c.customTransport != nil {
@@ -105,6 +155,11 @@ func (c *ClientImpl) Disconnect() error {
 
 // Query sends a simple text query.
 func (c *ClientImpl) Query(ctx context.Context, prompt string, sessionID ...string) error {
+	// Check context before proceeding
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	
 	// Check connection status with read lock
 	c.mu.RLock()
 	connected := c.connected
@@ -113,6 +168,11 @@ func (c *ClientImpl) Query(ctx context.Context, prompt string, sessionID ...stri
 	
 	if !connected || transport == nil {
 		return fmt.Errorf("client not connected")
+	}
+	
+	// Check context again after acquiring connection info
+	if ctx.Err() != nil {
+		return ctx.Err()
 	}
 	
 	// Determine session ID - use first provided, otherwise default to "default"
@@ -207,6 +267,11 @@ func (c *ClientImpl) ReceiveResponse(ctx context.Context) MessageIterator {
 
 // Interrupt sends an interrupt signal to stop the current operation.
 func (c *ClientImpl) Interrupt(ctx context.Context) error {
+	// Check context before proceeding
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	
 	// Check connection status with read lock
 	c.mu.RLock()
 	connected := c.connected
