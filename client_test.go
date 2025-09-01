@@ -9,99 +9,64 @@ import (
 	"time"
 )
 
-// T133: Client Auto Connect Context Manager 🔴 RED
-// Python Reference: test_streaming_client.py::TestClaudeSDKClientStreaming::test_auto_connect_with_context_manager
 func TestClientAutoConnectContextManager(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := setupTestContext(t, 10*time.Second)
 	defer cancel()
 
-	// Create mock transport for testing
-	transport := &clientMockTransport{}
-	
+	transport := newMockTransport()
+
 	// Test defer-based resource management (Go equivalent of Python context manager)
 	func() {
-		client := NewClientWithTransport(transport)
-		defer client.Disconnect() // Go defer pattern equivalent to context manager
-		
+		client := setupClient(t, transport)
+		defer disconnectClient(t, client)
+
 		// Connect should be called automatically or explicitly
-		err := client.Connect(ctx)
-		if err != nil {
-			t.Fatalf("Client connect failed: %v", err)
-		}
-		
+		connectClient(t, ctx, client)
+
 		// Verify connection was established
-		if !transport.connected {
-			t.Error("Expected transport to be connected")
-		}
-		
+		assertConnected(t, transport)
+
 		// Client should be ready to use
-		err = client.Query(ctx, "test message")
-		if err != nil {
-			t.Errorf("Client query failed: %v", err)
-		}
+		err := client.Query(ctx, "test message")
+		assertError(t, err, false, "")
 	}() // Defer should trigger disconnect
-	
+
 	// Verify disconnect was called
-	if transport.connected {
-		t.Error("Expected transport to be disconnected after defer")
-	}
+	assertDisconnected(t, transport)
 }
 
-// T134: Client Manual Connection 🔴 RED
-// Go Target: client_test.go::TestClientManualConnection
 func TestClientManualConnection(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := setupTestContext(t, 10*time.Second)
 	defer cancel()
 
-	transport := &clientMockTransport{}
-	client := NewClientWithTransport(transport)
+	transport := newMockTransport()
+	client := setupClient(t, transport)
 
 	// Manual Connect/Disconnect lifecycle
-	err := client.Connect(ctx)
-	if err != nil {
-		t.Fatalf("Connect failed: %v", err)
-	}
-	
-	if !transport.connected {
-		t.Error("Expected transport to be connected")
-	}
+	connectClient(t, ctx, client)
+	assertConnected(t, transport)
 
-	err = client.Disconnect()
-	if err != nil {
-		t.Errorf("Disconnect failed: %v", err)
-	}
-	
-	if transport.connected {
-		t.Error("Expected transport to be disconnected")
-	}
+	disconnectClient(t, client)
+	assertDisconnected(t, transport)
 }
 
-// T135: Client Query Execution 🔴 RED
-// Go Target: client_test.go::TestClientQueryExecution
 func TestClientQueryExecution(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := setupTestContext(t, 10*time.Second)
 	defer cancel()
 
-	transport := &clientMockTransport{}
-	client := NewClientWithTransport(transport)
-	defer client.Disconnect()
+	transport := newMockTransport()
+	client := setupClient(t, transport)
+	defer disconnectClient(t, client)
 
-	err := client.Connect(ctx)
-	if err != nil {
-		t.Fatalf("Connect failed: %v", err)
-	}
+	connectClient(t, ctx, client)
 
 	// Execute query through connected client
-	err = client.Query(ctx, "What is 2+2?")
-	if err != nil {
-		t.Errorf("Query execution failed: %v", err)
-	}
+	err := client.Query(ctx, "What is 2+2?")
+	assertError(t, err, false, "")
 
 	// Verify message was sent to transport
-	if transport.getSentMessageCount() != 1 {
-		t.Errorf("Expected 1 sent message, got %d", transport.getSentMessageCount())
-	}
-	
+	assertMessageCount(t, transport, 1)
+
 	// Verify message content
 	sentMsg, ok := transport.getSentMessage(0)
 	if !ok {
@@ -110,31 +75,26 @@ func TestClientQueryExecution(t *testing.T) {
 	if sentMsg.Type != "request" {
 		t.Errorf("Expected message type 'request', got '%s'", sentMsg.Type)
 	}
-	
+
 	userMsg, ok := sentMsg.Message.(*UserMessage)
 	if !ok {
 		t.Fatalf("Expected UserMessage, got %T", sentMsg.Message)
 	}
-	
+
 	if content, ok := userMsg.Content.(string); !ok || content != "What is 2+2?" {
 		t.Errorf("Expected content 'What is 2+2?', got '%v'", userMsg.Content)
 	}
 }
 
-// T136: Client Stream Query 🔴 RED
-// Go Target: client_test.go::TestClientStreamQuery
 func TestClientStreamQuery(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := setupTestContext(t, 10*time.Second)
 	defer cancel()
 
-	transport := &clientMockTransport{}
-	client := NewClientWithTransport(transport)
-	defer client.Disconnect()
+	transport := newMockTransport()
+	client := setupClient(t, transport)
+	defer disconnectClient(t, client)
 
-	err := client.Connect(ctx)
-	if err != nil {
-		t.Fatalf("Connect failed: %v", err)
-	}
+	connectClient(t, ctx, client)
 
 	// Create message channel
 	messages := make(chan StreamMessage, 3)
@@ -144,22 +104,16 @@ func TestClientStreamQuery(t *testing.T) {
 	close(messages)
 
 	// Execute stream query
-	err = client.QueryStream(ctx, messages)
-	if err != nil {
-		t.Errorf("Stream query execution failed: %v", err)
-	}
+	err := client.QueryStream(ctx, messages)
+	assertError(t, err, false, "")
 
 	// Give time for messages to be processed
 	time.Sleep(50 * time.Millisecond)
 
 	// Verify all messages were sent
-	if transport.getSentMessageCount() != 3 {
-		t.Errorf("Expected 3 sent messages, got %d", transport.getSentMessageCount())
-	}
+	assertMessageCount(t, transport, 3)
 }
 
-// T137: Client Message Reception 🔴 RED
-// Go Target: client_test.go::TestClientMessageReception
 func TestClientMessageReception(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -178,7 +132,7 @@ func TestClientMessageReception(t *testing.T) {
 			},
 		},
 	}
-	
+
 	client := NewClientWithTransport(transport)
 	defer client.Disconnect()
 
@@ -189,7 +143,7 @@ func TestClientMessageReception(t *testing.T) {
 
 	// Get message channel
 	msgChan := client.ReceiveMessages(ctx)
-	
+
 	// Trigger sending response messages
 	transport.sendResponses()
 
@@ -241,20 +195,20 @@ type clientMockTransport struct {
 	errChan          chan error
 	sentMessages     []StreamMessage
 	responseMessages []Message
-	
+
 	// Error injection for testing
-	connectError    error
-	sendError       error
-	interruptError  error
-	closeError      error
-	asyncError      error
-	slowSend        bool // Enable slow sending for backpressure testing
+	connectError   error
+	sendError      error
+	interruptError error
+	closeError     error
+	asyncError     error
+	slowSend       bool // Enable slow sending for backpressure testing
 }
 
 func (c *clientMockTransport) Connect(ctx context.Context) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	
+
 	if c.connectError != nil {
 		return c.connectError
 	}
@@ -267,14 +221,14 @@ func (c *clientMockTransport) Connect(ctx context.Context) error {
 func (c *clientMockTransport) SendMessage(ctx context.Context, message StreamMessage) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	
+
 	if c.sendError != nil {
 		return c.sendError
 	}
 	if !c.connected {
 		return fmt.Errorf("not connected")
 	}
-	
+
 	// Simulate slow sending for backpressure testing
 	if c.slowSend {
 		c.mu.Unlock()
@@ -286,7 +240,7 @@ func (c *clientMockTransport) SendMessage(ctx context.Context, message StreamMes
 		}
 		c.mu.Lock()
 	}
-	
+
 	c.sentMessages = append(c.sentMessages, message)
 	return nil
 }
@@ -305,11 +259,11 @@ func (c *clientMockTransport) Interrupt(ctx context.Context) error {
 func (c *clientMockTransport) Close() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	
+
 	if c.closeError != nil {
 		return c.closeError
 	}
-	
+
 	// Mark as closed and disconnected
 	c.connected = false
 	if !c.closed {
@@ -333,7 +287,7 @@ func (c *clientMockTransport) sendResponses() {
 	responseMessages := c.responseMessages
 	closed := c.closed
 	c.mu.Unlock()
-	
+
 	if responseMessages != nil && msgChan != nil && !closed {
 		go func() {
 			defer func() {
@@ -347,11 +301,11 @@ func (c *clientMockTransport) sendResponses() {
 				c.mu.Lock()
 				shouldStop := c.closed
 				c.mu.Unlock()
-				
+
 				if shouldStop {
 					return
 				}
-				
+
 				select {
 				case msgChan <- msg:
 				default:
@@ -370,7 +324,7 @@ func (c *clientMockTransport) sendAsyncError() {
 	asyncError := c.asyncError
 	closed := c.closed
 	c.mu.Unlock()
-	
+
 	if asyncError != nil && errChan != nil && !closed {
 		go func() {
 			defer func() {
@@ -379,7 +333,7 @@ func (c *clientMockTransport) sendAsyncError() {
 					// Ignore panic from closed channel
 				}
 			}()
-			
+
 			select {
 			case errChan <- asyncError:
 			default:
@@ -413,8 +367,128 @@ func (c *clientMockTransport) getSentMessage(index int) (StreamMessage, bool) {
 	return c.sentMessages[index], true
 }
 
-// T138: Client Response Iterator 🔴 RED
-// Go Target: client_test.go::TestClientResponseIterator
+// setupTestContext creates a context with timeout and cancel function
+func setupTestContext(t *testing.T, timeout time.Duration) (context.Context, context.CancelFunc) {
+	t.Helper()
+	return context.WithTimeout(context.Background(), timeout)
+}
+
+
+// newMockTransport creates a simple mock transport with default configuration.
+func newMockTransport() *clientMockTransport {
+	return &clientMockTransport{}
+}
+
+// MockTransportOption configures mock transport for table-driven tests.
+type MockTransportOption func(*clientMockTransport)
+
+// WithConnectError injects a connect error.
+func WithConnectError(err error) MockTransportOption {
+	return func(t *clientMockTransport) {
+		t.connectError = err
+	}
+}
+
+// WithSendError injects a send error.
+func WithSendError(err error) MockTransportOption {
+	return func(t *clientMockTransport) {
+		t.sendError = err
+	}
+}
+
+// WithAsyncError injects an async error.
+func WithAsyncError(err error) MockTransportOption {
+	return func(t *clientMockTransport) {
+		t.asyncError = err
+	}
+}
+
+// WithInterruptError injects an interrupt error.
+func WithInterruptError(err error) MockTransportOption {
+	return func(t *clientMockTransport) {
+		t.interruptError = err
+	}
+}
+
+// WithCloseError injects a close error.
+func WithCloseError(err error) MockTransportOption {
+	return func(t *clientMockTransport) {
+		t.closeError = err
+	}
+}
+
+// WithResponseMessages sets response messages.
+func WithResponseMessages(messages []Message) MockTransportOption {
+	return func(t *clientMockTransport) {
+		t.responseMessages = messages
+	}
+}
+
+// newMockTransportWithOptions creates configured mock transport using functional options.
+func newMockTransportWithOptions(options ...MockTransportOption) *clientMockTransport {
+	transport := &clientMockTransport{}
+	for _, option := range options {
+		option(transport)
+	}
+	return transport
+}
+
+// setupClient creates client with transport and options
+func setupClient(t *testing.T, transport Transport, options ...Option) Client {
+	t.Helper()
+	return NewClientWithTransport(transport, options...)
+}
+
+// connectClient connects client with error handling
+func connectClient(t *testing.T, ctx context.Context, client Client) {
+	t.Helper()
+	if err := client.Connect(ctx); err != nil {
+		t.Fatalf("Client connect failed: %v", err)
+	}
+}
+
+// disconnectClient safely disconnects client
+func disconnectClient(t *testing.T, client Client) {
+	t.Helper()
+	if err := client.Disconnect(); err != nil {
+		t.Errorf("Client disconnect failed: %v", err)
+	}
+}
+
+// Assertion helpers with t.Helper()
+func assertConnected(t *testing.T, transport *clientMockTransport) {
+	t.Helper()
+	if !transport.connected {
+		t.Error("Expected transport to be connected")
+	}
+}
+
+func assertDisconnected(t *testing.T, transport *clientMockTransport) {
+	t.Helper()
+	if transport.connected {
+		t.Error("Expected transport to be disconnected")
+	}
+}
+
+func assertError(t *testing.T, err error, wantErr bool, msgContains string) {
+	t.Helper()
+	if (err != nil) != wantErr {
+		t.Errorf("error = %v, wantErr %v", err, wantErr)
+		return
+	}
+	if wantErr && msgContains != "" && !strings.Contains(err.Error(), msgContains) {
+		t.Errorf("error = %v, expected message to contain %q", err, msgContains)
+	}
+}
+
+func assertMessageCount(t *testing.T, transport *clientMockTransport, expected int) {
+	t.Helper()
+	actual := transport.getSentMessageCount()
+	if actual != expected {
+		t.Errorf("Expected %d sent messages, got %d", expected, actual)
+	}
+}
+
 func TestClientResponseIterator(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -425,7 +499,7 @@ func TestClientResponseIterator(t *testing.T) {
 			&AssistantMessage{Content: []ContentBlock{&TextBlock{Text: "Response 2"}}, Model: "claude-opus-4-1-20250805"},
 		},
 	}
-	
+
 	client := NewClientWithTransport(transport)
 	defer client.Disconnect()
 
@@ -440,7 +514,7 @@ func TestClientResponseIterator(t *testing.T) {
 		t.Fatal("Expected response iterator, got nil")
 	}
 	defer iter.Close()
-	
+
 	// Trigger responses
 	transport.sendResponses()
 
@@ -459,8 +533,6 @@ func TestClientResponseIterator(t *testing.T) {
 	}
 }
 
-// T139: Client Interrupt Functionality 🔴 RED
-// Go Target: client_test.go::TestClientInterruptFunctionality  
 func TestClientInterruptFunctionality(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -481,8 +553,6 @@ func TestClientInterruptFunctionality(t *testing.T) {
 	}
 }
 
-// T141: Client Connection State 🔴 RED
-// Go Target: client_test.go::TestClientConnectionState
 func TestClientConnectionState(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -529,8 +599,6 @@ func TestClientConnectionState(t *testing.T) {
 	}
 }
 
-// T140: Client Session Management 🔴 RED
-// Go Target: client_test.go::TestClientSessionManagement
 func TestClientSessionManagement(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -602,119 +670,125 @@ func TestClientSessionManagement(t *testing.T) {
 	}
 }
 
-// T142: Client Error Propagation 🔴 RED
-// Go Target: client_test.go::TestClientErrorPropagation
+// TestClientErrorPropagation tests error propagation through client operations.
 func TestClientErrorPropagation(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+	tests := []struct {
+		name           string
+		transportSetup func() *clientMockTransport
+		operation      func(context.Context, Client) error
+		wantErr        bool
+		wantErrMsg     string
+		validate       func(*testing.T, *clientMockTransport, Client)
+	}{
+		{
+			name: "connect_error_propagation",
+			transportSetup: func() *clientMockTransport {
+				return newMockTransportWithOptions(WithConnectError(fmt.Errorf("connection failed: CLI not found")))
+			},
+			operation: func(ctx context.Context, client Client) error {
+				return client.Connect(ctx)
+			},
+			wantErr:    true,
+			wantErrMsg: "failed to connect transport: connection failed: CLI not found",
+		},
+		{
+			name: "send_error_propagation",
+			transportSetup: func() *clientMockTransport {
+				return newMockTransportWithOptions(WithSendError(fmt.Errorf("send failed: process exited")))
+			},
+			operation: func(ctx context.Context, client Client) error {
+				if err := client.Connect(ctx); err != nil {
+					return fmt.Errorf("connect failed: %v", err)
+				}
+				return client.Query(ctx, "test")
+			},
+			wantErr:    true,
+			wantErrMsg: "send failed: process exited",
+		},
+		{
+			name: "async_error_propagation",
+			transportSetup: func() *clientMockTransport {
+				return newMockTransportWithOptions(WithAsyncError(fmt.Errorf("async transport error")))
+			},
+			operation: func(ctx context.Context, client Client) error {
+				if err := client.Connect(ctx); err != nil {
+					return fmt.Errorf("connect failed: %v", err)
+				}
+				// Get iterator and expect error from error channel
+				iter := client.ReceiveResponse(ctx)
+				if iter == nil {
+					return fmt.Errorf("expected response iterator")
+				}
+				defer iter.Close()
 
-	// Test transport connection error propagation
-	transport := &clientMockTransport{
-		connectError: fmt.Errorf("connection failed: CLI not found"),
-	}
-	client := NewClientWithTransport(transport)
+				// Trigger async error
+				if transport, ok := client.(*ClientImpl).transport.(*clientMockTransport); ok {
+					transport.sendAsyncError()
+				}
 
-	err := client.Connect(ctx)
-	if err == nil {
-		t.Error("Expected connection error to be propagated")
-	}
-	if err.Error() != "failed to connect transport: connection failed: CLI not found" {
-		t.Errorf("Expected wrapped connection error, got: %v", err)
-	}
-
-	// Test transport send error propagation
-	transport2 := &clientMockTransport{
-		sendError: fmt.Errorf("send failed: process exited"),
-	}
-	client2 := NewClientWithTransport(transport2)
-	defer client2.Disconnect()
-
-	err = client2.Connect(ctx)
-	if err != nil {
-		t.Fatalf("Connect should succeed: %v", err)
-	}
-
-	err = client2.Query(ctx, "test")
-	if err == nil {
-		t.Error("Expected send error to be propagated")
-	}
-	if err.Error() != "send failed: process exited" {
-		t.Errorf("Expected send error, got: %v", err)
-	}
-
-	// Test error channel propagation
-	transport3 := &clientMockTransport{
-		asyncError: fmt.Errorf("async transport error"),
-	}
-	client3 := NewClientWithTransport(transport3)
-	defer client3.Disconnect()
-
-	err = client3.Connect(ctx)
-	if err != nil {
-		t.Fatalf("Connect should succeed: %v", err)
-	}
-
-	// Get iterator and expect error from error channel
-	iter := client3.ReceiveResponse(ctx)
-	if iter == nil {
-		t.Fatal("Expected response iterator")
-	}
-	defer iter.Close()
-
-	// Trigger async error
-	transport3.sendAsyncError()
-
-	// Next should return the async error
-	_, err = iter.Next(ctx)
-	if err == nil {
-		t.Error("Expected async error to be propagated through iterator")
-	}
-	if err.Error() != "async transport error" {
-		t.Errorf("Expected async transport error, got: %v", err)
-	}
-
-	// Test interrupt error propagation
-	transport4 := &clientMockTransport{
-		interruptError: fmt.Errorf("interrupt failed"),
-	}
-	client4 := NewClientWithTransport(transport4)
-	defer client4.Disconnect()
-
-	err = client4.Connect(ctx)
-	if err != nil {
-		t.Fatalf("Connect should succeed: %v", err)
-	}
-
-	err = client4.Interrupt(ctx)
-	if err == nil {
-		t.Error("Expected interrupt error to be propagated")
-	}
-	if err.Error() != "interrupt failed" {
-		t.Errorf("Expected interrupt error, got: %v", err)
-	}
-
-	// Test close error propagation
-	transport5 := &clientMockTransport{
-		closeError: fmt.Errorf("close failed"),
-	}
-	client5 := NewClientWithTransport(transport5)
-
-	err = client5.Connect(ctx)
-	if err != nil {
-		t.Fatalf("Connect should succeed: %v", err)
+				// Next should return the async error
+				_, err := iter.Next(ctx)
+				return err
+			},
+			wantErr:    true,
+			wantErrMsg: "async transport error",
+		},
+		{
+			name: "interrupt_error_propagation",
+			transportSetup: func() *clientMockTransport {
+				return newMockTransportWithOptions(WithInterruptError(fmt.Errorf("interrupt failed")))
+			},
+			operation: func(ctx context.Context, client Client) error {
+				if err := client.Connect(ctx); err != nil {
+					return fmt.Errorf("connect failed: %v", err)
+				}
+				return client.Interrupt(ctx)
+			},
+			wantErr:    true,
+			wantErrMsg: "interrupt failed",
+		},
+		{
+			name: "close_error_propagation",
+			transportSetup: func() *clientMockTransport {
+				return newMockTransportWithOptions(WithCloseError(fmt.Errorf("close failed")))
+			},
+			operation: func(ctx context.Context, client Client) error {
+				if err := client.Connect(ctx); err != nil {
+					return fmt.Errorf("connect failed: %v", err)
+				}
+				return client.Disconnect()
+			},
+			wantErr:    true,
+			wantErrMsg: "failed to close transport: close failed",
+		},
 	}
 
-	err = client5.Disconnect()
-	if err == nil {
-		t.Error("Expected close error to be propagated")
-	}
-	if err.Error() != "failed to close transport: close failed" {
-		t.Errorf("Expected wrapped close error, got: %v", err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, cancel := setupTestContext(t, 5*time.Second)
+			defer cancel()
+
+			transport := tt.transportSetup()
+			client := setupClient(t, transport)
+
+			err := tt.operation(ctx, client)
+
+			if (err != nil) != tt.wantErr {
+				t.Errorf("operation() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+
+			if tt.wantErr && err != nil && err.Error() != tt.wantErrMsg {
+				t.Errorf("operation() error message = %v, wantErrMsg %v", err.Error(), tt.wantErrMsg)
+			}
+
+			if tt.validate != nil {
+				tt.validate(t, transport, client)
+			}
+		})
 	}
 }
 
-// T143: Client Concurrent Access 🔴 RED
-// Go Target: client_test.go::TestClientConcurrentAccess
 func TestClientConcurrentAccess(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -731,7 +805,7 @@ func TestClientConcurrentAccess(t *testing.T) {
 	// Test concurrent Query operations
 	const numGoroutines = 10
 	const queriesPerGoroutine = 5
-	
+
 	var wg sync.WaitGroup
 	errorChan := make(chan error, numGoroutines*queriesPerGoroutine)
 
@@ -742,7 +816,7 @@ func TestClientConcurrentAccess(t *testing.T) {
 			for j := 0; j < queriesPerGoroutine; j++ {
 				prompt := fmt.Sprintf("Query from goroutine %d, message %d", goroutineID, j)
 				sessionID := fmt.Sprintf("session-%d-%d", goroutineID, j)
-				
+
 				if err := client.Query(ctx, prompt, sessionID); err != nil {
 					errorChan <- err
 					return
@@ -812,15 +886,13 @@ func TestClientConcurrentAccess(t *testing.T) {
 	for err := range connectErrors {
 		connectionErrors = append(connectionErrors, err)
 	}
-	
+
 	// At least one connection should succeed, others may fail due to concurrent access
 	if len(connectionErrors) == 4 {
 		t.Error("All concurrent connection attempts failed")
 	}
 }
 
-// T146: Client Transport Selection 🔴 RED
-// Go Target: client_test.go::TestClientTransportSelection
 func TestClientTransportSelection(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -840,8 +912,8 @@ func TestClientTransportSelection(t *testing.T) {
 			t.Errorf("Transport factory should be initialized, got: %v", err)
 		}
 		// Should get either CLI-related error or transport selection success message
-		if !strings.Contains(err.Error(), "claude") && !strings.Contains(err.Error(), "CLI") && 
-		   !strings.Contains(err.Error(), "transport selection successful") {
+		if !strings.Contains(err.Error(), "claude") && !strings.Contains(err.Error(), "CLI") &&
+			!strings.Contains(err.Error(), "transport selection successful") {
 			t.Errorf("Expected CLI or transport selection error, got: %v", err)
 		} else {
 			t.Logf("Got expected transport selection behavior: %v", err)
@@ -858,1632 +930,1611 @@ func TestClientTransportSelection(t *testing.T) {
 	}
 }
 
-// T144: Client Resource Cleanup 🔴 RED
-// Go Target: client_test.go::TestClientResourceCleanup
+// TestClientResourceCleanup tests proper resource cleanup during client lifecycle.
 func TestClientResourceCleanup(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	// Test 1: Basic resource cleanup after disconnect
-	t.Run("BasicResourceCleanup", func(t *testing.T) {
-		transport := &clientMockTransport{}
-		client := NewClientWithTransport(transport)
-
-		err := client.Connect(ctx)
-		if err != nil {
-			t.Fatalf("Connect failed: %v", err)
-		}
-
-		// Verify resources are allocated
-		if !transport.connected {
-			t.Error("Expected transport to be connected")
-		}
-
-		// Disconnect and verify cleanup
-		err = client.Disconnect()
-		if err != nil {
-			t.Errorf("Disconnect failed: %v", err)
-		}
-
-		// Verify transport is cleaned up
-		if transport.connected {
-			t.Error("Expected transport to be disconnected after cleanup")
-		}
-
-		// Verify client state is reset
-		clientImpl := client.(*ClientImpl)
-		clientImpl.mu.RLock()
-		connected := clientImpl.connected
-		transportRef := clientImpl.transport
-		msgChan := clientImpl.msgChan
-		errChan := clientImpl.errChan
-		clientImpl.mu.RUnlock()
-
-		if connected {
-			t.Error("Expected client.connected to be false after disconnect")
-		}
-		if transportRef != nil {
-			t.Error("Expected client.transport to be nil after disconnect")
-		}
-		if msgChan != nil {
-			t.Error("Expected client.msgChan to be nil after disconnect")
-		}
-		if errChan != nil {
-			t.Error("Expected client.errChan to be nil after disconnect")
-		}
-	})
-
-	// Test 2: Multiple disconnect calls should be safe (no double-close)
-	t.Run("MultipleDisconnectSafe", func(t *testing.T) {
-		transport := &clientMockTransport{}
-		client := NewClientWithTransport(transport)
-
-		err := client.Connect(ctx)
-		if err != nil {
-			t.Fatalf("Connect failed: %v", err)
-		}
-
-		// First disconnect
-		err = client.Disconnect()
-		if err != nil {
-			t.Errorf("First disconnect failed: %v", err)
-		}
-
-		// Second disconnect should not panic or error
-		err = client.Disconnect()
-		if err != nil {
-			t.Errorf("Second disconnect should be safe, but got error: %v", err)
-		}
-
-		// Third disconnect should also be safe
-		err = client.Disconnect()
-		if err != nil {
-			t.Errorf("Third disconnect should be safe, but got error: %v", err)
-		}
-	})
-
-	// Test 3: Resource cleanup with goroutines running
-	t.Run("CleanupWithActiveGoroutines", func(t *testing.T) {
-		transport := &clientMockTransport{
-			responseMessages: []Message{
-				&AssistantMessage{
-					Content: []ContentBlock{&TextBlock{Text: "Hello"}},
-					Model:   "claude-opus-4-1-20250805",
-				},
+	tests := []struct {
+		name           string
+		transportSetup func() *clientMockTransport
+		operation      func(*testing.T, context.Context, Client, *clientMockTransport)
+		validate       func(*testing.T, *clientMockTransport, Client)
+	}{
+		{
+			name: "basic_resource_cleanup",
+			transportSetup: func() *clientMockTransport {
+				return &clientMockTransport{}
 			},
-		}
-		client := NewClientWithTransport(transport)
+			operation: func(t *testing.T, ctx context.Context, client Client, transport *clientMockTransport) {
+				t.Helper()
+				err := client.Connect(ctx)
+				if err != nil {
+					t.Fatalf("Connect failed: %v", err)
+				}
 
-		err := client.Connect(ctx)
-		if err != nil {
-			t.Fatalf("Connect failed: %v", err)
-		}
+				// Verify resources are allocated
+				if !transport.connected {
+					t.Error("Expected transport to be connected")
+				}
 
-		// Start some operations that create goroutines
-		messages := make(chan StreamMessage, 2)
-		messages <- StreamMessage{Type: "request", Message: &UserMessage{Content: "Test 1"}}
-		messages <- StreamMessage{Type: "request", Message: &UserMessage{Content: "Test 2"}}
-		close(messages)
+				// Disconnect and verify cleanup
+				err = client.Disconnect()
+				if err != nil {
+					t.Errorf("Disconnect failed: %v", err)
+				}
+			},
+			validate: func(t *testing.T, transport *clientMockTransport, client Client) {
+				t.Helper()
+				// Verify transport is cleaned up
+				if transport.connected {
+					t.Error("Expected transport to be disconnected after cleanup")
+				}
 
-		err = client.QueryStream(ctx, messages)
-		if err != nil {
-			t.Errorf("QueryStream failed: %v", err)
-		}
+				// Verify client state is reset
+				clientImpl := client.(*ClientImpl)
+				clientImpl.mu.RLock()
+				connected := clientImpl.connected
+				transportRef := clientImpl.transport
+				msgChan := clientImpl.msgChan
+				errChan := clientImpl.errChan
+				clientImpl.mu.RUnlock()
 
-		// Start receiving messages (this may create goroutines)
-		msgChan := client.ReceiveMessages(ctx)
-		
-		// Start a goroutine to consume messages
-		done := make(chan bool)
-		go func() {
-			for {
+				if connected {
+					t.Error("Expected client.connected to be false after disconnect")
+				}
+				if transportRef != nil {
+					t.Error("Expected client.transport to be nil after disconnect")
+				}
+				if msgChan != nil {
+					t.Error("Expected client.msgChan to be nil after disconnect")
+				}
+				if errChan != nil {
+					t.Error("Expected client.errChan to be nil after disconnect")
+				}
+			},
+		},
+		{
+			name: "multiple_disconnect_safe",
+			transportSetup: func() *clientMockTransport {
+				return &clientMockTransport{}
+			},
+			operation: func(t *testing.T, ctx context.Context, client Client, transport *clientMockTransport) {
+				t.Helper()
+				err := client.Connect(ctx)
+				if err != nil {
+					t.Fatalf("Connect failed: %v", err)
+				}
+
+				// First disconnect
+				err = client.Disconnect()
+				if err != nil {
+					t.Errorf("First disconnect failed: %v", err)
+				}
+
+				// Second disconnect should not panic or error
+				err = client.Disconnect()
+				if err != nil {
+					t.Errorf("Second disconnect should be safe, but got error: %v", err)
+				}
+
+				// Third disconnect should also be safe
+				err = client.Disconnect()
+				if err != nil {
+					t.Errorf("Third disconnect should be safe, but got error: %v", err)
+				}
+			},
+		},
+		{
+			name: "cleanup_with_active_goroutines",
+			transportSetup: func() *clientMockTransport {
+				return &clientMockTransport{
+					responseMessages: []Message{
+						&AssistantMessage{
+							Content: []ContentBlock{&TextBlock{Text: "Hello"}},
+							Model:   "claude-opus-4-1-20250805",
+						},
+					},
+				}
+			},
+			operation: func(t *testing.T, ctx context.Context, client Client, transport *clientMockTransport) {
+				t.Helper()
+				err := client.Connect(ctx)
+				if err != nil {
+					t.Fatalf("Connect failed: %v", err)
+				}
+
+				// Start some operations that create goroutines
+				messages := make(chan StreamMessage, 2)
+				messages <- StreamMessage{Type: "request", Message: &UserMessage{Content: "Test 1"}}
+				messages <- StreamMessage{Type: "request", Message: &UserMessage{Content: "Test 2"}}
+				close(messages)
+
+				err = client.QueryStream(ctx, messages)
+				if err != nil {
+					t.Errorf("QueryStream failed: %v", err)
+				}
+
+				// Start receiving messages (this may create goroutines)
+				msgChan := client.ReceiveMessages(ctx)
+
+				// Start a goroutine to consume messages
+				done := make(chan bool)
+				go func() {
+					for {
+						select {
+						case msg := <-msgChan:
+							if msg == nil {
+								done <- true
+								return
+							}
+						case <-time.After(100 * time.Millisecond):
+							done <- true
+							return
+						}
+					}
+				}()
+
+				// Give some time for goroutines to start
+				time.Sleep(50 * time.Millisecond)
+
+				// Now disconnect - should clean up all resources
+				err = client.Disconnect()
+				if err != nil {
+					t.Errorf("Disconnect with active goroutines failed: %v", err)
+				}
+
+				// Wait for consumer goroutine to finish
 				select {
-				case msg := <-msgChan:
-					if msg == nil {
-						done <- true
-						return
+				case <-done:
+				case <-time.After(2 * time.Second):
+					t.Error("Consumer goroutine did not finish within timeout")
+				}
+			},
+			validate: func(t *testing.T, transport *clientMockTransport, client Client) {
+				t.Helper()
+				// Verify cleanup
+				if transport.connected {
+					t.Error("Transport should be disconnected after cleanup with active goroutines")
+				}
+			},
+		},
+		{
+			name: "repeated_connect_disconnect_no_leak",
+			transportSetup: func() *clientMockTransport {
+				return &clientMockTransport{}
+			},
+			operation: func(t *testing.T, ctx context.Context, client Client, transport *clientMockTransport) {
+				t.Helper()
+				// Perform many connect/disconnect cycles
+				for i := 0; i < 100; i++ {
+					err := client.Connect(ctx)
+					if err != nil {
+						t.Fatalf("Connect %d failed: %v", i, err)
+					}
+
+					// Do some work
+					err = client.Query(ctx, fmt.Sprintf("Test query %d", i))
+					if err != nil {
+						t.Errorf("Query %d failed: %v", i, err)
+					}
+
+					err = client.Disconnect()
+					if err != nil {
+						t.Errorf("Disconnect %d failed: %v", i, err)
+					}
+
+					// Verify state is clean after each cycle
+					clientImpl := client.(*ClientImpl)
+					clientImpl.mu.RLock()
+					connected := clientImpl.connected
+					transportRef := clientImpl.transport
+					clientImpl.mu.RUnlock()
+
+					if connected {
+						t.Errorf("Client should not be connected after disconnect cycle %d", i)
+					}
+					if transportRef != nil {
+						t.Errorf("Transport reference should be nil after disconnect cycle %d", i)
+					}
+				}
+			},
+		},
+		{
+			name: "disconnect_during_operations",
+			transportSetup: func() *clientMockTransport {
+				return &clientMockTransport{}
+			},
+			operation: func(t *testing.T, ctx context.Context, client Client, transport *clientMockTransport) {
+				t.Helper()
+				err := client.Connect(ctx)
+				if err != nil {
+					t.Fatalf("Connect failed: %v", err)
+				}
+
+				// Start multiple operations concurrently
+				var wg sync.WaitGroup
+				errorChan := make(chan error, 10)
+
+				// Start multiple queries
+				for i := 0; i < 5; i++ {
+					wg.Add(1)
+					go func(id int) {
+						defer wg.Done()
+						if err := client.Query(ctx, fmt.Sprintf("Query %d", id)); err != nil {
+							errorChan <- err
+						}
+					}(i)
+				}
+
+				// Start message receiving
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					msgChan := client.ReceiveMessages(ctx)
+					for {
+						select {
+						case msg := <-msgChan:
+							if msg == nil {
+								return
+							}
+						case <-time.After(50 * time.Millisecond):
+							return
+						}
+					}
+				}()
+
+				// Give operations time to start
+				time.Sleep(25 * time.Millisecond)
+
+				// Disconnect while operations are running
+				err = client.Disconnect()
+				if err != nil {
+					t.Errorf("Disconnect during operations failed: %v", err)
+				}
+
+				// Wait for all goroutines to complete
+				done := make(chan bool)
+				go func() {
+					wg.Wait()
+					done <- true
+				}()
+
+				select {
+				case <-done:
+				case <-time.After(3 * time.Second):
+					t.Error("Goroutines did not complete within timeout after disconnect")
+				}
+
+				// Collect any errors (some expected due to disconnection)
+				close(errorChan)
+				for err := range errorChan {
+					// Errors are expected here due to disconnection during operations
+					if !strings.Contains(err.Error(), "not connected") {
+						t.Logf("Expected connection error: %v", err)
+					}
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+
+			transport := tt.transportSetup()
+			client := NewClientWithTransport(transport)
+
+			// Execute operation
+			if tt.operation != nil {
+				tt.operation(t, ctx, client, transport)
+			}
+
+			// Validation
+			if tt.validate != nil {
+				tt.validate(t, transport, client)
+			}
+		})
+	}
+}
+
+// TestClientConfigurationValidation tests validation of client configuration options.
+func TestClientConfigurationValidation(t *testing.T) {
+	tests := []struct {
+		name          string
+		clientOptions []Option
+		setupClient   func(Client) // For manual modifications like invalid permission mode
+		wantErr       bool
+		wantErrMsg    string // Expected error message substring
+		shouldConnect bool   // Whether Connect() should succeed
+		validate      func(*testing.T, Client)
+	}{
+		{
+			name: "valid_configuration",
+			clientOptions: []Option{
+				WithSystemPrompt("You are a helpful assistant"),
+				WithAllowedTools("Read", "Write", "Bash"),
+				WithDisallowedTools("dangerous-tool"),
+				WithMaxTurns(10),
+				WithPermissionMode(PermissionModeAcceptEdits),
+				WithModel("claude-opus-4-1-20250805"),
+				WithCwd("/tmp"),
+			},
+			wantErr:       false,
+			shouldConnect: true,
+		},
+		{
+			name: "invalid_working_directory",
+			clientOptions: []Option{
+				WithCwd("/non/existent/directory/that/should/not/exist"),
+			},
+			wantErr:       true,
+			wantErrMsg:    "directory",
+			shouldConnect: false,
+		},
+		{
+			name: "invalid_max_turns",
+			clientOptions: []Option{
+				WithMaxTurns(-1),
+			},
+			wantErr:       true,
+			wantErrMsg:    "turns",
+			shouldConnect: false,
+		},
+		{
+			name:          "invalid_permission_mode",
+			clientOptions: []Option{},
+			setupClient: func(client Client) {
+				// Manually set invalid permission mode
+				clientImpl := client.(*ClientImpl)
+				invalidMode := PermissionMode("invalid_mode")
+				clientImpl.options.PermissionMode = &invalidMode
+			},
+			wantErr:       true,
+			wantErrMsg:    "permission",
+			shouldConnect: false,
+		},
+		{
+			name: "conflicting_tool_configuration",
+			clientOptions: []Option{
+				WithAllowedTools("Read", "Write"),
+				WithDisallowedTools("Read"), // Read is both allowed and disallowed
+			},
+			wantErr:       false, // May be accepted with precedence rules
+			shouldConnect: true,
+		},
+		{
+			name: "empty_model_name",
+			clientOptions: []Option{
+				WithModel(""),
+			},
+			wantErr:       false, // May use defaults
+			shouldConnect: true,
+		},
+		{
+			name: "invalid_mcp_server_configuration",
+			clientOptions: []Option{
+				WithMcpServers(map[string]McpServerConfig{
+					"test-server": &McpStdioServerConfig{
+						Type:    McpServerTypeStdio,
+						Command: "", // Empty command
+						Args:    []string{},
+					},
+				}),
+			},
+			wantErr:       false, // May be accepted
+			shouldConnect: true,
+		},
+		{
+			name:          "nil_options_handling",
+			clientOptions: []Option{}, // No options, use defaults
+			wantErr:       false,
+			shouldConnect: true,
+		},
+		{
+			name: "configuration_immutability_after_connection",
+			clientOptions: []Option{
+				WithSystemPrompt("Original prompt"),
+			},
+			wantErr:       false,
+			shouldConnect: true,
+			validate: func(t *testing.T, client Client) {
+				// Verify config can be modified after creation but before connection
+				clientImpl := client.(*ClientImpl)
+				originalPrompt := "Original prompt"
+				if clientImpl.options.SystemPrompt == nil || *clientImpl.options.SystemPrompt != originalPrompt {
+					t.Errorf("Expected original prompt to be %q", originalPrompt)
+				}
+
+				// Modify after connection attempt
+				modifiedPrompt := "Modified prompt"
+				clientImpl.options.SystemPrompt = &modifiedPrompt
+
+				// This tests that modification doesn't break subsequent operations
+				ctx, cancel := setupTestContext(t, 5*time.Second)
+				defer cancel()
+
+				err := client.Query(ctx, "test")
+				if err != nil {
+					t.Errorf("Query failed after options modification: %v", err)
+				}
+			},
+		},
+		{
+			name: "large_configuration_values",
+			clientOptions: []Option{
+				WithSystemPrompt(strings.Repeat("This is a very long system prompt. ", 1000)),
+				WithMaxThinkingTokens(100000),
+			},
+			wantErr:       false, // Should handle large values
+			shouldConnect: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, cancel := setupTestContext(t, 5*time.Second)
+			defer cancel()
+
+			transport := newMockTransport()
+			client := setupClient(t, transport, tt.clientOptions...)
+
+			// Apply any manual setup modifications
+			if tt.setupClient != nil {
+				tt.setupClient(client)
+			}
+
+			err := client.Connect(ctx)
+
+			if tt.shouldConnect {
+				if err != nil && tt.wantErr && tt.wantErrMsg != "" {
+					if !strings.Contains(err.Error(), tt.wantErrMsg) {
+						t.Errorf("Connect() error = %v, wantErrMsg substring = %v", err.Error(), tt.wantErrMsg)
+					}
+				} else if err != nil && !tt.wantErr {
+					t.Errorf("Connect() unexpected error = %v", err)
+				} else if err == nil && tt.wantErr {
+					t.Error("Connect() expected error but got none")
+					client.Disconnect() // Clean up successful connection
+				}
+
+				// If connection succeeded, clean up
+				if err == nil {
+					defer client.Disconnect()
+				}
+			} else {
+				// Should not connect
+				if err == nil {
+					t.Error("Connect() should have failed")
+					client.Disconnect()
+				} else if tt.wantErrMsg != "" && !strings.Contains(err.Error(), tt.wantErrMsg) {
+					t.Errorf("Connect() error = %v, wantErrMsg substring = %v", err.Error(), tt.wantErrMsg)
+				}
+			}
+
+			// Run additional validations
+			if tt.validate != nil {
+				tt.validate(t, client)
+			}
+		})
+	}
+}
+
+// TestClientInterfaceCompliance tests compliance with the Client interface contract.
+func TestClientInterfaceCompliance(t *testing.T) {
+	tests := []struct {
+		name           string
+		transportSetup func() *clientMockTransport
+		operation      func(*testing.T, context.Context, Client)
+		validate       func(*testing.T, *clientMockTransport, Client)
+		wantErr        bool
+		connectFirst   bool // Whether to connect before operation
+	}{
+		{
+			name: "interface_methods_exist",
+			transportSetup: func() *clientMockTransport {
+				return &clientMockTransport{}
+			},
+			operation: func(t *testing.T, ctx context.Context, client Client) {
+				t.Helper()
+				// Type assertion to ensure ClientImpl implements Client interface
+				var _ Client = client
+
+				// Test that all methods are callable with correct signatures
+				// Connect(ctx context.Context, prompt ...StreamMessage) error
+				err := client.Connect(ctx)
+				if err != nil {
+					t.Logf("Connect returned error (expected for mock): %v", err)
+				}
+
+				// Query(ctx context.Context, prompt string, sessionID ...string) error
+				err = client.Query(ctx, "test")
+				if err != nil {
+					t.Logf("Query returned error (expected for disconnected client): %v", err)
+				}
+
+				// Query with session ID
+				err = client.Query(ctx, "test", "session123")
+				if err != nil {
+					t.Logf("Query with session ID returned error: %v", err)
+				}
+
+				// Query with multiple session IDs (should use first one)
+				err = client.Query(ctx, "test", "session1", "session2")
+				if err != nil {
+					t.Logf("Query with multiple session IDs returned error: %v", err)
+				}
+
+				// QueryStream(ctx context.Context, messages <-chan StreamMessage) error
+				messages := make(chan StreamMessage)
+				close(messages) // Empty channel
+				err = client.QueryStream(ctx, messages)
+				if err != nil {
+					t.Logf("QueryStream returned error: %v", err)
+				}
+
+				// ReceiveMessages(ctx context.Context) <-chan Message
+				msgChan := client.ReceiveMessages(ctx)
+				if msgChan == nil {
+					t.Error("ReceiveMessages should not return nil channel")
+				}
+
+				// ReceiveResponse(ctx context.Context) MessageIterator
+				iter := client.ReceiveResponse(ctx)
+				if iter == nil {
+					// This is acceptable for disconnected client
+					t.Log("ReceiveResponse returned nil (expected for disconnected client)")
+				}
+
+				// Interrupt(ctx context.Context) error
+				err = client.Interrupt(ctx)
+				if err != nil {
+					t.Logf("Interrupt returned error (expected for disconnected client): %v", err)
+				}
+
+				// Disconnect() error
+				err = client.Disconnect()
+				if err != nil {
+					t.Errorf("Disconnect should not return error for clean disconnect: %v", err)
+				}
+			},
+		},
+		{
+			name: "connect_method_behavior",
+			transportSetup: func() *clientMockTransport {
+				return &clientMockTransport{}
+			},
+			operation: func(t *testing.T, ctx context.Context, client Client) {
+				t.Helper()
+				// Connect should work with valid transport
+				err := client.Connect(ctx)
+				if err != nil {
+					t.Errorf("Connect should succeed with valid transport: %v", err)
+				}
+
+				// Connect with initial messages
+				initialMsg := StreamMessage{Type: "request", Message: &UserMessage{Content: "Hello"}}
+				err = client.Connect(ctx, initialMsg)
+				if err != nil {
+					t.Logf("Connect with initial message returned: %v", err)
+				}
+
+				client.Disconnect()
+			},
+		},
+		{
+			name: "query_method_variations",
+			transportSetup: func() *clientMockTransport {
+				return &clientMockTransport{}
+			},
+			connectFirst: true,
+			operation: func(t *testing.T, ctx context.Context, client Client) {
+				t.Helper()
+				// Query with no session ID (should use default)
+				err := client.Query(ctx, "test message")
+				if err != nil {
+					t.Errorf("Query without session ID failed: %v", err)
+				}
+
+				// Query with empty session ID (should use default)
+				err = client.Query(ctx, "test message", "")
+				if err != nil {
+					t.Errorf("Query with empty session ID failed: %v", err)
+				}
+
+				// Query with valid session ID
+				err = client.Query(ctx, "test message", "session123")
+				if err != nil {
+					t.Errorf("Query with valid session ID failed: %v", err)
+				}
+			},
+			validate: func(t *testing.T, transport *clientMockTransport, client Client) {
+				t.Helper()
+				// Verify messages were sent correctly
+				expectedMsgCount := 3
+				if transport.getSentMessageCount() != expectedMsgCount {
+					t.Errorf("Expected %d messages sent, got %d", expectedMsgCount, transport.getSentMessageCount())
+				}
+			},
+		},
+		{
+			name: "query_stream_method_behavior",
+			transportSetup: func() *clientMockTransport {
+				return &clientMockTransport{}
+			},
+			connectFirst: true,
+			operation: func(t *testing.T, ctx context.Context, client Client) {
+				t.Helper()
+				// Test with multiple messages
+				messages := make(chan StreamMessage, 3)
+				messages <- StreamMessage{Type: "request", Message: &UserMessage{Content: "Message 1"}}
+				messages <- StreamMessage{Type: "request", Message: &UserMessage{Content: "Message 2"}}
+				messages <- StreamMessage{Type: "request", Message: &UserMessage{Content: "Message 3"}}
+				close(messages)
+
+				err := client.QueryStream(ctx, messages)
+				if err != nil {
+					t.Errorf("QueryStream failed: %v", err)
+				}
+
+				// Give time for goroutine to process messages
+				time.Sleep(100 * time.Millisecond)
+
+				// Test with empty channel
+				emptyMessages := make(chan StreamMessage)
+				close(emptyMessages)
+
+				err = client.QueryStream(ctx, emptyMessages)
+				if err != nil {
+					t.Errorf("QueryStream with empty channel failed: %v", err)
+				}
+			},
+		},
+		{
+			name: "receive_messages_method_behavior",
+			transportSetup: func() *clientMockTransport {
+				return &clientMockTransport{
+					responseMessages: []Message{
+						&AssistantMessage{Content: []ContentBlock{&TextBlock{Text: "Response 1"}}, Model: "claude-opus-4-1-20250805"},
+						&AssistantMessage{Content: []ContentBlock{&TextBlock{Text: "Response 2"}}, Model: "claude-opus-4-1-20250805"},
+					},
+				}
+			},
+			connectFirst: true,
+			operation: func(t *testing.T, ctx context.Context, client Client) {
+				t.Helper()
+				// Get message channel
+				msgChan := client.ReceiveMessages(ctx)
+				if msgChan == nil {
+					t.Fatal("ReceiveMessages returned nil channel")
+				}
+			},
+			validate: func(t *testing.T, transport *clientMockTransport, client Client) {
+				t.Helper()
+				ctx := context.Background()
+				msgChan := client.ReceiveMessages(ctx)
+
+				// Trigger sending responses
+				transport.sendResponses()
+
+				// Read messages
+				var receivedMessages []Message
+				for i := 0; i < 2; i++ {
+					select {
+					case msg := <-msgChan:
+						if msg != nil {
+							receivedMessages = append(receivedMessages, msg)
+						}
+					case <-time.After(1 * time.Second):
+						t.Fatal("Timeout waiting for messages")
+					}
+				}
+
+				if len(receivedMessages) != 2 {
+					t.Errorf("Expected 2 messages, got %d", len(receivedMessages))
+				}
+			},
+		},
+		{
+			name: "receive_response_method_behavior",
+			transportSetup: func() *clientMockTransport {
+				return &clientMockTransport{
+					responseMessages: []Message{
+						&AssistantMessage{Content: []ContentBlock{&TextBlock{Text: "Iterator Response"}}, Model: "claude-opus-4-1-20250805"},
+					},
+				}
+			},
+			connectFirst: true,
+			operation: func(t *testing.T, ctx context.Context, client Client) {
+				t.Helper()
+				// Get response iterator
+				iter := client.ReceiveResponse(ctx)
+				if iter == nil {
+					t.Fatal("ReceiveResponse returned nil iterator")
+				}
+				if iter != nil {
+					defer iter.Close()
+				}
+			},
+			validate: func(t *testing.T, transport *clientMockTransport, client Client) {
+				t.Helper()
+				ctx := context.Background()
+				iter := client.ReceiveResponse(ctx)
+				if iter == nil {
+					t.Fatal("ReceiveResponse returned nil iterator")
+				}
+				defer iter.Close()
+
+				// Trigger responses
+				transport.sendResponses()
+
+				// Use iterator
+				msg, err := iter.Next(ctx)
+				if err != nil {
+					t.Errorf("Iterator Next failed: %v", err)
+				} else if msg == nil {
+					t.Error("Iterator returned nil message")
+				}
+
+				// Close iterator
+				err = iter.Close()
+				if err != nil {
+					t.Errorf("Iterator Close failed: %v", err)
+				}
+			},
+		},
+		{
+			name: "interrupt_method_behavior",
+			transportSetup: func() *clientMockTransport {
+				return &clientMockTransport{}
+			},
+			operation: func(t *testing.T, ctx context.Context, client Client) {
+				t.Helper()
+				// Interrupt on disconnected client should return error
+				err := client.Interrupt(ctx)
+				if err == nil {
+					t.Error("Interrupt on disconnected client should return error")
+				}
+
+				// Interrupt on connected client should work
+				err = client.Connect(ctx)
+				if err != nil {
+					t.Fatalf("Connect failed: %v", err)
+				}
+
+				err = client.Interrupt(ctx)
+				if err != nil {
+					t.Errorf("Interrupt on connected client failed: %v", err)
+				}
+
+				client.Disconnect()
+			},
+		},
+		{
+			name: "disconnect_method_behavior",
+			transportSetup: func() *clientMockTransport {
+				return &clientMockTransport{}
+			},
+			operation: func(t *testing.T, ctx context.Context, client Client) {
+				t.Helper()
+				// Disconnect on unconnected client should be safe
+				err := client.Disconnect()
+				if err != nil {
+					t.Errorf("Disconnect on unconnected client should be safe: %v", err)
+				}
+
+				// Connect and disconnect
+				err = client.Connect(ctx)
+				if err != nil {
+					t.Fatalf("Connect failed: %v", err)
+				}
+
+				err = client.Disconnect()
+				if err != nil {
+					t.Errorf("Disconnect after connect failed: %v", err)
+				}
+
+				// Multiple disconnects should be safe
+				err = client.Disconnect()
+				if err != nil {
+					t.Errorf("Second disconnect should be safe: %v", err)
+				}
+			},
+		},
+		{
+			name: "error_handling_consistency",
+			transportSetup: func() *clientMockTransport {
+				return &clientMockTransport{
+					connectError: fmt.Errorf("mock connect error"),
+				}
+			},
+			operation: func(t *testing.T, ctx context.Context, client Client) {
+				t.Helper()
+				// All methods should handle errors consistently
+				err := client.Connect(ctx)
+				if err == nil {
+					t.Error("Expected connect error")
+				}
+
+				// Methods should return appropriate errors when not connected
+				err = client.Query(ctx, "test")
+				if err == nil {
+					t.Error("Query should return error when not connected")
+				}
+
+				messages := make(chan StreamMessage)
+				close(messages)
+				err = client.QueryStream(ctx, messages)
+				if err == nil {
+					t.Error("QueryStream should return error when not connected")
+				}
+
+				err = client.Interrupt(ctx)
+				if err == nil {
+					t.Error("Interrupt should return error when not connected")
+				}
+
+				// ReceiveMessages should return closed channel when not connected
+				msgChan := client.ReceiveMessages(ctx)
+				select {
+				case msg, ok := <-msgChan:
+					if ok || msg != nil {
+						t.Error("ReceiveMessages should return closed channel when not connected")
 					}
 				case <-time.After(100 * time.Millisecond):
-					done <- true
-					return
+					t.Error("ReceiveMessages channel should be immediately readable when closed")
 				}
-			}
-		}()
 
-		// Give some time for goroutines to start
-		time.Sleep(50 * time.Millisecond)
-
-		// Now disconnect - should clean up all resources
-		err = client.Disconnect()
-		if err != nil {
-			t.Errorf("Disconnect with active goroutines failed: %v", err)
-		}
-
-		// Wait for consumer goroutine to finish
-		select {
-		case <-done:
-		case <-time.After(2 * time.Second):
-			t.Error("Consumer goroutine did not finish within timeout")
-		}
-
-		// Verify cleanup
-		if transport.connected {
-			t.Error("Transport should be disconnected after cleanup with active goroutines")
-		}
-	})
-
-	// Test 4: Memory leak prevention - repeated connect/disconnect cycles
-	t.Run("RepeatedConnectDisconnectNoLeak", func(t *testing.T) {
-		transport := &clientMockTransport{}
-		client := NewClientWithTransport(transport)
-
-		// Perform many connect/disconnect cycles
-		for i := 0; i < 100; i++ {
-			err := client.Connect(ctx)
-			if err != nil {
-				t.Fatalf("Connect %d failed: %v", i, err)
-			}
-
-			// Do some work
-			err = client.Query(ctx, fmt.Sprintf("Test query %d", i))
-			if err != nil {
-				t.Errorf("Query %d failed: %v", i, err)
-			}
-
-			err = client.Disconnect()
-			if err != nil {
-				t.Errorf("Disconnect %d failed: %v", i, err)
-			}
-
-			// Verify state is clean after each cycle
-			clientImpl := client.(*ClientImpl)
-			clientImpl.mu.RLock()
-			connected := clientImpl.connected
-			transportRef := clientImpl.transport
-			clientImpl.mu.RUnlock()
-
-			if connected {
-				t.Errorf("Client should not be connected after disconnect cycle %d", i)
-			}
-			if transportRef != nil {
-				t.Errorf("Transport reference should be nil after disconnect cycle %d", i)
-			}
-		}
-	})
-
-	// Test 5: Disconnect during operations should be safe
-	t.Run("DisconnectDuringOperations", func(t *testing.T) {
-		transport := &clientMockTransport{}
-		client := NewClientWithTransport(transport)
-
-		err := client.Connect(ctx)
-		if err != nil {
-			t.Fatalf("Connect failed: %v", err)
-		}
-
-		// Start multiple operations concurrently
-		var wg sync.WaitGroup
-		errorChan := make(chan error, 10)
-
-		// Start multiple queries
-		for i := 0; i < 5; i++ {
-			wg.Add(1)
-			go func(id int) {
-				defer wg.Done()
-				if err := client.Query(ctx, fmt.Sprintf("Query %d", id)); err != nil {
-					errorChan <- err
+				// ReceiveResponse should return nil when not connected
+				iter := client.ReceiveResponse(ctx)
+				if iter != nil {
+					t.Error("ReceiveResponse should return nil when not connected")
 				}
-			}(i)
-		}
-
-		// Start message receiving
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			msgChan := client.ReceiveMessages(ctx)
-			for {
-				select {
-				case msg := <-msgChan:
-					if msg == nil {
-						return
-					}
-				case <-time.After(50 * time.Millisecond):
-					return
-				}
-			}
-		}()
-
-		// Give operations time to start
-		time.Sleep(25 * time.Millisecond)
-
-		// Disconnect while operations are running
-		err = client.Disconnect()
-		if err != nil {
-			t.Errorf("Disconnect during operations failed: %v", err)
-		}
-
-		// Wait for all goroutines to complete
-		done := make(chan bool)
-		go func() {
-			wg.Wait()
-			done <- true
-		}()
-
-		select {
-		case <-done:
-		case <-time.After(3 * time.Second):
-			t.Error("Goroutines did not complete within timeout after disconnect")
-		}
-
-		// Collect any errors (some expected due to disconnection)
-		close(errorChan)
-		for err := range errorChan {
-			// Errors are expected here due to disconnection during operations
-			if !strings.Contains(err.Error(), "not connected") {
-				t.Logf("Expected connection error: %v", err)
-			}
-		}
-	})
-}
-
-// T157: Client Configuration Validation 🔴 RED
-// Go Target: client_test.go::TestClientConfigurationValidation
-func TestClientConfigurationValidation(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	// Test 1: Valid configuration should work
-	t.Run("ValidConfiguration", func(t *testing.T) {
-		transport := &clientMockTransport{}
-		
-		// Create client with valid options
-		client := NewClientWithTransport(transport,
-			WithSystemPrompt("You are a helpful assistant"),
-			WithAllowedTools("Read", "Write", "Bash"),
-			WithDisallowedTools("dangerous-tool"),
-			WithMaxTurns(10),
-			WithPermissionMode(PermissionModeAcceptEdits),
-			WithModel("claude-opus-4-1-20250805"),
-			WithCwd("/tmp"),
-		)
-
-		// Should connect successfully with valid configuration
-		err := client.Connect(ctx)
-		if err != nil {
-			t.Errorf("Valid configuration should connect successfully: %v", err)
-		}
-
-		err = client.Disconnect()
-		if err != nil {
-			t.Errorf("Disconnect failed: %v", err)
-		}
-	})
-
-	// Test 2: Invalid working directory should be rejected
-	t.Run("InvalidWorkingDirectory", func(t *testing.T) {
-		transport := &clientMockTransport{}
-		
-		// Create client with non-existent working directory
-		client := NewClientWithTransport(transport,
-			WithCwd("/non/existent/directory/that/should/not/exist"),
-		)
-
-		// Should fail during connect with helpful error
-		err := client.Connect(ctx)
-		if err == nil {
-			t.Error("Expected error for invalid working directory")
-			client.Disconnect()
-		} else if !strings.Contains(err.Error(), "working directory") && !strings.Contains(err.Error(), "directory") {
-			t.Errorf("Expected working directory validation error, got: %v", err)
-		}
-	})
-
-	// Test 3: Invalid max turns should be rejected
-	t.Run("InvalidMaxTurns", func(t *testing.T) {
-		transport := &clientMockTransport{}
-		
-		// Create client with invalid max turns
-		client := NewClientWithTransport(transport,
-			WithMaxTurns(-1), // Negative turns should be invalid
-		)
-
-		// Should validate during client creation or connection
-		err := client.Connect(ctx)
-		if err == nil {
-			t.Error("Expected error for negative max turns")
-			client.Disconnect()
-		} else if !strings.Contains(err.Error(), "max_turns") && !strings.Contains(err.Error(), "turns") {
-			t.Logf("Got error (may be acceptable): %v", err)
-		}
-	})
-
-	// Test 4: Invalid permission mode should be rejected
-	t.Run("InvalidPermissionMode", func(t *testing.T) {
-		transport := &clientMockTransport{}
-		
-		// Create client with invalid permission mode
-		client := NewClientWithTransport(transport)
-		
-		// Manually set invalid permission mode to test validation
-		clientImpl := client.(*ClientImpl)
-		invalidMode := PermissionMode("invalid_mode")
-		clientImpl.options.PermissionMode = &invalidMode
-
-		// Should validate during connection
-		err := client.Connect(ctx)
-		if err == nil {
-			t.Error("Expected error for invalid permission mode")
-			client.Disconnect()
-		} else if !strings.Contains(err.Error(), "permission") && !strings.Contains(err.Error(), "mode") {
-			t.Logf("Got error (may be acceptable): %v", err)
-		}
-	})
-
-	// Test 5: Tool validation - conflicting allowed and disallowed tools
-	t.Run("ConflictingToolConfiguration", func(t *testing.T) {
-		transport := &clientMockTransport{}
-		
-		// Create client with conflicting tool configuration
-		client := NewClientWithTransport(transport,
-			WithAllowedTools("Read", "Write"),
-			WithDisallowedTools("Read"), // Read is both allowed and disallowed
-		)
-
-		// Should validate during connection
-		err := client.Connect(ctx)
-		if err == nil {
-			// Some implementations might allow this and use precedence rules
-			t.Log("Conflicting tool configuration was accepted (may use precedence rules)")
-			client.Disconnect()
-		} else if !strings.Contains(err.Error(), "tool") {
-			t.Logf("Got error for conflicting tools: %v", err)
-		}
-	})
-
-	// Test 6: Invalid model name validation
-	t.Run("InvalidModelName", func(t *testing.T) {
-		transport := &clientMockTransport{}
-		
-		// Create client with potentially invalid model name
-		client := NewClientWithTransport(transport,
-			WithModel(""), // Empty model name
-		)
-
-		// Should either reject empty model or use default
-		err := client.Connect(ctx)
-		if err != nil {
-			if strings.Contains(err.Error(), "model") {
-				t.Logf("Empty model name was rejected: %v", err)
-			} else {
-				t.Logf("Got different error: %v", err)
-			}
-		} else {
-			// Empty model might be acceptable if defaults are used
-			t.Log("Empty model name was accepted (using defaults)")
-			client.Disconnect()
-		}
-	})
-
-	// Test 7: Invalid MCP server configuration
-	t.Run("InvalidMCPServerConfiguration", func(t *testing.T) {
-		transport := &clientMockTransport{}
-		
-		// Create client with invalid MCP configuration
-		mcpConfig := &McpStdioServerConfig{
-			Type:    McpServerTypeStdio,
-			Command: "", // Empty command should be invalid
-			Args:    []string{},
-		}
-		
-		mcpServers := map[string]McpServerConfig{
-			"test-server": mcpConfig,
-		}
-		client := NewClientWithTransport(transport,
-			WithMcpServers(mcpServers),
-		)
-
-		// Should validate MCP configuration
-		err := client.Connect(ctx)
-		if err == nil {
-			t.Log("Empty MCP command was accepted")
-			client.Disconnect()
-		} else if !strings.Contains(err.Error(), "mcp") && !strings.Contains(err.Error(), "command") {
-			t.Logf("Got error: %v", err)
-		}
-	})
-
-	// Test 8: Nil options should be handled gracefully
-	t.Run("NilOptionsHandling", func(t *testing.T) {
-		transport := &clientMockTransport{}
-		
-		// Create client with no options (should use defaults)
-		client := NewClientWithTransport(transport)
-
-		// Should work with default options
-		err := client.Connect(ctx)
-		if err != nil {
-			// This might fail due to transport setup, not options validation
-			t.Logf("Connect with default options failed: %v", err)
-		} else {
-			client.Disconnect()
-		}
-	})
-
-	// Test 9: Configuration immutability after connection
-	t.Run("ConfigurationImmutabilityAfterConnection", func(t *testing.T) {
-		transport := &clientMockTransport{}
-		
-		client := NewClientWithTransport(transport,
-			WithSystemPrompt("Original prompt"),
-		)
-
-		err := client.Connect(ctx)
-		if err != nil {
-			t.Fatalf("Connect failed: %v", err)
-		}
-
-		// Try to modify configuration after connection (should not affect connected client)
-		clientImpl := client.(*ClientImpl)
-		var originalPrompt string
-		if clientImpl.options.SystemPrompt != nil {
-			originalPrompt = *clientImpl.options.SystemPrompt
-		}
-		modifiedPrompt := "Modified prompt"
-		clientImpl.options.SystemPrompt = &modifiedPrompt
-
-		// Send a query to verify the configuration wasn't changed mid-flight
-		err = client.Query(ctx, "test")
-		if err != nil {
-			t.Errorf("Query failed after options modification: %v", err)
-		}
-
-		// Clean up
-		client.Disconnect()
-
-		// The original prompt should have been preserved in some form
-		if originalPrompt != "Original prompt" {
-			t.Errorf("Expected original prompt to be preserved, got %q", originalPrompt)
-		}
-	})
-
-	// Test 10: Large configuration values
-	t.Run("LargeConfigurationValues", func(t *testing.T) {
-		transport := &clientMockTransport{}
-		
-		// Create very large system prompt
-		largePrompt := strings.Repeat("This is a very long system prompt. ", 1000)
-		
-		client := NewClientWithTransport(transport,
-			WithSystemPrompt(largePrompt),
-			WithMaxThinkingTokens(100000), // Large thinking tokens
-		)
-
-		// Should handle large configuration values
-		err := client.Connect(ctx)
-		if err != nil {
-			t.Logf("Large configuration values caused error: %v", err)
-		} else {
-			client.Disconnect()
-		}
-	})
-}
-
-// T158: Client Interface Compliance 🔴 RED
-// Go Target: client_test.go::TestClientInterfaceCompliance
-func TestClientInterfaceCompliance(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	// Test 1: Verify all Client interface methods exist and have correct signatures
-	t.Run("InterfaceMethodsExist", func(t *testing.T) {
-		transport := &clientMockTransport{}
-		client := NewClientWithTransport(transport)
-
-		// Type assertion to ensure ClientImpl implements Client interface
-		var _ Client = client
-
-		// Test that all methods are callable with correct signatures
-		
-		// Connect(ctx context.Context, prompt ...StreamMessage) error
-		err := client.Connect(ctx)
-		if err != nil {
-			t.Logf("Connect returned error (expected for mock): %v", err)
-		}
-
-		// Query(ctx context.Context, prompt string, sessionID ...string) error
-		err = client.Query(ctx, "test")
-		if err != nil {
-			t.Logf("Query returned error (expected for disconnected client): %v", err)
-		}
-
-		// Query with session ID
-		err = client.Query(ctx, "test", "session123")
-		if err != nil {
-			t.Logf("Query with session ID returned error: %v", err)
-		}
-
-		// Query with multiple session IDs (should use first one)
-		err = client.Query(ctx, "test", "session1", "session2")
-		if err != nil {
-			t.Logf("Query with multiple session IDs returned error: %v", err)
-		}
-
-		// QueryStream(ctx context.Context, messages <-chan StreamMessage) error
-		messages := make(chan StreamMessage)
-		close(messages) // Empty channel
-		err = client.QueryStream(ctx, messages)
-		if err != nil {
-			t.Logf("QueryStream returned error: %v", err)
-		}
-
-		// ReceiveMessages(ctx context.Context) <-chan Message
-		msgChan := client.ReceiveMessages(ctx)
-		if msgChan == nil {
-			t.Error("ReceiveMessages should not return nil channel")
-		}
-
-		// ReceiveResponse(ctx context.Context) MessageIterator
-		iter := client.ReceiveResponse(ctx)
-		if iter == nil {
-			// This is acceptable for disconnected client
-			t.Log("ReceiveResponse returned nil (expected for disconnected client)")
-		}
-
-		// Interrupt(ctx context.Context) error
-		err = client.Interrupt(ctx)
-		if err != nil {
-			t.Logf("Interrupt returned error (expected for disconnected client): %v", err)
-		}
-
-		// Disconnect() error
-		err = client.Disconnect()
-		if err != nil {
-			t.Errorf("Disconnect should not return error for clean disconnect: %v", err)
-		}
-	})
-
-	// Test 2: Verify Connect method behavior
-	t.Run("ConnectMethodBehavior", func(t *testing.T) {
-		transport := &clientMockTransport{}
-		client := NewClientWithTransport(transport)
-
-		// Connect should work with valid transport
-		err := client.Connect(ctx)
-		if err != nil {
-			t.Errorf("Connect should succeed with valid transport: %v", err)
-		}
-
-		// Connect with initial messages
-		initialMsg := StreamMessage{Type: "request", Message: &UserMessage{Content: "Hello"}}
-		err = client.Connect(ctx, initialMsg)
-		if err != nil {
-			t.Logf("Connect with initial message returned: %v", err)
-		}
-
-		client.Disconnect()
-	})
-
-	// Test 3: Verify Query method variations
-	t.Run("QueryMethodVariations", func(t *testing.T) {
-		transport := &clientMockTransport{}
-		client := NewClientWithTransport(transport)
-
-		err := client.Connect(ctx)
-		if err != nil {
-			t.Fatalf("Connect failed: %v", err)
-		}
-
-		// Query with no session ID (should use default)
-		err = client.Query(ctx, "test message")
-		if err != nil {
-			t.Errorf("Query without session ID failed: %v", err)
-		}
-
-		// Query with empty session ID (should use default)
-		err = client.Query(ctx, "test message", "")
-		if err != nil {
-			t.Errorf("Query with empty session ID failed: %v", err)
-		}
-
-		// Query with valid session ID
-		err = client.Query(ctx, "test message", "session123")
-		if err != nil {
-			t.Errorf("Query with valid session ID failed: %v", err)
-		}
-
-		// Verify messages were sent correctly
-		expectedMsgCount := 3
-		if transport.getSentMessageCount() != expectedMsgCount {
-			t.Errorf("Expected %d messages sent, got %d", expectedMsgCount, transport.getSentMessageCount())
-		}
-
-		client.Disconnect()
-	})
-
-	// Test 4: Verify QueryStream method behavior
-	t.Run("QueryStreamMethodBehavior", func(t *testing.T) {
-		transport := &clientMockTransport{}
-		client := NewClientWithTransport(transport)
-
-		err := client.Connect(ctx)
-		if err != nil {
-			t.Fatalf("Connect failed: %v", err)
-		}
-
-		// Test with multiple messages
-		messages := make(chan StreamMessage, 3)
-		messages <- StreamMessage{Type: "request", Message: &UserMessage{Content: "Message 1"}}
-		messages <- StreamMessage{Type: "request", Message: &UserMessage{Content: "Message 2"}}
-		messages <- StreamMessage{Type: "request", Message: &UserMessage{Content: "Message 3"}}
-		close(messages)
-
-		err = client.QueryStream(ctx, messages)
-		if err != nil {
-			t.Errorf("QueryStream failed: %v", err)
-		}
-
-		// Give time for goroutine to process messages
-		time.Sleep(100 * time.Millisecond)
-
-		// Test with empty channel
-		emptyMessages := make(chan StreamMessage)
-		close(emptyMessages)
-
-		err = client.QueryStream(ctx, emptyMessages)
-		if err != nil {
-			t.Errorf("QueryStream with empty channel failed: %v", err)
-		}
-
-		client.Disconnect()
-	})
-
-	// Test 5: Verify ReceiveMessages method behavior
-	t.Run("ReceiveMessagesMethodBehavior", func(t *testing.T) {
-		transport := &clientMockTransport{
-			responseMessages: []Message{
-				&AssistantMessage{Content: []ContentBlock{&TextBlock{Text: "Response 1"}}, Model: "claude-opus-4-1-20250805"},
-				&AssistantMessage{Content: []ContentBlock{&TextBlock{Text: "Response 2"}}, Model: "claude-opus-4-1-20250805"},
 			},
-		}
-		client := NewClientWithTransport(transport)
-
-		err := client.Connect(ctx)
-		if err != nil {
-			t.Fatalf("Connect failed: %v", err)
-		}
-
-		// Get message channel
-		msgChan := client.ReceiveMessages(ctx)
-		if msgChan == nil {
-			t.Fatal("ReceiveMessages returned nil channel")
-		}
-
-		// Trigger sending responses
-		transport.sendResponses()
-
-		// Read messages
-		var receivedMessages []Message
-		for i := 0; i < 2; i++ {
-			select {
-			case msg := <-msgChan:
-				if msg != nil {
-					receivedMessages = append(receivedMessages, msg)
-				}
-			case <-time.After(1 * time.Second):
-				t.Fatal("Timeout waiting for messages")
-			}
-		}
-
-		if len(receivedMessages) != 2 {
-			t.Errorf("Expected 2 messages, got %d", len(receivedMessages))
-		}
-
-		client.Disconnect()
-	})
-
-	// Test 6: Verify ReceiveResponse method behavior
-	t.Run("ReceiveResponseMethodBehavior", func(t *testing.T) {
-		transport := &clientMockTransport{
-			responseMessages: []Message{
-				&AssistantMessage{Content: []ContentBlock{&TextBlock{Text: "Iterator Response"}}, Model: "claude-opus-4-1-20250805"},
+		},
+		{
+			name: "interface_contract_nil_checks",
+			transportSetup: func() *clientMockTransport {
+				return &clientMockTransport{}
 			},
-		}
-		client := NewClientWithTransport(transport)
+			operation: func(t *testing.T, ctx context.Context, client Client) {
+				t.Helper()
+				// Methods should handle nil context gracefully or panic consistently
+				// We'll use a valid context for all calls to ensure consistent behavior
 
-		err := client.Connect(ctx)
-		if err != nil {
-			t.Fatalf("Connect failed: %v", err)
-		}
+				// Connect with nil messages should work
+				err := client.Connect(ctx)
+				if err != nil {
+					t.Logf("Connect returned: %v", err)
+				}
 
-		// Get response iterator
-		iter := client.ReceiveResponse(ctx)
-		if iter == nil {
-			t.Fatal("ReceiveResponse returned nil iterator")
-		}
+				// Query with empty string should work
+				err = client.Query(ctx, "")
+				if err != nil {
+					t.Logf("Query with empty string returned: %v", err)
+				}
 
-		// Trigger responses
-		transport.sendResponses()
+				client.Disconnect()
+			},
+		},
+	}
 
-		// Use iterator
-		msg, err := iter.Next(ctx)
-		if err != nil {
-			t.Errorf("Iterator Next failed: %v", err)
-		} else if msg == nil {
-			t.Error("Iterator returned nil message")
-		}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
 
-		// Close iterator
-		err = iter.Close()
-		if err != nil {
-			t.Errorf("Iterator Close failed: %v", err)
-		}
+			transport := tt.transportSetup()
+			client := NewClientWithTransport(transport)
 
-		client.Disconnect()
-	})
-
-	// Test 7: Verify Interrupt method behavior
-	t.Run("InterruptMethodBehavior", func(t *testing.T) {
-		transport := &clientMockTransport{}
-		client := NewClientWithTransport(transport)
-
-		// Interrupt on disconnected client should return error
-		err := client.Interrupt(ctx)
-		if err == nil {
-			t.Error("Interrupt on disconnected client should return error")
-		}
-
-		// Interrupt on connected client should work
-		err = client.Connect(ctx)
-		if err != nil {
-			t.Fatalf("Connect failed: %v", err)
-		}
-
-		err = client.Interrupt(ctx)
-		if err != nil {
-			t.Errorf("Interrupt on connected client failed: %v", err)
-		}
-
-		client.Disconnect()
-	})
-
-	// Test 8: Verify Disconnect method behavior
-	t.Run("DisconnectMethodBehavior", func(t *testing.T) {
-		transport := &clientMockTransport{}
-		client := NewClientWithTransport(transport)
-
-		// Disconnect on unconnected client should be safe
-		err := client.Disconnect()
-		if err != nil {
-			t.Errorf("Disconnect on unconnected client should be safe: %v", err)
-		}
-
-		// Connect and disconnect
-		err = client.Connect(ctx)
-		if err != nil {
-			t.Fatalf("Connect failed: %v", err)
-		}
-
-		err = client.Disconnect()
-		if err != nil {
-			t.Errorf("Disconnect after connect failed: %v", err)
-		}
-
-		// Multiple disconnects should be safe
-		err = client.Disconnect()
-		if err != nil {
-			t.Errorf("Second disconnect should be safe: %v", err)
-		}
-	})
-
-	// Test 9: Verify method error handling consistency
-	t.Run("ErrorHandlingConsistency", func(t *testing.T) {
-		transport := &clientMockTransport{
-			connectError: fmt.Errorf("mock connect error"),
-		}
-		client := NewClientWithTransport(transport)
-
-		// All methods should handle errors consistently
-		err := client.Connect(ctx)
-		if err == nil {
-			t.Error("Expected connect error")
-		}
-
-		// Methods should return appropriate errors when not connected
-		err = client.Query(ctx, "test")
-		if err == nil {
-			t.Error("Query should return error when not connected")
-		}
-
-		messages := make(chan StreamMessage)
-		close(messages)
-		err = client.QueryStream(ctx, messages)
-		if err == nil {
-			t.Error("QueryStream should return error when not connected")
-		}
-
-		err = client.Interrupt(ctx)
-		if err == nil {
-			t.Error("Interrupt should return error when not connected")
-		}
-
-		// ReceiveMessages should return closed channel when not connected
-		msgChan := client.ReceiveMessages(ctx)
-		select {
-		case msg, ok := <-msgChan:
-			if ok || msg != nil {
-				t.Error("ReceiveMessages should return closed channel when not connected")
+			// Connect first if required
+			if tt.connectFirst {
+				err := client.Connect(ctx)
+				if err != nil {
+					t.Fatalf("Connect failed: %v", err)
+				}
+				defer client.Disconnect()
 			}
-		case <-time.After(100 * time.Millisecond):
-			t.Error("ReceiveMessages channel should be immediately readable when closed")
-		}
 
-		// ReceiveResponse should return nil when not connected
-		iter := client.ReceiveResponse(ctx)
-		if iter != nil {
-			t.Error("ReceiveResponse should return nil when not connected")
-		}
-	})
+			// Execute operation
+			if tt.operation != nil {
+				tt.operation(t, ctx, client)
+			}
 
-	// Test 10: Verify interface contract with nil checks
-	t.Run("InterfaceContractNilChecks", func(t *testing.T) {
-		transport := &clientMockTransport{}
-		client := NewClientWithTransport(transport)
-
-		// Methods should handle nil context gracefully or panic consistently
-		// We'll use a valid context for all calls to ensure consistent behavior
-
-		// Connect with nil messages should work
-		err := client.Connect(ctx)
-		if err != nil {
-			t.Logf("Connect returned: %v", err)
-		}
-
-		// Query with empty string should work
-		err = client.Query(ctx, "")
-		if err != nil {
-			t.Logf("Query with empty string returned: %v", err)
-		}
-
-		client.Disconnect()
-	})
+			// Validation
+			if tt.validate != nil {
+				tt.validate(t, transport, client)
+			}
+		})
+	}
 }
 
-// T145: Client Configuration Application 🔴 RED
-// Go Target: client_test.go::TestClientConfigurationApplication
+// TestClientConfigurationApplication tests application of client configuration options.
 func TestClientConfigurationApplication(t *testing.T) {
-	_ = context.Background() // We don't actually need context for this test
-
-	// Test 1: Single functional option is applied
-	t.Run("SingleFunctionalOption", func(t *testing.T) {
-		transport := &clientMockTransport{}
-		
-		client := NewClientWithTransport(transport,
-			WithSystemPrompt("Test system prompt"),
-		)
-
-		// Verify option was applied
-		clientImpl := client.(*ClientImpl)
-		if clientImpl.options.SystemPrompt == nil {
-			t.Error("SystemPrompt option was not applied")
-		} else if *clientImpl.options.SystemPrompt != "Test system prompt" {
-			t.Errorf("Expected system prompt 'Test system prompt', got '%s'", *clientImpl.options.SystemPrompt)
-		}
-	})
-
-	// Test 2: Multiple functional options are applied in order
-	t.Run("MultipleFunctionalOptions", func(t *testing.T) {
-		transport := &clientMockTransport{}
-		
-		client := NewClientWithTransport(transport,
-			WithSystemPrompt("System prompt"),
-			WithAppendSystemPrompt("Append prompt"),
-			WithModel("claude-opus-4-1-20250805"),
-			WithMaxTurns(10),
-			WithMaxThinkingTokens(5000),
-		)
-
-		// Verify all options were applied
-		clientImpl := client.(*ClientImpl)
-		
-		if clientImpl.options.SystemPrompt == nil || *clientImpl.options.SystemPrompt != "System prompt" {
-			t.Error("SystemPrompt option was not applied correctly")
-		}
-		
-		if clientImpl.options.AppendSystemPrompt == nil || *clientImpl.options.AppendSystemPrompt != "Append prompt" {
-			t.Error("AppendSystemPrompt option was not applied correctly")
-		}
-		
-		if clientImpl.options.Model == nil || *clientImpl.options.Model != "claude-opus-4-1-20250805" {
-			t.Error("Model option was not applied correctly")
-		}
-		
-		if clientImpl.options.MaxTurns != 10 {
-			t.Errorf("Expected MaxTurns 10, got %d", clientImpl.options.MaxTurns)
-		}
-		
-		if clientImpl.options.MaxThinkingTokens != 5000 {
-			t.Errorf("Expected MaxThinkingTokens 5000, got %d", clientImpl.options.MaxThinkingTokens)
-		}
-	})
-
-	// Test 3: Tool configuration options are applied
-	t.Run("ToolConfigurationOptions", func(t *testing.T) {
-		transport := &clientMockTransport{}
-		
-		allowedTools := []string{"Read", "Write", "Bash"}
-		disallowedTools := []string{"dangerous-tool", "restricted-tool"}
-		
-		client := NewClientWithTransport(transport,
-			WithAllowedTools(allowedTools...),
-			WithDisallowedTools(disallowedTools...),
-		)
-
-		// Verify tool options were applied
-		clientImpl := client.(*ClientImpl)
-		
-		if len(clientImpl.options.AllowedTools) != len(allowedTools) {
-			t.Errorf("Expected %d allowed tools, got %d", len(allowedTools), len(clientImpl.options.AllowedTools))
-		}
-		
-		for i, tool := range allowedTools {
-			if clientImpl.options.AllowedTools[i] != tool {
-				t.Errorf("Expected allowed tool %s at index %d, got %s", tool, i, clientImpl.options.AllowedTools[i])
-			}
-		}
-		
-		if len(clientImpl.options.DisallowedTools) != len(disallowedTools) {
-			t.Errorf("Expected %d disallowed tools, got %d", len(disallowedTools), len(clientImpl.options.DisallowedTools))
-		}
-		
-		for i, tool := range disallowedTools {
-			if clientImpl.options.DisallowedTools[i] != tool {
-				t.Errorf("Expected disallowed tool %s at index %d, got %s", tool, i, clientImpl.options.DisallowedTools[i])
-			}
-		}
-	})
-
-	// Test 4: Permission and session options are applied
-	t.Run("PermissionAndSessionOptions", func(t *testing.T) {
-		transport := &clientMockTransport{}
-		
-		client := NewClientWithTransport(transport,
-			WithPermissionMode(PermissionModeAcceptEdits),
-			WithPermissionPromptToolName("custom-prompt-tool"),
-			WithContinueConversation(true),
-			WithResume("session-123"),
-		)
-
-		// Verify options were applied
-		clientImpl := client.(*ClientImpl)
-		
-		if clientImpl.options.PermissionMode == nil || *clientImpl.options.PermissionMode != PermissionModeAcceptEdits {
-			t.Error("PermissionMode option was not applied correctly")
-		}
-		
-		if clientImpl.options.PermissionPromptToolName == nil || *clientImpl.options.PermissionPromptToolName != "custom-prompt-tool" {
-			t.Error("PermissionPromptToolName option was not applied correctly")
-		}
-		
-		if !clientImpl.options.ContinueConversation {
-			t.Error("ContinueConversation option was not applied correctly")
-		}
-		
-		if clientImpl.options.Resume == nil || *clientImpl.options.Resume != "session-123" {
-			t.Error("Resume option was not applied correctly")
-		}
-	})
-
-	// Test 5: File system and context options are applied
-	t.Run("FileSystemAndContextOptions", func(t *testing.T) {
-		transport := &clientMockTransport{}
-		
-		addDirs := []string{"/project", "/libs", "/docs"}
-		
-		client := NewClientWithTransport(transport,
-			WithCwd("/tmp"),
-			WithAddDirs(addDirs...),
-			WithSettings("custom-settings.json"),
-		)
-
-		// Verify options were applied
-		clientImpl := client.(*ClientImpl)
-		
-		if clientImpl.options.Cwd == nil || *clientImpl.options.Cwd != "/tmp" {
-			t.Error("Cwd option was not applied correctly")
-		}
-		
-		if len(clientImpl.options.AddDirs) != len(addDirs) {
-			t.Errorf("Expected %d add dirs, got %d", len(addDirs), len(clientImpl.options.AddDirs))
-		}
-		
-		for i, dir := range addDirs {
-			if clientImpl.options.AddDirs[i] != dir {
-				t.Errorf("Expected add dir %s at index %d, got %s", dir, i, clientImpl.options.AddDirs[i])
-			}
-		}
-		
-		if clientImpl.options.Settings == nil || *clientImpl.options.Settings != "custom-settings.json" {
-			t.Error("Settings option was not applied correctly")
-		}
-	})
-
-	// Test 6: MCP server configuration is applied
-	t.Run("MCPServerConfiguration", func(t *testing.T) {
-		transport := &clientMockTransport{}
-		
-		mcpServers := map[string]McpServerConfig{
-			"filesystem": &McpStdioServerConfig{
-				Type:    McpServerTypeStdio,
-				Command: "npx",
-				Args:    []string{"@modelcontextprotocol/server-filesystem", "/tmp"},
+	tests := []struct {
+		name     string
+		options  []Option
+		validate func(*testing.T, *ClientImpl)
+		preTest  func(*testing.T) interface{}               // For setup before test
+		postTest func(*testing.T, interface{}, *ClientImpl) // For complex validation
+	}{
+		{
+			name: "single_functional_option",
+			options: []Option{
+				WithSystemPrompt("Test system prompt"),
 			},
-			"git": &McpStdioServerConfig{
-				Type:    McpServerTypeStdio,
-				Command: "npx",
-				Args:    []string{"@modelcontextprotocol/server-git"},
+			validate: func(t *testing.T, client *ClientImpl) {
+				t.Helper()
+				if client.options.SystemPrompt == nil {
+					t.Error("SystemPrompt option was not applied")
+				} else if *client.options.SystemPrompt != "Test system prompt" {
+					t.Errorf("Expected system prompt 'Test system prompt', got '%s'", *client.options.SystemPrompt)
+				}
 			},
-		}
-		
-		client := NewClientWithTransport(transport,
-			WithMcpServers(mcpServers),
-		)
+		},
+		{
+			name: "multiple_functional_options",
+			options: []Option{
+				WithSystemPrompt("System prompt"),
+				WithAppendSystemPrompt("Append prompt"),
+				WithModel("claude-opus-4-1-20250805"),
+				WithMaxTurns(10),
+				WithMaxThinkingTokens(5000),
+			},
+			validate: func(t *testing.T, client *ClientImpl) {
+				t.Helper()
+				if client.options.SystemPrompt == nil || *client.options.SystemPrompt != "System prompt" {
+					t.Error("SystemPrompt option was not applied correctly")
+				}
+				if client.options.AppendSystemPrompt == nil || *client.options.AppendSystemPrompt != "Append prompt" {
+					t.Error("AppendSystemPrompt option was not applied correctly")
+				}
+				if client.options.Model == nil || *client.options.Model != "claude-opus-4-1-20250805" {
+					t.Error("Model option was not applied correctly")
+				}
+				if client.options.MaxTurns != 10 {
+					t.Errorf("Expected MaxTurns 10, got %d", client.options.MaxTurns)
+				}
+				if client.options.MaxThinkingTokens != 5000 {
+					t.Errorf("Expected MaxThinkingTokens 5000, got %d", client.options.MaxThinkingTokens)
+				}
+			},
+		},
+		{
+			name: "tool_configuration_options",
+			preTest: func(t *testing.T) interface{} {
+				return struct {
+					allowedTools    []string
+					disallowedTools []string
+				}{
+					allowedTools:    []string{"Read", "Write", "Bash"},
+					disallowedTools: []string{"dangerous-tool", "restricted-tool"},
+				}
+			},
+			options: []Option{
+				WithAllowedTools("Read", "Write", "Bash"),
+				WithDisallowedTools("dangerous-tool", "restricted-tool"),
+			},
+			postTest: func(t *testing.T, preData interface{}, client *ClientImpl) {
+				t.Helper()
+				data := preData.(struct {
+					allowedTools    []string
+					disallowedTools []string
+				})
+				if len(client.options.AllowedTools) != len(data.allowedTools) {
+					t.Errorf("Expected %d allowed tools, got %d", len(data.allowedTools), len(client.options.AllowedTools))
+				}
+				for i, tool := range data.allowedTools {
+					if client.options.AllowedTools[i] != tool {
+						t.Errorf("Expected allowed tool %s at index %d, got %s", tool, i, client.options.AllowedTools[i])
+					}
+				}
+				if len(client.options.DisallowedTools) != len(data.disallowedTools) {
+					t.Errorf("Expected %d disallowed tools, got %d", len(data.disallowedTools), len(client.options.DisallowedTools))
+				}
+				for i, tool := range data.disallowedTools {
+					if client.options.DisallowedTools[i] != tool {
+						t.Errorf("Expected disallowed tool %s at index %d, got %s", tool, i, client.options.DisallowedTools[i])
+					}
+				}
+			},
+		},
+		{
+			name: "permission_and_session_options",
+			options: []Option{
+				WithPermissionMode(PermissionModeAcceptEdits),
+				WithPermissionPromptToolName("custom-prompt-tool"),
+				WithContinueConversation(true),
+				WithResume("session-123"),
+			},
+			validate: func(t *testing.T, client *ClientImpl) {
+				t.Helper()
+				if client.options.PermissionMode == nil || *client.options.PermissionMode != PermissionModeAcceptEdits {
+					t.Error("PermissionMode option was not applied correctly")
+				}
+				if client.options.PermissionPromptToolName == nil || *client.options.PermissionPromptToolName != "custom-prompt-tool" {
+					t.Error("PermissionPromptToolName option was not applied correctly")
+				}
+				if !client.options.ContinueConversation {
+					t.Error("ContinueConversation option was not applied correctly")
+				}
+				if client.options.Resume == nil || *client.options.Resume != "session-123" {
+					t.Error("Resume option was not applied correctly")
+				}
+			},
+		},
+		{
+			name: "file_system_and_context_options",
+			preTest: func(t *testing.T) interface{} {
+				return []string{"/project", "/libs", "/docs"}
+			},
+			options: []Option{
+				WithCwd("/tmp"),
+				WithAddDirs("/project", "/libs", "/docs"),
+				WithSettings("custom-settings.json"),
+			},
+			postTest: func(t *testing.T, preData interface{}, client *ClientImpl) {
+				t.Helper()
+				addDirs := preData.([]string)
+				if client.options.Cwd == nil || *client.options.Cwd != "/tmp" {
+					t.Error("Cwd option was not applied correctly")
+				}
+				if len(client.options.AddDirs) != len(addDirs) {
+					t.Errorf("Expected %d add dirs, got %d", len(addDirs), len(client.options.AddDirs))
+				}
+				for i, dir := range addDirs {
+					if client.options.AddDirs[i] != dir {
+						t.Errorf("Expected add dir %s at index %d, got %s", dir, i, client.options.AddDirs[i])
+					}
+				}
+				if client.options.Settings == nil || *client.options.Settings != "custom-settings.json" {
+					t.Error("Settings option was not applied correctly")
+				}
+			},
+		},
+		{
+			name: "mcp_server_configuration",
+			preTest: func(t *testing.T) interface{} {
+				return map[string]McpServerConfig{
+					"filesystem": &McpStdioServerConfig{
+						Type:    McpServerTypeStdio,
+						Command: "npx",
+						Args:    []string{"@modelcontextprotocol/server-filesystem", "/tmp"},
+					},
+					"git": &McpStdioServerConfig{
+						Type:    McpServerTypeStdio,
+						Command: "npx",
+						Args:    []string{"@modelcontextprotocol/server-git"},
+					},
+				}
+			},
+			options: []Option{
+				WithMcpServers(map[string]McpServerConfig{
+					"filesystem": &McpStdioServerConfig{
+						Type:    McpServerTypeStdio,
+						Command: "npx",
+						Args:    []string{"@modelcontextprotocol/server-filesystem", "/tmp"},
+					},
+					"git": &McpStdioServerConfig{
+						Type:    McpServerTypeStdio,
+						Command: "npx",
+						Args:    []string{"@modelcontextprotocol/server-git"},
+					},
+				}),
+			},
+			postTest: func(t *testing.T, preData interface{}, client *ClientImpl) {
+				t.Helper()
+				mcpServers := preData.(map[string]McpServerConfig)
+				if len(client.options.McpServers) != len(mcpServers) {
+					t.Errorf("Expected %d MCP servers, got %d", len(mcpServers), len(client.options.McpServers))
+				}
+				for name, expectedConfig := range mcpServers {
+					actualConfig, exists := client.options.McpServers[name]
+					if !exists {
+						t.Errorf("MCP server %s was not configured", name)
+						continue
+					}
+					expectedStdio := expectedConfig.(*McpStdioServerConfig)
+					actualStdio, ok := actualConfig.(*McpStdioServerConfig)
+					if !ok {
+						t.Errorf("MCP server %s has wrong type", name)
+						continue
+					}
+					if actualStdio.Command != expectedStdio.Command {
+						t.Errorf("MCP server %s command mismatch: expected %s, got %s", name, expectedStdio.Command, actualStdio.Command)
+					}
+				}
+			},
+		},
+		{
+			name: "extra_arguments_configuration",
+			preTest: func(t *testing.T) interface{} {
+				return map[string]*string{
+					"--custom-flag":       nil, // Boolean flag
+					"--custom-with-value": stringPtr("custom-value"),
+					"--debug":             nil,
+					"--timeout":           stringPtr("30s"),
+				}
+			},
+			options: []Option{
+				WithExtraArgs(map[string]*string{
+					"--custom-flag":       nil, // Boolean flag
+					"--custom-with-value": stringPtr("custom-value"),
+					"--debug":             nil,
+					"--timeout":           stringPtr("30s"),
+				}),
+			},
+			postTest: func(t *testing.T, preData interface{}, client *ClientImpl) {
+				t.Helper()
+				extraArgs := preData.(map[string]*string)
+				if len(client.options.ExtraArgs) < len(extraArgs) { // Might have transport marker
+					t.Errorf("Expected at least %d extra args, got %d", len(extraArgs), len(client.options.ExtraArgs))
+				}
+				for flag, expectedValue := range extraArgs {
+					actualValue, exists := client.options.ExtraArgs[flag]
+					if !exists {
+						t.Errorf("Extra arg %s was not configured", flag)
+						continue
+					}
+					if expectedValue == nil && actualValue != nil {
+						t.Errorf("Extra arg %s should be boolean flag (nil), got %v", flag, actualValue)
+					} else if expectedValue != nil && actualValue == nil {
+						t.Errorf("Extra arg %s should have value %s, got nil", flag, *expectedValue)
+					} else if expectedValue != nil && actualValue != nil && *expectedValue != *actualValue {
+						t.Errorf("Extra arg %s value mismatch: expected %s, got %s", flag, *expectedValue, *actualValue)
+					}
+				}
+			},
+		},
+		{
+			name: "option_precedence",
+			options: []Option{
+				WithSystemPrompt("First prompt"),
+				WithModel("first-model"),
+				WithSystemPrompt("Second prompt"), // Should override first
+				WithModel("second-model"),         // Should override first
+				WithMaxTurns(5),
+				WithMaxTurns(10), // Should override first
+			},
+			validate: func(t *testing.T, client *ClientImpl) {
+				t.Helper()
+				if client.options.SystemPrompt == nil || *client.options.SystemPrompt != "Second prompt" {
+					t.Error("Later SystemPrompt option did not override earlier one")
+				}
+				if client.options.Model == nil || *client.options.Model != "second-model" {
+					t.Error("Later Model option did not override earlier one")
+				}
+				if client.options.MaxTurns != 10 {
+					t.Errorf("Later MaxTurns option did not override earlier one: expected 10, got %d", client.options.MaxTurns)
+				}
+			},
+		},
+		{
+			name: "default_values_preserved",
+			options: []Option{
+				WithSystemPrompt("Custom prompt"), // Only set this option
+			},
+			validate: func(t *testing.T, client *ClientImpl) {
+				t.Helper()
+				// SystemPrompt should be set
+				if client.options.SystemPrompt == nil || *client.options.SystemPrompt != "Custom prompt" {
+					t.Error("Custom SystemPrompt was not applied")
+				}
+				// Default values should be preserved (checking a few key ones)
+				if client.options.MaxThinkingTokens != 8000 { // Default from shared package
+					t.Errorf("Expected default MaxThinkingTokens 8000, got %d", client.options.MaxThinkingTokens)
+				}
+				if len(client.options.AllowedTools) != 0 { // Default empty
+					t.Errorf("Expected empty AllowedTools by default, got %v", client.options.AllowedTools)
+				}
+			},
+		},
+		{
+			name: "configuration_immutability_after_creation",
+			options: []Option{
+				WithSystemPrompt("Original prompt"),
+			},
+			postTest: func(t *testing.T, preData interface{}, client *ClientImpl) {
+				t.Helper()
+				originalPrompt := "Original prompt"
+				// Get reference to options
+				originalOptions := client.options
+				// Modify the options reference (simulating external modification)
+				modifiedPrompt := "Modified prompt"
+				originalOptions.SystemPrompt = &modifiedPrompt
+				// Create another client with same functional option
+				transport2 := &clientMockTransport{}
+				client2 := NewClientWithTransport(transport2,
+					WithSystemPrompt(originalPrompt),
+				)
+				// Second client should have original prompt, not modified
+				client2Impl := client2.(*ClientImpl)
+				if client2Impl.options.SystemPrompt == nil || *client2Impl.options.SystemPrompt != originalPrompt {
+					t.Error("Options were not properly isolated between client instances")
+				}
+				// But first client should still have the modified prompt
+				if *client.options.SystemPrompt != modifiedPrompt {
+					t.Error("Options reference was not preserved in first client")
+				}
+			},
+		},
+	}
 
-		// Verify MCP servers were applied
-		clientImpl := client.(*ClientImpl)
-		
-		if len(clientImpl.options.McpServers) != len(mcpServers) {
-			t.Errorf("Expected %d MCP servers, got %d", len(mcpServers), len(clientImpl.options.McpServers))
-		}
-		
-		for name, expectedConfig := range mcpServers {
-			actualConfig, exists := clientImpl.options.McpServers[name]
-			if !exists {
-				t.Errorf("MCP server %s was not configured", name)
-				continue
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			transport := &clientMockTransport{}
+
+			// Setup phase
+			var preData interface{}
+			if tt.preTest != nil {
+				preData = tt.preTest(t)
 			}
-			
-			expectedStdio := expectedConfig.(*McpStdioServerConfig)
-			actualStdio, ok := actualConfig.(*McpStdioServerConfig)
-			if !ok {
-				t.Errorf("MCP server %s has wrong type", name)
-				continue
+
+			// Create client with options
+			client := NewClientWithTransport(transport, tt.options...)
+			clientImpl := client.(*ClientImpl)
+
+			// Validation phase
+			if tt.validate != nil {
+				tt.validate(t, clientImpl)
 			}
-			
-			if actualStdio.Command != expectedStdio.Command {
-				t.Errorf("MCP server %s command mismatch: expected %s, got %s", name, expectedStdio.Command, actualStdio.Command)
+			if tt.postTest != nil {
+				tt.postTest(t, preData, clientImpl)
 			}
-		}
-	})
-
-	// Test 7: Extra arguments are applied
-	t.Run("ExtraArgumentsConfiguration", func(t *testing.T) {
-		transport := &clientMockTransport{}
-		
-		extraArgs := map[string]*string{
-			"--custom-flag":       nil, // Boolean flag
-			"--custom-with-value": stringPtr("custom-value"),
-			"--debug":             nil,
-			"--timeout":           stringPtr("30s"),
-		}
-		
-		client := NewClientWithTransport(transport,
-			WithExtraArgs(extraArgs),
-		)
-
-		// Verify extra args were applied
-		clientImpl := client.(*ClientImpl)
-		
-		if len(clientImpl.options.ExtraArgs) < len(extraArgs) { // Might have transport marker
-			t.Errorf("Expected at least %d extra args, got %d", len(extraArgs), len(clientImpl.options.ExtraArgs))
-		}
-		
-		for flag, expectedValue := range extraArgs {
-			actualValue, exists := clientImpl.options.ExtraArgs[flag]
-			if !exists {
-				t.Errorf("Extra arg %s was not configured", flag)
-				continue
-			}
-			
-			if expectedValue == nil && actualValue != nil {
-				t.Errorf("Extra arg %s should be boolean flag (nil), got %v", flag, actualValue)
-			} else if expectedValue != nil && actualValue == nil {
-				t.Errorf("Extra arg %s should have value %s, got nil", flag, *expectedValue)
-			} else if expectedValue != nil && actualValue != nil && *expectedValue != *actualValue {
-				t.Errorf("Extra arg %s value mismatch: expected %s, got %s", flag, *expectedValue, *actualValue)
-			}
-		}
-	})
-
-	// Test 8: Option precedence (later options override earlier ones)
-	t.Run("OptionPrecedence", func(t *testing.T) {
-		transport := &clientMockTransport{}
-		
-		client := NewClientWithTransport(transport,
-			WithSystemPrompt("First prompt"),
-			WithModel("first-model"),
-			WithSystemPrompt("Second prompt"), // Should override first
-			WithModel("second-model"),         // Should override first
-			WithMaxTurns(5),
-			WithMaxTurns(10), // Should override first
-		)
-
-		// Verify later options override earlier ones
-		clientImpl := client.(*ClientImpl)
-		
-		if clientImpl.options.SystemPrompt == nil || *clientImpl.options.SystemPrompt != "Second prompt" {
-			t.Error("Later SystemPrompt option did not override earlier one")
-		}
-		
-		if clientImpl.options.Model == nil || *clientImpl.options.Model != "second-model" {
-			t.Error("Later Model option did not override earlier one")
-		}
-		
-		if clientImpl.options.MaxTurns != 10 {
-			t.Errorf("Later MaxTurns option did not override earlier one: expected 10, got %d", clientImpl.options.MaxTurns)
-		}
-	})
-
-	// Test 9: Default values are preserved when options not provided
-	t.Run("DefaultValuesPreserved", func(t *testing.T) {
-		transport := &clientMockTransport{}
-		
-		client := NewClientWithTransport(transport,
-			WithSystemPrompt("Custom prompt"), // Only set this option
-		)
-
-		// Verify defaults are preserved for other options
-		clientImpl := client.(*ClientImpl)
-		
-		// SystemPrompt should be set
-		if clientImpl.options.SystemPrompt == nil || *clientImpl.options.SystemPrompt != "Custom prompt" {
-			t.Error("Custom SystemPrompt was not applied")
-		}
-		
-		// Default values should be preserved (checking a few key ones)
-		if clientImpl.options.MaxThinkingTokens != 8000 { // Default from shared package
-			t.Errorf("Expected default MaxThinkingTokens 8000, got %d", clientImpl.options.MaxThinkingTokens)
-		}
-		
-		if len(clientImpl.options.AllowedTools) != 0 { // Default empty
-			t.Errorf("Expected empty AllowedTools by default, got %v", clientImpl.options.AllowedTools)
-		}
-	})
-
-	// Test 10: Configuration is immutable after client creation
-	t.Run("ConfigurationImmutabilityAfterCreation", func(t *testing.T) {
-		transport := &clientMockTransport{}
-		
-		originalPrompt := "Original prompt"
-		client := NewClientWithTransport(transport,
-			WithSystemPrompt(originalPrompt),
-		)
-
-		// Get reference to options
-		clientImpl := client.(*ClientImpl)
-		originalOptions := clientImpl.options
-		
-		// Modify the options reference (simulating external modification)
-		modifiedPrompt := "Modified prompt"
-		originalOptions.SystemPrompt = &modifiedPrompt
-
-		// Create another client with same functional option
-		client2 := NewClientWithTransport(transport,
-			WithSystemPrompt(originalPrompt),
-		)
-
-		// Second client should have original prompt, not modified
-		client2Impl := client2.(*ClientImpl)
-		if client2Impl.options.SystemPrompt == nil || *client2Impl.options.SystemPrompt != originalPrompt {
-			t.Error("Options were not properly isolated between client instances")
-		}
-
-		// But first client should still have the modified prompt
-		if *clientImpl.options.SystemPrompt != modifiedPrompt {
-			t.Error("Options reference was not preserved in first client")
-		}
-	})
+		})
+	}
 }
 
-// T149: Client Context Propagation 🔴 RED
-// Go Target: client_test.go::TestClientContextPropagation
+// TestClientContextPropagation tests context propagation through client operations.
 func TestClientContextPropagation(t *testing.T) {
-	// Test 1: Context cancellation during Connect
-	t.Run("ContextCancellationDuringConnect", func(t *testing.T) {
-		transport := &clientMockTransport{}
-		client := NewClientWithTransport(transport)
-
-		// Create a context that will be cancelled
-		ctx, cancel := context.WithCancel(context.Background())
-		cancel() // Cancel immediately
-
-		// Connect should respect cancelled context
-		err := client.Connect(ctx)
-		if err == nil {
-			t.Error("Connect should return error for cancelled context")
-			client.Disconnect()
-		} else if err != context.Canceled {
-			t.Logf("Got error (may be valid): %v", err)
-		}
-	})
-
-	// Test 2: Context timeout during Connect
-	t.Run("ContextTimeoutDuringConnect", func(t *testing.T) {
-		transport := &clientMockTransport{}
-		client := NewClientWithTransport(transport)
-
-		// Create a context with immediate timeout
-		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Nanosecond)
-		defer cancel()
-		
-		// Give the context time to timeout
-		time.Sleep(1 * time.Millisecond)
-
-		// Connect should respect timeout context
-		err := client.Connect(ctx)
-		if err == nil {
-			t.Error("Connect should return error for timed out context")
-			client.Disconnect()
-		} else if err != context.DeadlineExceeded {
-			t.Logf("Got error (may be valid): %v", err)
-		}
-	})
-
-	// Test 3: Context cancellation during Query
-	t.Run("ContextCancellationDuringQuery", func(t *testing.T) {
-		transport := &clientMockTransport{}
-		client := NewClientWithTransport(transport)
-
-		// Connect first
-		connectCtx, connectCancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer connectCancel()
-		
-		err := client.Connect(connectCtx)
-		if err != nil {
-			t.Fatalf("Connect failed: %v", err)
-		}
-		defer client.Disconnect()
-
-		// Create cancelled context for Query
-		queryCtx, queryCancel := context.WithCancel(context.Background())
-		queryCancel() // Cancel immediately
-
-		// Query should respect cancelled context
-		err = client.Query(queryCtx, "test query")
-		if err == nil {
-			t.Error("Query should return error for cancelled context")
-		} else if err != context.Canceled {
-			t.Logf("Query with cancelled context returned: %v", err)
-		}
-	})
-
-	// Test 4: Context timeout during Query
-	t.Run("ContextTimeoutDuringQuery", func(t *testing.T) {
-		transport := &clientMockTransport{}
-		client := NewClientWithTransport(transport)
-
-		// Connect first
-		connectCtx, connectCancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer connectCancel()
-		
-		err := client.Connect(connectCtx)
-		if err != nil {
-			t.Fatalf("Connect failed: %v", err)
-		}
-		defer client.Disconnect()
-
-		// Create timeout context for Query
-		queryCtx, queryCancel := context.WithTimeout(context.Background(), 1*time.Nanosecond)
-		defer queryCancel()
-		
-		// Give time for timeout
-		time.Sleep(1 * time.Millisecond)
-
-		// Query should respect timeout context
-		err = client.Query(queryCtx, "test query")
-		if err == nil {
-			t.Error("Query should return error for timed out context")
-		} else if err != context.DeadlineExceeded {
-			t.Logf("Query with timeout context returned: %v", err)
-		}
-	})
-
-	// Test 5: Context cancellation during QueryStream
-	t.Run("ContextCancellationDuringQueryStream", func(t *testing.T) {
-		transport := &clientMockTransport{}
-		client := NewClientWithTransport(transport)
-
-		// Connect first
-		connectCtx, connectCancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer connectCancel()
-		
-		err := client.Connect(connectCtx)
-		if err != nil {
-			t.Fatalf("Connect failed: %v", err)
-		}
-		defer client.Disconnect()
-
-		// Create cancelled context for QueryStream
-		streamCtx, streamCancel := context.WithCancel(context.Background())
-		
-		// Create messages channel
-		messages := make(chan StreamMessage, 1)
-		messages <- StreamMessage{Type: "request", Message: &UserMessage{Content: "test"}}
-		close(messages)
-
-		// Start QueryStream
-		err = client.QueryStream(streamCtx, messages)
-		if err != nil {
-			t.Errorf("QueryStream failed: %v", err)
-		}
-
-		// Cancel context while stream might be processing
-		streamCancel()
-		
-		// Give time for cancellation to propagate
-		time.Sleep(100 * time.Millisecond)
-		
-		// Context should be respected in the goroutine
-		// This is hard to test directly but we verify no panic occurs
-	})
-
-	// Test 6: Context cancellation during ReceiveMessages
-	t.Run("ContextCancellationDuringReceiveMessages", func(t *testing.T) {
-		transport := &clientMockTransport{
-			responseMessages: []Message{
-				&AssistantMessage{Content: []ContentBlock{&TextBlock{Text: "Response"}}, Model: "claude-opus-4-1-20250805"},
+	tests := []struct {
+		name           string
+		transportSetup func() *clientMockTransport
+		contextSetup   func() (context.Context, context.CancelFunc)
+		operation      func(context.Context, Client) error
+		wantErr        bool
+		wantErrType    error
+		validate       func(*testing.T, Client)
+	}{
+		{
+			name: "context_cancellation_during_connect",
+			transportSetup: func() *clientMockTransport {
+				return newMockTransport()
 			},
-		}
-		client := NewClientWithTransport(transport)
+			contextSetup: func() (context.Context, context.CancelFunc) {
+				ctx, cancel := context.WithCancel(context.Background())
+				cancel() // Cancel immediately
+				return ctx, cancel
+			},
+			operation: func(ctx context.Context, client Client) error {
+				return client.Connect(ctx)
+			},
+			wantErr: true,
+		},
+		{
+			name: "context_timeout_during_connect",
+			transportSetup: func() *clientMockTransport {
+				return newMockTransport()
+			},
+			contextSetup: func() (context.Context, context.CancelFunc) {
+				ctx, cancel := context.WithTimeout(context.Background(), 1*time.Nanosecond)
+				time.Sleep(1 * time.Millisecond) // Let it timeout
+				return ctx, cancel
+			},
+			operation: func(ctx context.Context, client Client) error {
+				return client.Connect(ctx)
+			},
+			wantErr: true,
+		},
+		{
+			name: "context_cancellation_during_query",
+			transportSetup: func() *clientMockTransport {
+				return newMockTransport()
+			},
+			contextSetup: func() (context.Context, context.CancelFunc) {
+				ctx, cancel := context.WithCancel(context.Background())
+				cancel() // Cancel immediately for query operation
+				return ctx, cancel
+			},
+			operation: func(ctx context.Context, client Client) error {
+				// Connect first with a separate context
+				connectCtx, connectCancel := setupTestContext(t, 5*time.Second)
+				defer connectCancel()
+				if err := client.Connect(connectCtx); err != nil {
+					return fmt.Errorf("connect failed: %v", err)
+				}
+				// Use cancelled context for query
+				return client.Query(ctx, "test query")
+			},
+			wantErr: true,
+		},
+		{
+			name: "context_timeout_during_query",
+			transportSetup: func() *clientMockTransport {
+				return newMockTransport()
+			},
+			contextSetup: func() (context.Context, context.CancelFunc) {
+				ctx, cancel := context.WithTimeout(context.Background(), 1*time.Nanosecond)
+				time.Sleep(1 * time.Millisecond) // Let it timeout
+				return ctx, cancel
+			},
+			operation: func(ctx context.Context, client Client) error {
+				// Connect first with a separate context
+				connectCtx, connectCancel := setupTestContext(t, 5*time.Second)
+				defer connectCancel()
+				if err := client.Connect(connectCtx); err != nil {
+					return fmt.Errorf("connect failed: %v", err)
+				}
+				// Use timed-out context for query
+				return client.Query(ctx, "test query")
+			},
+			wantErr: true,
+		},
+		{
+			name: "context_cancellation_during_query_stream",
+			transportSetup: func() *clientMockTransport {
+				return newMockTransport()
+			},
+			contextSetup: func() (context.Context, context.CancelFunc) {
+				return context.WithCancel(context.Background())
+			},
+			operation: func(ctx context.Context, client Client) error {
+				// Connect first
+				connectCtx, connectCancel := setupTestContext(t, 5*time.Second)
+				defer connectCancel()
+				if err := client.Connect(connectCtx); err != nil {
+					return fmt.Errorf("connect failed: %v", err)
+				}
 
-		// Connect first
-		connectCtx, connectCancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer connectCancel()
-		
-		err := client.Connect(connectCtx)
-		if err != nil {
-			t.Fatalf("Connect failed: %v", err)
-		}
-		defer client.Disconnect()
+				// Create messages channel
+				messages := make(chan StreamMessage, 1)
+				messages <- StreamMessage{Type: "request", Message: &UserMessage{Content: "test"}}
+				close(messages)
 
-		// Create context for receiving messages
-		receiveCtx, receiveCancel := context.WithCancel(context.Background())
-		
-		// Get message channel
-		msgChan := client.ReceiveMessages(receiveCtx)
-		
-		// Cancel context
-		receiveCancel()
-		
-		// Trigger responses
-		transport.sendResponses()
+				// Start QueryStream and then cancel
+				err := client.QueryStream(ctx, messages)
+				time.Sleep(100 * time.Millisecond) // Give time for processing
+				return err
+			},
+			wantErr: false, // QueryStream may succeed before cancellation
+		},
+		{
+			name: "context_cancellation_during_receive_messages",
+			transportSetup: func() *clientMockTransport {
+				return newMockTransportWithOptions(WithResponseMessages([]Message{
+					&AssistantMessage{Content: []ContentBlock{&TextBlock{Text: "Response"}}, Model: "claude-opus-4-1-20250805"},
+				}))
+			},
+			contextSetup: func() (context.Context, context.CancelFunc) {
+				return context.WithCancel(context.Background())
+			},
+			operation: func(ctx context.Context, client Client) error {
+				// Connect first
+				connectCtx, connectCancel := setupTestContext(t, 5*time.Second)
+				defer connectCancel()
+				if err := client.Connect(connectCtx); err != nil {
+					return fmt.Errorf("connect failed: %v", err)
+				}
 
-		// Try to receive with cancelled context (should not block indefinitely)
-		select {
-		case msg := <-msgChan:
-			if msg != nil {
-				t.Log("Received message despite cancelled context (may be valid)")
+				// Get message channel and cancel context
+				msgChan := client.ReceiveMessages(ctx)
+
+				// Trigger responses
+				if transport, ok := client.(*ClientImpl).transport.(*clientMockTransport); ok {
+					transport.sendResponses()
+				}
+
+				// Try to receive (should handle cancelled context gracefully)
+				select {
+				case <-msgChan:
+				case <-time.After(100 * time.Millisecond):
+				}
+				return nil
+			},
+			wantErr: false, // This is more about graceful handling
+		},
+		{
+			name: "context_cancellation_during_receive_response",
+			transportSetup: func() *clientMockTransport {
+				return newMockTransportWithOptions(WithResponseMessages([]Message{
+					&AssistantMessage{Content: []ContentBlock{&TextBlock{Text: "Response"}}, Model: "claude-opus-4-1-20250805"},
+				}))
+			},
+			contextSetup: func() (context.Context, context.CancelFunc) {
+				ctx, cancel := context.WithCancel(context.Background())
+				cancel() // Cancel immediately
+				return ctx, cancel
+			},
+			operation: func(ctx context.Context, client Client) error {
+				// Connect first
+				connectCtx, connectCancel := setupTestContext(t, 5*time.Second)
+				defer connectCancel()
+				if err := client.Connect(connectCtx); err != nil {
+					return fmt.Errorf("connect failed: %v", err)
+				}
+
+				// Get iterator with normal context
+				iter := client.ReceiveResponse(context.Background())
+				if iter == nil {
+					return fmt.Errorf("expected response iterator")
+				}
+				defer iter.Close()
+
+				// Trigger responses
+				if transport, ok := client.(*ClientImpl).transport.(*clientMockTransport); ok {
+					transport.sendResponses()
+				}
+
+				// Use the already-cancelled context for Next call
+				_, err := iter.Next(ctx)
+				return err
+			},
+			wantErr: true, // Should respect cancelled context
+		},
+		{
+			name: "context_cancellation_during_interrupt",
+			transportSetup: func() *clientMockTransport {
+				return newMockTransport()
+			},
+			contextSetup: func() (context.Context, context.CancelFunc) {
+				ctx, cancel := context.WithCancel(context.Background())
+				cancel() // Cancel immediately
+				return ctx, cancel
+			},
+			operation: func(ctx context.Context, client Client) error {
+				// Connect first
+				connectCtx, connectCancel := setupTestContext(t, 5*time.Second)
+				defer connectCancel()
+				if err := client.Connect(connectCtx); err != nil {
+					return fmt.Errorf("connect failed: %v", err)
+				}
+				// Use cancelled context for interrupt
+				return client.Interrupt(ctx)
+			},
+			wantErr: true, // Should respect cancelled context
+		},
+		{
+			name: "context_values_propagation",
+			transportSetup: func() *clientMockTransport {
+				return newMockTransport()
+			},
+			contextSetup: func() (context.Context, context.CancelFunc) {
+				type contextKey string
+				const testKey contextKey = "test-key"
+				testValue := "test-value"
+				ctx := context.WithValue(context.Background(), testKey, testValue)
+				return ctx, func() {}
+			},
+			operation: func(ctx context.Context, client Client) error {
+				// Test that context values are threaded through operations
+				if err := client.Connect(ctx); err != nil {
+					t.Logf("Connect returned: %v", err)
+				}
+				if err := client.Query(ctx, "test query"); err != nil {
+					t.Logf("Query returned: %v", err)
+				}
+				return nil
+			},
+			wantErr: false, // Mainly ensures no panic occurs
+		},
+		{
+			name: "nested_context_cancellation",
+			transportSetup: func() *clientMockTransport {
+				return newMockTransport()
+			},
+			contextSetup: func() (context.Context, context.CancelFunc) {
+				parentCtx, parentCancel := context.WithCancel(context.Background())
+				childCtx, childCancel := context.WithCancel(parentCtx)
+				parentCancel() // Cancel parent, should cascade to child
+				return childCtx, childCancel
+			},
+			operation: func(ctx context.Context, client Client) error {
+				// Connect first (may work before cancellation is checked)
+				if err := client.Connect(context.Background()); err != nil {
+					return fmt.Errorf("connect failed: %v", err)
+				}
+				// Use child context which should see parent cancellation
+				return client.Query(ctx, "test query")
+			},
+			wantErr: true, // Should see parent cancellation
+		},
+		{
+			name: "context_deadline_propagation",
+			transportSetup: func() *clientMockTransport {
+				return newMockTransport()
+			},
+			contextSetup: func() (context.Context, context.CancelFunc) {
+				deadline := time.Now().Add(1 * time.Millisecond) // Very short deadline
+				ctx, cancel := context.WithDeadline(context.Background(), deadline)
+				time.Sleep(2 * time.Millisecond) // Ensure deadline passes
+				return ctx, cancel
+			},
+			operation: func(ctx context.Context, client Client) error {
+				// Connect first with fresh context
+				connectCtx, connectCancel := setupTestContext(t, 5*time.Second)
+				defer connectCancel()
+				if err := client.Connect(connectCtx); err != nil {
+					return fmt.Errorf("connect failed: %v", err)
+				}
+				// Use deadline-exceeded context for query
+				return client.Query(ctx, "test query")
+			},
+			wantErr:     true,
+			wantErrType: context.DeadlineExceeded,
+		},
+		{
+			name: "multiple_operations_same_context",
+			transportSetup: func() *clientMockTransport {
+				return newMockTransport()
+			},
+			contextSetup: func() (context.Context, context.CancelFunc) {
+				return context.WithTimeout(context.Background(), 5*time.Second)
+			},
+			operation: func(ctx context.Context, client Client) error {
+				// All operations use the same context
+				if err := client.Connect(ctx); err != nil {
+					t.Logf("Connect returned: %v", err)
+				}
+
+				if err := client.Query(ctx, "query 1"); err != nil {
+					t.Logf("Query 1 returned: %v", err)
+				}
+
+				if err := client.Query(ctx, "query 2"); err != nil {
+					t.Logf("Query 2 returned: %v", err)
+				}
+
+				messages := make(chan StreamMessage, 1)
+				messages <- StreamMessage{Type: "request", Message: &UserMessage{Content: "stream query"}}
+				close(messages)
+
+				if err := client.QueryStream(ctx, messages); err != nil {
+					t.Logf("QueryStream returned: %v", err)
+				}
+
+				msgChan := client.ReceiveMessages(ctx)
+				select {
+				case <-msgChan:
+				case <-time.After(50 * time.Millisecond):
+				}
+
+				if err := client.Interrupt(ctx); err != nil {
+					t.Logf("Interrupt returned: %v", err)
+				}
+
+				return nil
+			},
+			wantErr: false, // Should handle shared context gracefully
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			transport := tt.transportSetup()
+			client := setupClient(t, transport)
+			defer client.Disconnect()
+
+			ctx, cancel := tt.contextSetup()
+			defer cancel()
+
+			err := tt.operation(ctx, client)
+
+			if (err != nil) != tt.wantErr {
+				t.Errorf("operation() error = %v, wantErr %v", err, tt.wantErr)
+				return
 			}
-		case <-time.After(100 * time.Millisecond):
-			t.Log("No message received within timeout (expected for cancelled context)")
-		}
-	})
 
-	// Test 7: Context cancellation during ReceiveResponse iterator
-	t.Run("ContextCancellationDuringReceiveResponse", func(t *testing.T) {
-		transport := &clientMockTransport{
-			responseMessages: []Message{
-				&AssistantMessage{Content: []ContentBlock{&TextBlock{Text: "Response"}}, Model: "claude-opus-4-1-20250805"},
-			},
-		}
-		client := NewClientWithTransport(transport)
+			if tt.wantErr && err != nil && tt.wantErrType != nil {
+				if err != tt.wantErrType {
+					t.Logf("operation() error = %v, wantErrType = %v (may be acceptable)", err, tt.wantErrType)
+				}
+			}
 
-		// Connect first
-		connectCtx, connectCancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer connectCancel()
-		
-		err := client.Connect(connectCtx)
-		if err != nil {
-			t.Fatalf("Connect failed: %v", err)
-		}
-		defer client.Disconnect()
-
-		// Get response iterator
-		iterCtx := context.Background()
-		iter := client.ReceiveResponse(iterCtx)
-		if iter == nil {
-			t.Fatal("ReceiveResponse returned nil iterator")
-		}
-
-		// Create cancelled context for Next call
-		nextCtx, nextCancel := context.WithCancel(context.Background())
-		nextCancel() // Cancel immediately
-
-		// Trigger responses
-		transport.sendResponses()
-
-		// Iterator Next should respect cancelled context
-		_, err = iter.Next(nextCtx)
-		if err == nil {
-			t.Log("Iterator Next succeeded despite cancelled context (may be valid)")
-		} else if err == context.Canceled {
-			t.Log("Iterator correctly returned context.Canceled")
-		} else {
-			t.Logf("Iterator returned different error: %v", err)
-		}
-
-		iter.Close()
-	})
-
-	// Test 8: Context cancellation during Interrupt
-	t.Run("ContextCancellationDuringInterrupt", func(t *testing.T) {
-		transport := &clientMockTransport{}
-		client := NewClientWithTransport(transport)
-
-		// Connect first
-		connectCtx, connectCancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer connectCancel()
-		
-		err := client.Connect(connectCtx)
-		if err != nil {
-			t.Fatalf("Connect failed: %v", err)
-		}
-		defer client.Disconnect()
-
-		// Create cancelled context for Interrupt
-		interruptCtx, interruptCancel := context.WithCancel(context.Background())
-		interruptCancel() // Cancel immediately
-
-		// Interrupt should respect cancelled context
-		err = client.Interrupt(interruptCtx)
-		if err == nil {
-			t.Log("Interrupt succeeded despite cancelled context (may be valid)")
-		} else if err == context.Canceled {
-			t.Log("Interrupt correctly returned context.Canceled")
-		} else {
-			t.Logf("Interrupt returned different error: %v", err)
-		}
-	})
-
-	// Test 9: Context values are propagated
-	t.Run("ContextValuesPropagation", func(t *testing.T) {
-		transport := &clientMockTransport{}
-		client := NewClientWithTransport(transport)
-
-		// Create context with custom values
-		type contextKey string
-		const testKey contextKey = "test-key"
-		testValue := "test-value"
-		
-		ctx := context.WithValue(context.Background(), testKey, testValue)
-
-		// Context values should be available throughout operations
-		err := client.Connect(ctx)
-		if err != nil {
-			t.Logf("Connect returned: %v", err)
-		}
-
-		err = client.Query(ctx, "test query")
-		if err != nil {
-			t.Logf("Query returned: %v", err)
-		}
-
-		// This test mainly ensures no panic occurs and context is properly threaded
-		client.Disconnect()
-	})
-
-	// Test 10: Nested context cancellation behavior
-	t.Run("NestedContextCancellation", func(t *testing.T) {
-		transport := &clientMockTransport{}
-		client := NewClientWithTransport(transport)
-
-		// Create nested contexts
-		parentCtx, parentCancel := context.WithCancel(context.Background())
-		childCtx, childCancel := context.WithCancel(parentCtx)
-
-		// Connect with child context
-		err := client.Connect(childCtx)
-		if err != nil {
-			t.Logf("Connect returned: %v", err)
-		}
-		defer client.Disconnect()
-
-		// Cancel parent context (should cascade to child)
-		parentCancel()
-		defer childCancel() // Cleanup
-
-		// Operations with child context should see cancellation
-		err = client.Query(childCtx, "test query")
-		if err == nil {
-			t.Log("Query succeeded despite parent context cancellation (may be valid)")
-		} else if err == context.Canceled {
-			t.Log("Query correctly propagated parent context cancellation")
-		} else {
-			t.Logf("Query returned: %v", err)
-		}
-	})
-
-	// Test 11: Context deadline propagation
-	t.Run("ContextDeadlinePropagation", func(t *testing.T) {
-		transport := &clientMockTransport{}
-		client := NewClientWithTransport(transport)
-
-		// Create context with deadline
-		deadline := time.Now().Add(100 * time.Millisecond)
-		ctx, cancel := context.WithDeadline(context.Background(), deadline)
-		defer cancel()
-
-		// Connect should work initially
-		err := client.Connect(ctx)
-		if err != nil {
-			t.Logf("Connect returned: %v", err)
-		}
-		defer client.Disconnect()
-
-		// Wait for deadline to pass
-		time.Sleep(150 * time.Millisecond)
-
-		// Operations should now see deadline exceeded
-		err = client.Query(ctx, "test query")
-		if err == nil {
-			t.Log("Query succeeded despite exceeded deadline (may be valid)")
-		} else if err == context.DeadlineExceeded {
-			t.Log("Query correctly returned context.DeadlineExceeded")
-		} else {
-			t.Logf("Query returned: %v", err)
-		}
-	})
-
-	// Test 12: Multiple operations with same context
-	t.Run("MultipleOperationsSameContext", func(t *testing.T) {
-		transport := &clientMockTransport{}
-		client := NewClientWithTransport(transport)
-
-		// Create single context for all operations
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-
-		// All operations should use the same context
-		err := client.Connect(ctx)
-		if err != nil {
-			t.Logf("Connect returned: %v", err)
-		}
-		defer client.Disconnect()
-
-		err = client.Query(ctx, "query 1")
-		if err != nil {
-			t.Logf("Query 1 returned: %v", err)
-		}
-
-		err = client.Query(ctx, "query 2")
-		if err != nil {
-			t.Logf("Query 2 returned: %v", err)
-		}
-
-		messages := make(chan StreamMessage, 1)
-		messages <- StreamMessage{Type: "request", Message: &UserMessage{Content: "stream query"}}
-		close(messages)
-
-		err = client.QueryStream(ctx, messages)
-		if err != nil {
-			t.Logf("QueryStream returned: %v", err)
-		}
-
-		// All operations should share the same timeout
-		msgChan := client.ReceiveMessages(ctx)
-		select {
-		case <-msgChan:
-		case <-time.After(100 * time.Millisecond):
-		}
-
-		err = client.Interrupt(ctx)
-		if err != nil {
-			t.Logf("Interrupt returned: %v", err)
-		}
-	})
+			if tt.validate != nil {
+				tt.validate(t, client)
+			}
+		})
+	}
 }
 
-// T148: Client Backpressure 🔴 RED
-// Go Target: client_test.go::TestClientBackpressure
 func TestClientBackpressure(t *testing.T) {
 	// Test channel buffer management under load
 	transport := &clientMockTransport{
@@ -2491,23 +2542,23 @@ func TestClientBackpressure(t *testing.T) {
 		errChan:  make(chan error, 10),
 		slowSend: true, // Enable slow sending to create backpressure
 	}
-	
+
 	client := NewClientWithTransport(transport, WithMaxTurns(100))
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	
+
 	err := client.Connect(ctx)
 	if err != nil {
 		t.Fatalf("Connect failed: %v", err)
 	}
 	defer client.Disconnect()
-	
+
 	// Test 1: High volume message sending
 	t.Run("HighVolumeMessageSending", func(t *testing.T) {
 		messageCount := 50
 		var wg sync.WaitGroup
 		errChan := make(chan error, messageCount)
-		
+
 		for i := 0; i < messageCount; i++ {
 			wg.Add(1)
 			go func(idx int) {
@@ -2518,26 +2569,26 @@ func TestClientBackpressure(t *testing.T) {
 				}
 			}(i)
 		}
-		
+
 		wg.Wait()
 		close(errChan)
-		
+
 		// Check for errors (excluding timeout)
 		for err := range errChan {
 			t.Error(err)
 		}
 	})
-	
+
 	// Test 2: Stream backpressure handling
 	t.Run("StreamBackpressureHandling", func(t *testing.T) {
 		streamMessages := make(chan StreamMessage, 5) // Small buffer
-		
+
 		// Start streaming
 		err = client.QueryStream(ctx, streamMessages)
 		if err != nil {
 			t.Errorf("QueryStream failed: %v", err)
 		}
-		
+
 		// Send messages rapidly
 		for i := 0; i < 10; i++ {
 			userMsg := &UserMessage{Content: fmt.Sprintf("Stream message %d", i)}
@@ -2546,7 +2597,7 @@ func TestClientBackpressure(t *testing.T) {
 				Message:   userMsg,
 				SessionID: "stream-test",
 			}
-			
+
 			select {
 			case streamMessages <- streamMsg:
 			case <-time.After(100 * time.Millisecond):
@@ -2555,13 +2606,13 @@ func TestClientBackpressure(t *testing.T) {
 		}
 		close(streamMessages)
 	})
-	
+
 	// Test 3: Buffer overflow protection
 	t.Run("BufferOverflowProtection", func(t *testing.T) {
 		transport.mu.Lock()
 		sentCount := len(transport.sentMessages)
 		transport.mu.Unlock()
-		
+
 		// Should handle load without crashes
 		if sentCount < 0 {
 			t.Error("Negative sent message count indicates memory corruption")
@@ -2569,29 +2620,27 @@ func TestClientBackpressure(t *testing.T) {
 	})
 }
 
-// T151: Client Multiple Sessions 🔴 RED
-// Go Target: client_test.go::TestClientMultipleSessions
 func TestClientMultipleSessions(t *testing.T) {
 	// Test session multiplexing and isolation
 	transport := &clientMockTransport{
 		msgChan: make(chan Message, 100),
 		errChan: make(chan error, 10),
 	}
-	
+
 	client := NewClientWithTransport(transport)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	
+
 	err := client.Connect(ctx)
 	if err != nil {
 		t.Fatalf("Connect failed: %v", err)
 	}
 	defer client.Disconnect()
-	
+
 	// Test 1: Multiple sessions with different IDs
 	t.Run("MultipleSessionIDs", func(t *testing.T) {
 		sessionIDs := []string{"session1", "session2", "session3"}
-		
+
 		// Send messages to different sessions
 		for _, sessionID := range sessionIDs {
 			err := client.Query(ctx, fmt.Sprintf("Message for %s", sessionID), sessionID)
@@ -2599,16 +2648,16 @@ func TestClientMultipleSessions(t *testing.T) {
 				t.Errorf("Query for session %s failed: %v", sessionID, err)
 			}
 		}
-		
+
 		// Verify messages were sent with correct session IDs
 		transport.mu.Lock()
 		sentCount := len(transport.sentMessages)
 		transport.mu.Unlock()
-		
+
 		if sentCount != 3 {
 			t.Fatalf("Expected 3 messages sent, got %d", sentCount)
 		}
-		
+
 		// Check session isolation - verify all expected session IDs are present
 		transport.mu.Lock()
 		sessionsSeen := make(map[string]bool)
@@ -2616,7 +2665,7 @@ func TestClientMultipleSessions(t *testing.T) {
 			sessionsSeen[msg.SessionID] = true
 		}
 		transport.mu.Unlock()
-		
+
 		// Verify all expected session IDs were used
 		for _, expectedSessionID := range sessionIDs {
 			if !sessionsSeen[expectedSessionID] {
@@ -2624,47 +2673,47 @@ func TestClientMultipleSessions(t *testing.T) {
 			}
 		}
 	})
-	
+
 	// Test 2: Concurrent sessions
 	t.Run("ConcurrentSessions", func(t *testing.T) {
 		sessionCount := 5
 		messagesPerSession := 3
 		var wg sync.WaitGroup
-		
+
 		// Clear previous messages
 		transport.mu.Lock()
 		transport.sentMessages = nil
 		transport.mu.Unlock()
-		
+
 		// Send messages concurrently to different sessions
 		for sessionIdx := 0; sessionIdx < sessionCount; sessionIdx++ {
 			wg.Add(1)
 			go func(sIdx int) {
 				defer wg.Done()
 				sessionID := fmt.Sprintf("concurrent-session-%d", sIdx)
-				
+
 				for msgIdx := 0; msgIdx < messagesPerSession; msgIdx++ {
 					err := client.Query(ctx, fmt.Sprintf("Message %d", msgIdx), sessionID)
 					if err != nil {
-						t.Errorf("Concurrent query failed for session %s, message %d: %v", 
+						t.Errorf("Concurrent query failed for session %s, message %d: %v",
 							sessionID, msgIdx, err)
 					}
 				}
 			}(sessionIdx)
 		}
-		
+
 		wg.Wait()
-		
+
 		// Verify all messages were sent
 		transport.mu.Lock()
 		totalExpected := sessionCount * messagesPerSession
 		actualCount := len(transport.sentMessages)
 		transport.mu.Unlock()
-		
+
 		if actualCount != totalExpected {
 			t.Errorf("Expected %d total messages, got %d", totalExpected, actualCount)
 		}
-		
+
 		// Verify session isolation - each session's messages should be grouped
 		sessionMessageCounts := make(map[string]int)
 		transport.mu.Lock()
@@ -2672,91 +2721,91 @@ func TestClientMultipleSessions(t *testing.T) {
 			sessionMessageCounts[msg.SessionID]++
 		}
 		transport.mu.Unlock()
-		
+
 		if len(sessionMessageCounts) != sessionCount {
 			t.Errorf("Expected %d unique sessions, got %d", sessionCount, len(sessionMessageCounts))
 		}
-		
+
 		for sessionID, count := range sessionMessageCounts {
 			if count != messagesPerSession {
-				t.Errorf("Session %s should have %d messages, got %d", 
+				t.Errorf("Session %s should have %d messages, got %d",
 					sessionID, messagesPerSession, count)
 			}
 		}
 	})
-	
+
 	// Test 3: Default session behavior
 	t.Run("DefaultSessionBehavior", func(t *testing.T) {
 		// Clear previous messages
 		transport.mu.Lock()
 		transport.sentMessages = nil
 		transport.mu.Unlock()
-		
+
 		// Send message without explicit session ID
 		err := client.Query(ctx, "Default session message")
 		if err != nil {
 			t.Errorf("Default session query failed: %v", err)
 		}
-		
+
 		// Verify default session ID is used
 		transport.mu.Lock()
 		if len(transport.sentMessages) != 1 {
 			t.Fatalf("Expected 1 message, got %d", len(transport.sentMessages))
 		}
-		
+
 		msg := transport.sentMessages[0]
 		if msg.SessionID != "default" {
 			t.Errorf("Expected default session ID 'default', got '%s'", msg.SessionID)
 		}
 		transport.mu.Unlock()
 	})
-	
+
 	// Test 4: Session isolation with QueryStream
 	t.Run("SessionIsolationWithQueryStream", func(t *testing.T) {
 		// Clear previous messages
 		transport.mu.Lock()
 		transport.sentMessages = nil
 		transport.mu.Unlock()
-		
+
 		// Create streams for different sessions
 		session1Messages := make(chan StreamMessage, 5)
 		session2Messages := make(chan StreamMessage, 5)
-		
+
 		// Start streams
 		err1 := client.QueryStream(ctx, session1Messages)
 		if err1 != nil {
 			t.Errorf("QueryStream for session1 failed: %v", err1)
 		}
-		
+
 		err2 := client.QueryStream(ctx, session2Messages)
 		if err2 != nil {
 			t.Errorf("QueryStream for session2 failed: %v", err2)
 		}
-		
+
 		// Send messages to different sessions via streams
 		userMsg1 := &UserMessage{Content: "Stream message for session1"}
 		streamMsg1 := StreamMessage{
-			Type:      "request", 
+			Type:      "request",
 			Message:   userMsg1,
 			SessionID: "stream-session-1",
 		}
-		
+
 		userMsg2 := &UserMessage{Content: "Stream message for session2"}
 		streamMsg2 := StreamMessage{
 			Type:      "request",
-			Message:   userMsg2, 
+			Message:   userMsg2,
 			SessionID: "stream-session-2",
 		}
-		
+
 		session1Messages <- streamMsg1
 		session2Messages <- streamMsg2
-		
+
 		close(session1Messages)
 		close(session2Messages)
-		
+
 		// Wait a bit for messages to be processed
 		time.Sleep(100 * time.Millisecond)
-		
+
 		// Verify session isolation in stream messages
 		transport.mu.Lock()
 		sentCount := len(transport.sentMessages)
@@ -2766,7 +2815,7 @@ func TestClientMultipleSessions(t *testing.T) {
 			for _, msg := range transport.sentMessages {
 				sessionFound[msg.SessionID] = true
 			}
-			
+
 			if !sessionFound["stream-session-1"] || !sessionFound["stream-session-2"] {
 				t.Error("Stream messages did not maintain session isolation")
 			}
@@ -2775,402 +2824,479 @@ func TestClientMultipleSessions(t *testing.T) {
 	})
 }
 
-// T159: Client Factory Function 🔴 RED
-// Go Target: client_test.go::TestClientFactoryFunction
+// TestClientFactoryFunction tests the NewClient factory function behavior.
 func TestClientFactoryFunction(t *testing.T) {
-	// Test NewClient constructor with options
-	
-	// Test 1: NewClient with no options
-	t.Run("NewClientNoOptions", func(t *testing.T) {
-		client := NewClient()
-		if client == nil {
-			t.Fatal("NewClient() returned nil")
-		}
-		
-		// Verify it's a ClientImpl
-		clientImpl, ok := client.(*ClientImpl)
-		if !ok {
-			t.Fatalf("Expected *ClientImpl, got %T", client)
-		}
-		
-		// Verify options are initialized
-		if clientImpl.options == nil {
-			t.Error("Client options should be initialized")
-		}
-		
-		// Verify no custom transport
-		if clientImpl.customTransport != nil {
-			t.Error("NewClient should not have custom transport")
-		}
-		
-		// Verify not connected initially
-		clientImpl.mu.RLock()
-		connected := clientImpl.connected
-		clientImpl.mu.RUnlock()
-		
-		if connected {
-			t.Error("NewClient should not be connected initially")
-		}
-	})
-	
-	// Test 2: NewClient with single option
-	t.Run("NewClientSingleOption", func(t *testing.T) {
-		client := NewClient(WithMaxTurns(5))
-		if client == nil {
-			t.Fatal("NewClient() returned nil")
-		}
-		
-		clientImpl := client.(*ClientImpl)
-		if clientImpl.options == nil {
-			t.Fatal("Client options should be initialized")
-		}
-		
-		if clientImpl.options.MaxTurns != 5 {
-			t.Errorf("Expected MaxTurns=5, got %d", clientImpl.options.MaxTurns)
-		}
-	})
-	
-	// Test 3: NewClient with multiple options
-	t.Run("NewClientMultipleOptions", func(t *testing.T) {
-		workingDir := "/tmp"
-		systemPrompt := "Custom system prompt"
-		
-		client := NewClient(
-			WithMaxTurns(10),
-			WithCwd(workingDir),
-			WithSystemPrompt(systemPrompt),
-			WithPermissionMode(PermissionModeBypassPermissions),
-		)
-		
-		if client == nil {
-			t.Fatal("NewClient() returned nil")
-		}
-		
-		clientImpl := client.(*ClientImpl)
-		if clientImpl.options == nil {
-			t.Fatal("Client options should be initialized")
-		}
-		
-		// Verify all options were applied
-		if clientImpl.options.MaxTurns != 10 {
-			t.Errorf("Expected MaxTurns=10, got %d", clientImpl.options.MaxTurns)
-		}
-		
-		if clientImpl.options.Cwd == nil || *clientImpl.options.Cwd != workingDir {
-			t.Errorf("Expected Cwd=%s, got %v", workingDir, clientImpl.options.Cwd)
-		}
-		
-		if clientImpl.options.SystemPrompt == nil || *clientImpl.options.SystemPrompt != systemPrompt {
-			t.Errorf("Expected SystemPrompt=%s, got %v", systemPrompt, clientImpl.options.SystemPrompt)
-		}
-		
-		if clientImpl.options.PermissionMode == nil || *clientImpl.options.PermissionMode != PermissionModeBypassPermissions {
-			t.Errorf("Expected PermissionMode=%s, got %v", PermissionModeBypassPermissions, clientImpl.options.PermissionMode)
-		}
-	})
-	
-	// Test 4: NewClient vs NewClientWithTransport behavior
-	t.Run("NewClientVsNewClientWithTransport", func(t *testing.T) {
-		// NewClient
-		client1 := NewClient(WithMaxTurns(7))
-		clientImpl1 := client1.(*ClientImpl)
-		
-		// NewClientWithTransport
-		transport := &clientMockTransport{}
-		client2 := NewClientWithTransport(transport, WithMaxTurns(7))
-		clientImpl2 := client2.(*ClientImpl)
-		
-		// Both should have same options
-		if clientImpl1.options.MaxTurns != clientImpl2.options.MaxTurns {
-			t.Error("Both constructors should apply options equally")
-		}
-		
-		// But different transport behavior
-		if clientImpl1.customTransport != nil {
-			t.Error("NewClient should not have custom transport")
-		}
-		
-		if clientImpl2.customTransport == nil {
-			t.Error("NewClientWithTransport should have custom transport")
-		}
-		
-		if clientImpl2.customTransport != transport {
-			t.Error("NewClientWithTransport should store the provided transport")
-		}
-	})
-	
-	// Test 5: NewClient factory function consistency
-	t.Run("FactoryFunctionConsistency", func(t *testing.T) {
-		// Create multiple clients with same options
-		clients := make([]Client, 3)
-		for i := range clients {
-			clients[i] = NewClient(
+	tests := []struct {
+		name     string
+		options  []Option
+		validate func(*testing.T, Client)
+		setup    func(*testing.T) *clientMockTransport          // For NewClientWithTransport tests
+		postTest func(*testing.T, Client, *clientMockTransport) // For complex validation
+	}{
+		{
+			name:    "new_client_no_options",
+			options: []Option{},
+			validate: func(t *testing.T, client Client) {
+				t.Helper()
+				if client == nil {
+					t.Fatal("NewClient() returned nil")
+				}
+
+				// Verify it's a ClientImpl
+				clientImpl, ok := client.(*ClientImpl)
+				if !ok {
+					t.Fatalf("Expected *ClientImpl, got %T", client)
+				}
+
+				// Verify options are initialized
+				if clientImpl.options == nil {
+					t.Error("Client options should be initialized")
+				}
+
+				// Verify no custom transport
+				if clientImpl.customTransport != nil {
+					t.Error("NewClient should not have custom transport")
+				}
+
+				// Verify not connected initially
+				clientImpl.mu.RLock()
+				connected := clientImpl.connected
+				clientImpl.mu.RUnlock()
+
+				if connected {
+					t.Error("NewClient should not be connected initially")
+				}
+			},
+		},
+		{
+			name:    "new_client_single_option",
+			options: []Option{WithMaxTurns(5)},
+			validate: func(t *testing.T, client Client) {
+				t.Helper()
+				if client == nil {
+					t.Fatal("NewClient() returned nil")
+				}
+
+				clientImpl := client.(*ClientImpl)
+				if clientImpl.options == nil {
+					t.Fatal("Client options should be initialized")
+				}
+
+				if clientImpl.options.MaxTurns != 5 {
+					t.Errorf("Expected MaxTurns=5, got %d", clientImpl.options.MaxTurns)
+				}
+			},
+		},
+		{
+			name: "new_client_multiple_options",
+			options: []Option{
+				WithMaxTurns(10),
+				WithCwd("/tmp"),
+				WithSystemPrompt("Custom system prompt"),
+				WithPermissionMode(PermissionModeBypassPermissions),
+			},
+			validate: func(t *testing.T, client Client) {
+				t.Helper()
+				if client == nil {
+					t.Fatal("NewClient() returned nil")
+				}
+
+				clientImpl := client.(*ClientImpl)
+				if clientImpl.options == nil {
+					t.Fatal("Client options should be initialized")
+				}
+
+				// Verify all options were applied
+				workingDir := "/tmp"
+				systemPrompt := "Custom system prompt"
+
+				if clientImpl.options.MaxTurns != 10 {
+					t.Errorf("Expected MaxTurns=10, got %d", clientImpl.options.MaxTurns)
+				}
+
+				if clientImpl.options.Cwd == nil || *clientImpl.options.Cwd != workingDir {
+					t.Errorf("Expected Cwd=%s, got %v", workingDir, clientImpl.options.Cwd)
+				}
+
+				if clientImpl.options.SystemPrompt == nil || *clientImpl.options.SystemPrompt != systemPrompt {
+					t.Errorf("Expected SystemPrompt=%s, got %v", systemPrompt, clientImpl.options.SystemPrompt)
+				}
+
+				if clientImpl.options.PermissionMode == nil || *clientImpl.options.PermissionMode != PermissionModeBypassPermissions {
+					t.Errorf("Expected PermissionMode=%s, got %v", PermissionModeBypassPermissions, clientImpl.options.PermissionMode)
+				}
+			},
+		},
+		{
+			name:    "new_client_vs_new_client_with_transport",
+			options: []Option{WithMaxTurns(7)},
+			setup: func(t *testing.T) *clientMockTransport {
+				return &clientMockTransport{}
+			},
+			postTest: func(t *testing.T, client1 Client, transport *clientMockTransport) {
+				t.Helper()
+				// NewClient
+				clientImpl1 := client1.(*ClientImpl)
+
+				// NewClientWithTransport
+				client2 := NewClientWithTransport(transport, WithMaxTurns(7))
+				clientImpl2 := client2.(*ClientImpl)
+
+				// Both should have same options
+				if clientImpl1.options.MaxTurns != clientImpl2.options.MaxTurns {
+					t.Error("Both constructors should apply options equally")
+				}
+
+				// But different transport behavior
+				if clientImpl1.customTransport != nil {
+					t.Error("NewClient should not have custom transport")
+				}
+
+				if clientImpl2.customTransport == nil {
+					t.Error("NewClientWithTransport should have custom transport")
+				}
+
+				if clientImpl2.customTransport != transport {
+					t.Error("NewClientWithTransport should store the provided transport")
+				}
+			},
+		},
+		{
+			name: "factory_function_consistency",
+			options: []Option{
 				WithMaxTurns(15),
 				WithSystemPrompt("Test prompt"),
-			)
-		}
-		
-		// All should be configured identically
-		for i, client := range clients {
-			clientImpl := client.(*ClientImpl)
-			
-			if clientImpl.options.MaxTurns != 15 {
-				t.Errorf("Client %d MaxTurns mismatch: expected 15, got %d", i, clientImpl.options.MaxTurns)
-			}
-			
-			if clientImpl.options.SystemPrompt == nil || *clientImpl.options.SystemPrompt != "Test prompt" {
-				t.Errorf("Client %d SystemPrompt mismatch: expected 'Test prompt', got %v", i, clientImpl.options.SystemPrompt)
-			}
-			
-			// Each should be independent instance
-			if clientImpl.customTransport != nil {
-				t.Errorf("Client %d should not have custom transport", i)
-			}
-		}
-	})
-	
-	// Test 6: Factory function with option override
-	t.Run("FactoryFunctionOptionOverride", func(t *testing.T) {
-		// Test that later options override earlier ones
-		client := NewClient(
-			WithMaxTurns(1),
-			WithMaxTurns(2),
-			WithMaxTurns(3), // This should be the final value
-		)
-		
-		clientImpl := client.(*ClientImpl)
-		if clientImpl.options.MaxTurns != 3 {
-			t.Errorf("Expected final MaxTurns=3, got %d", clientImpl.options.MaxTurns)
-		}
-	})
-}
+			},
+			validate: func(t *testing.T, client Client) {
+				t.Helper()
+				// Create multiple clients with same options
+				clients := make([]Client, 3)
+				for i := range clients {
+					clients[i] = NewClient(
+						WithMaxTurns(15),
+						WithSystemPrompt("Test prompt"),
+					)
+				}
 
-// T161: Client Default Configuration 🔴 RED  
-// Go Target: client_test.go::TestClientDefaultConfiguration
-func TestClientDefaultConfiguration(t *testing.T) {
-	// Test sensible defaults for zero-config usage
-	
-	// Test 1: Zero-config client creation
-	t.Run("ZeroConfigClientCreation", func(t *testing.T) {
-		client := NewClient()
-		if client == nil {
-			t.Fatal("NewClient() should not return nil")
-		}
-		
-		clientImpl := client.(*ClientImpl)
-		if clientImpl.options == nil {
-			t.Fatal("Client options should be initialized even with no options")
-		}
-		
-		// Verify default values are sensible
-		options := clientImpl.options
-		
-		// MaxTurns should have reasonable default (check current default)
-		if options.MaxTurns < 0 {
-			t.Error("Default MaxTurns should be non-negative")
-		}
-		
-		// Working directory should be nil initially (uses CLI default)
-		if options.Cwd != nil {
-			t.Errorf("Default Cwd should be nil to use CLI default, got %v", options.Cwd)
-		}
-		
-		// System prompt should be nil initially (uses CLI default)
-		if options.SystemPrompt != nil {
-			t.Errorf("Default SystemPrompt should be nil to use CLI default, got %v", options.SystemPrompt)
-		}
-		
-		// Permission mode should be nil initially (uses CLI default)
-		if options.PermissionMode != nil {
-			t.Errorf("Default PermissionMode should be nil to use CLI default, got %v", options.PermissionMode)
-		}
-	})
-	
-	// Test 2: Default values don't break functionality
-	t.Run("DefaultValuesFunctional", func(t *testing.T) {
-		transport := &clientMockTransport{
-			msgChan: make(chan Message, 10),
-			errChan: make(chan error, 10),
-		}
-		
-		client := NewClient() // Zero config
-		
-		// Set custom transport for testing
-		clientImpl := client.(*ClientImpl)
-		clientImpl.customTransport = transport
-		
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		defer cancel()
-		
-		// Connect should work with defaults
-		err := client.Connect(ctx)
-		if err != nil {
-			t.Fatalf("Connect with default config failed: %v", err)
-		}
-		defer client.Disconnect()
-		
-		// Query should work with defaults
-		err = client.Query(ctx, "Default config test")
-		if err != nil {
-			t.Errorf("Query with default config failed: %v", err)
-		}
-		
-		// Verify message was sent
-		transport.mu.Lock()
-		sentCount := len(transport.sentMessages)
-		transport.mu.Unlock()
-		
-		if sentCount != 1 {
-			t.Errorf("Expected 1 message sent, got %d", sentCount)
-		}
-	})
-	
-	// Test 3: Default MaxTurns behavior
-	t.Run("DefaultMaxTurnsBehavior", func(t *testing.T) {
-		client := NewClient()
-		clientImpl := client.(*ClientImpl)
-		
-		// Should have sensible default (0 means no limit, which is valid)
-		defaultMaxTurns := clientImpl.options.MaxTurns
-		if defaultMaxTurns < 0 {
-			t.Errorf("Default MaxTurns should be non-negative, got %d", defaultMaxTurns)
-		}
-		
-		// Default of 0 means "no limit" which is a reasonable default
-		if defaultMaxTurns != 0 {
-			t.Logf("Default MaxTurns is %d (0 means no limit)", defaultMaxTurns)
-		}
-	})
-	
-	// Test 4: Defaults vs explicit configuration
-	t.Run("DefaultsVsExplicitConfiguration", func(t *testing.T) {
-		// Zero config client
-		defaultClient := NewClient()
-		defaultImpl := defaultClient.(*ClientImpl)
-		
-		// Explicitly configured client with same values as defaults
-		explicitClient := NewClient(
-			WithMaxTurns(defaultImpl.options.MaxTurns), // Use same value as default
-		)
-		explicitImpl := explicitClient.(*ClientImpl)
-		
-		// Should behave identically
-		if defaultImpl.options.MaxTurns != explicitImpl.options.MaxTurns {
-			t.Error("Default and explicit configuration should be identical when values match")
-		}
-		
-		// Both should work identically
-		transport1 := &clientMockTransport{
-			msgChan: make(chan Message, 10),
-			errChan: make(chan error, 10),
-		}
-		transport2 := &clientMockTransport{
-			msgChan: make(chan Message, 10),
-			errChan: make(chan error, 10),
-		}
-		
-		defaultImpl.customTransport = transport1
-		explicitImpl.customTransport = transport2
-		
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		defer cancel()
-		
-		// Both should connect successfully
-		err1 := defaultClient.Connect(ctx)
-		err2 := explicitClient.Connect(ctx)
-		
-		if err1 != nil {
-			t.Errorf("Default client connect failed: %v", err1)
-		}
-		if err2 != nil {
-			t.Errorf("Explicit client connect failed: %v", err2)
-		}
-		
-		defer defaultClient.Disconnect()
-		defer explicitClient.Disconnect()
-	})
-	
-	// Test 5: Default configuration validation
-	t.Run("DefaultConfigurationValidation", func(t *testing.T) {
-		client := NewClient()
-		clientImpl := client.(*ClientImpl)
-		
-		// Default configuration should pass validation
-		err := clientImpl.validateOptions()
-		if err != nil {
-			t.Errorf("Default configuration should pass validation, got error: %v", err)
-		}
-	})
-	
-	// Test 6: Zero config usability
-	t.Run("ZeroConfigUsability", func(t *testing.T) {
-		// This tests the user experience for zero-config usage
-		transport := &clientMockTransport{
-			msgChan: make(chan Message, 10),
-			errChan: make(chan error, 10),
-		}
-		
-		// User creates client with no configuration
-		client := NewClient()
-		clientImpl := client.(*ClientImpl)
-		clientImpl.customTransport = transport
-		
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		defer cancel()
-		
-		// Should work immediately without additional setup
-		err := client.Connect(ctx)
-		if err != nil {
-			t.Fatalf("Zero-config client should connect immediately, got: %v", err)
-		}
-		defer client.Disconnect()
-		
-		// Should be able to send messages immediately
-		err = client.Query(ctx, "Hello, Claude!")
-		if err != nil {
-			t.Fatalf("Zero-config client should send messages immediately, got: %v", err)
-		}
-		
-		// Should receive messages
-		messages := client.ReceiveMessages(ctx)
-		if messages == nil {
-			t.Error("Zero-config client should receive messages")
-		}
-		
-		// Should support iterators
-		iter := client.ReceiveResponse(ctx)
-		if iter == nil {
-			t.Error("Zero-config client should support response iterators")
-		}
-		if iter != nil {
-			iter.Close()
-		}
-		
-		// Should support interrupts
-		err = client.Interrupt(ctx)
-		if err != nil {
-			t.Logf("Interrupt returned: %v (may be expected)", err)
-		}
-		
-		// Verify the expected message was sent
-		transport.mu.Lock()
-		sentCount := len(transport.sentMessages)
-		if sentCount > 0 {
-			msg := transport.sentMessages[0]
-			if userMsg, ok := msg.Message.(*UserMessage); ok {
-				if content, ok := userMsg.Content.(string); ok {
-					if content != "Hello, Claude!" {
-						t.Errorf("Expected message 'Hello, Claude!', got '%s'", content)
+				// All should be configured identically
+				for i, testClient := range clients {
+					clientImpl := testClient.(*ClientImpl)
+
+					if clientImpl.options.MaxTurns != 15 {
+						t.Errorf("Client %d MaxTurns mismatch: expected 15, got %d", i, clientImpl.options.MaxTurns)
+					}
+
+					if clientImpl.options.SystemPrompt == nil || *clientImpl.options.SystemPrompt != "Test prompt" {
+						t.Errorf("Client %d SystemPrompt mismatch: expected 'Test prompt', got %v", i, clientImpl.options.SystemPrompt)
+					}
+
+					// Each should be independent instance
+					if clientImpl.customTransport != nil {
+						t.Errorf("Client %d should not have custom transport", i)
 					}
 				}
+			},
+		},
+		{
+			name: "factory_function_option_override",
+			options: []Option{
+				WithMaxTurns(1),
+				WithMaxTurns(2),
+				WithMaxTurns(3), // This should be the final value
+			},
+			validate: func(t *testing.T, client Client) {
+				t.Helper()
+				clientImpl := client.(*ClientImpl)
+				if clientImpl.options.MaxTurns != 3 {
+					t.Errorf("Expected final MaxTurns=3, got %d", clientImpl.options.MaxTurns)
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Setup transport if needed
+			var transport *clientMockTransport
+			if tt.setup != nil {
+				transport = tt.setup(t)
 			}
-		}
-		transport.mu.Unlock()
-	})
+
+			// Create client with options
+			client := NewClient(tt.options...)
+
+			// Validation
+			if tt.validate != nil {
+				tt.validate(t, client)
+			}
+			if tt.postTest != nil {
+				tt.postTest(t, client, transport)
+			}
+		})
+	}
 }
 
-// T147: Client Message Ordering 🔴 RED
-// Go Target: client_test.go::TestClientMessageOrdering
+// TestClientDefaultConfiguration tests default client configuration values.
+func TestClientDefaultConfiguration(t *testing.T) {
+	tests := []struct {
+		name        string
+		options     []Option                              // Empty for zero-config tests
+		preTest     func(*testing.T) *clientMockTransport // Setup transport if needed
+		validate    func(*testing.T, *ClientImpl, *clientMockTransport)
+		requiresCtx bool // Whether test needs context/timeout
+	}{
+		{
+			name:    "zero_config_client_creation",
+			options: []Option{}, // No options - zero config
+			validate: func(t *testing.T, client *ClientImpl, transport *clientMockTransport) {
+				t.Helper()
+				if client == nil {
+					t.Fatal("NewClient() should not return nil")
+				}
+				if client.options == nil {
+					t.Fatal("Client options should be initialized even with no options")
+				}
+
+				options := client.options
+				// MaxTurns should have reasonable default (check current default)
+				if options.MaxTurns < 0 {
+					t.Error("Default MaxTurns should be non-negative")
+				}
+
+				// Working directory should be nil initially (uses CLI default)
+				if options.Cwd != nil {
+					t.Errorf("Default Cwd should be nil to use CLI default, got %v", options.Cwd)
+				}
+
+				// System prompt should be nil initially (uses CLI default)
+				if options.SystemPrompt != nil {
+					t.Errorf("Default SystemPrompt should be nil to use CLI default, got %v", options.SystemPrompt)
+				}
+
+				// Permission mode should be nil initially (uses CLI default)
+				if options.PermissionMode != nil {
+					t.Errorf("Default PermissionMode should be nil to use CLI default, got %v", options.PermissionMode)
+				}
+			},
+		},
+		{
+			name:    "default_values_functional",
+			options: []Option{}, // Zero config
+			preTest: func(t *testing.T) *clientMockTransport {
+				return &clientMockTransport{
+					msgChan: make(chan Message, 10),
+					errChan: make(chan error, 10),
+				}
+			},
+			requiresCtx: true,
+			validate: func(t *testing.T, client *ClientImpl, transport *clientMockTransport) {
+				t.Helper()
+				ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+				defer cancel()
+
+				// Connect should work with defaults
+				clientInterface := Client(client)
+				err := clientInterface.Connect(ctx)
+				if err != nil {
+					t.Fatalf("Connect with default config failed: %v", err)
+				}
+				defer clientInterface.Disconnect()
+
+				// Query should work with defaults
+				err = clientInterface.Query(ctx, "Default config test")
+				if err != nil {
+					t.Errorf("Query with default config failed: %v", err)
+				}
+
+				// Verify message was sent
+				transport.mu.Lock()
+				sentCount := len(transport.sentMessages)
+				transport.mu.Unlock()
+
+				if sentCount != 1 {
+					t.Errorf("Expected 1 message sent, got %d", sentCount)
+				}
+			},
+		},
+		{
+			name:    "default_max_turns_behavior",
+			options: []Option{}, // Zero config
+			validate: func(t *testing.T, client *ClientImpl, transport *clientMockTransport) {
+				t.Helper()
+				// Should have sensible default (0 means no limit, which is valid)
+				defaultMaxTurns := client.options.MaxTurns
+				if defaultMaxTurns < 0 {
+					t.Errorf("Default MaxTurns should be non-negative, got %d", defaultMaxTurns)
+				}
+
+				// Default of 0 means "no limit" which is a reasonable default
+				if defaultMaxTurns != 0 {
+					t.Logf("Default MaxTurns is %d (0 means no limit)", defaultMaxTurns)
+				}
+			},
+		},
+		{
+			name:        "defaults_vs_explicit_configuration",
+			options:     []Option{}, // Zero config, comparison done in validation
+			requiresCtx: true,
+			validate: func(t *testing.T, defaultClient *ClientImpl, transport *clientMockTransport) {
+				t.Helper()
+				// Explicitly configured client with same values as defaults
+				explicitClient := NewClient(
+					WithMaxTurns(defaultClient.options.MaxTurns), // Use same value as default
+				)
+				explicitImpl := explicitClient.(*ClientImpl)
+
+				// Should behave identically
+				if defaultClient.options.MaxTurns != explicitImpl.options.MaxTurns {
+					t.Error("Default and explicit configuration should be identical when values match")
+				}
+
+				// Both should work identically
+				transport1 := &clientMockTransport{
+					msgChan: make(chan Message, 10),
+					errChan: make(chan error, 10),
+				}
+				transport2 := &clientMockTransport{
+					msgChan: make(chan Message, 10),
+					errChan: make(chan error, 10),
+				}
+
+				defaultClient.customTransport = transport1
+				explicitImpl.customTransport = transport2
+
+				ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+				defer cancel()
+
+				// Both should connect successfully
+				defaultClientInterface := Client(defaultClient)
+				explicitClientInterface := Client(explicitImpl)
+
+				err1 := defaultClientInterface.Connect(ctx)
+				err2 := explicitClientInterface.Connect(ctx)
+
+				if err1 != nil {
+					t.Errorf("Default client connect failed: %v", err1)
+				}
+				if err2 != nil {
+					t.Errorf("Explicit client connect failed: %v", err2)
+				}
+
+				defer defaultClientInterface.Disconnect()
+				defer explicitClientInterface.Disconnect()
+			},
+		},
+		{
+			name:    "default_configuration_validation",
+			options: []Option{}, // Zero config
+			validate: func(t *testing.T, client *ClientImpl, transport *clientMockTransport) {
+				t.Helper()
+				// Default configuration should pass validation
+				err := client.validateOptions()
+				if err != nil {
+					t.Errorf("Default configuration should pass validation, got error: %v", err)
+				}
+			},
+		},
+		{
+			name:    "zero_config_usability",
+			options: []Option{}, // Zero config
+			preTest: func(t *testing.T) *clientMockTransport {
+				return &clientMockTransport{
+					msgChan: make(chan Message, 10),
+					errChan: make(chan error, 10),
+				}
+			},
+			requiresCtx: true,
+			validate: func(t *testing.T, client *ClientImpl, transport *clientMockTransport) {
+				t.Helper()
+				ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+				defer cancel()
+
+				// Should work immediately without additional setup
+				clientInterface := Client(client)
+				err := clientInterface.Connect(ctx)
+				if err != nil {
+					t.Fatalf("Zero-config client should connect immediately, got: %v", err)
+				}
+				defer clientInterface.Disconnect()
+
+				// Should be able to send messages immediately
+				err = clientInterface.Query(ctx, "Hello, Claude!")
+				if err != nil {
+					t.Fatalf("Zero-config client should send messages immediately, got: %v", err)
+				}
+
+				// Should receive messages
+				messages := clientInterface.ReceiveMessages(ctx)
+				if messages == nil {
+					t.Error("Zero-config client should receive messages")
+				}
+
+				// Should support iterators
+				iter := clientInterface.ReceiveResponse(ctx)
+				if iter == nil {
+					t.Error("Zero-config client should support response iterators")
+				}
+				if iter != nil {
+					iter.Close()
+				}
+
+				// Should support interrupts
+				err = clientInterface.Interrupt(ctx)
+				if err != nil {
+					t.Logf("Interrupt returned: %v (may be expected)", err)
+				}
+
+				// Verify the expected message was sent
+				transport.mu.Lock()
+				sentCount := len(transport.sentMessages)
+				if sentCount > 0 {
+					msg := transport.sentMessages[0]
+					if userMsg, ok := msg.Message.(*UserMessage); ok {
+						if content, ok := userMsg.Content.(string); ok {
+							if content != "Hello, Claude!" {
+								t.Errorf("Expected message 'Hello, Claude!', got '%s'", content)
+							}
+						}
+					}
+				}
+				transport.mu.Unlock()
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Setup transport if needed
+			var transport *clientMockTransport
+			if tt.preTest != nil {
+				transport = tt.preTest(t)
+			}
+
+			// Create client with options (empty for zero-config)
+			var client Client
+			if len(tt.options) == 0 {
+				client = NewClient() // Zero config
+			} else {
+				client = NewClient(tt.options...)
+			}
+
+			clientImpl := client.(*ClientImpl)
+
+			// Set custom transport if provided
+			if transport != nil {
+				clientImpl.customTransport = transport
+			}
+
+			// Validation
+			if tt.validate != nil {
+				tt.validate(t, clientImpl, transport)
+			}
+		})
+	}
+}
+
 func TestClientMessageOrdering(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -3207,13 +3333,13 @@ func TestClientMessageOrdering(t *testing.T) {
 				t.Errorf("Failed to get message %d", i)
 				continue
 			}
-			
+
 			userMsg, ok := sentMsg.Message.(*UserMessage)
 			if !ok {
 				t.Errorf("Message %d is not UserMessage", i)
 				continue
 			}
-			
+
 			expectedContent := fmt.Sprintf("Message %d", i)
 			if content, ok := userMsg.Content.(string); !ok || content != expectedContent {
 				t.Errorf("Message %d content mismatch: expected %s, got %v", i, expectedContent, userMsg.Content)
@@ -3243,7 +3369,7 @@ func TestClientMessageOrdering(t *testing.T) {
 			go func(id int) {
 				defer wg.Done()
 				sessionID := fmt.Sprintf("session-%d", id)
-				
+
 				// Send messages sequentially within this goroutine
 				for msgNum := 0; msgNum < messagesPerGoroutine; msgNum++ {
 					content := fmt.Sprintf("G%d-M%d", id, msgNum)
@@ -3278,12 +3404,12 @@ func TestClientMessageOrdering(t *testing.T) {
 			if !ok {
 				continue
 			}
-			
+
 			userMsg, ok := sentMsg.Message.(*UserMessage)
 			if !ok {
 				continue
 			}
-			
+
 			if content, ok := userMsg.Content.(string); ok {
 				sessionMessages[sentMsg.SessionID] = append(sessionMessages[sentMsg.SessionID], content)
 			}
@@ -3294,13 +3420,13 @@ func TestClientMessageOrdering(t *testing.T) {
 			if len(messages) != messagesPerGoroutine {
 				t.Errorf("Session %s should have %d messages, got %d", sessionID, messagesPerGoroutine, len(messages))
 			}
-			
+
 			// Extract goroutine ID from session ID
 			var goroutineID int
 			if _, err := fmt.Sscanf(sessionID, "session-%d", &goroutineID); err != nil {
 				continue
 			}
-			
+
 			// Verify messages are in order for this session
 			for msgIndex, content := range messages {
 				expected := fmt.Sprintf("G%d-M%d", goroutineID, msgIndex)
@@ -3325,7 +3451,7 @@ func TestClientMessageOrdering(t *testing.T) {
 		// Create ordered messages
 		const messageCount = 20
 		messages := make(chan StreamMessage, messageCount)
-		
+
 		for i := 0; i < messageCount; i++ {
 			messages <- StreamMessage{
 				Type:      "request",
@@ -3355,18 +3481,18 @@ func TestClientMessageOrdering(t *testing.T) {
 				t.Errorf("Failed to get stream message %d", i)
 				continue
 			}
-			
+
 			userMsg, ok := sentMsg.Message.(*UserMessage)
 			if !ok {
 				t.Errorf("Stream message %d is not UserMessage", i)
 				continue
 			}
-			
+
 			expectedContent := fmt.Sprintf("Stream message %d", i)
 			if content, ok := userMsg.Content.(string); !ok || content != expectedContent {
 				t.Errorf("Stream message %d content mismatch: expected %s, got %v", i, expectedContent, userMsg.Content)
 			}
-			
+
 			if sentMsg.SessionID != "stream-session" {
 				t.Errorf("Stream message %d session ID mismatch: expected stream-session, got %s", i, sentMsg.SessionID)
 			}
@@ -3416,7 +3542,7 @@ func TestClientMessageOrdering(t *testing.T) {
 				}
 			}
 			close(messages)
-			
+
 			err := client.QueryStream(ctx, messages)
 			if err != nil {
 				t.Errorf("QueryStream failed: %v", err)
@@ -3427,7 +3553,7 @@ func TestClientMessageOrdering(t *testing.T) {
 		}()
 
 		wg.Wait()
-		
+
 		// Give time for all operations to complete
 		time.Sleep(100 * time.Millisecond)
 
@@ -3459,7 +3585,7 @@ func TestClientMessageOrdering(t *testing.T) {
 			go func(id int) {
 				defer wg.Done()
 				sessionID := fmt.Sprintf("worker-%d", id)
-				
+
 				for msgNum := 0; msgNum < messagesPerWorker; msgNum++ {
 					content := fmt.Sprintf("W%d-M%d", id, msgNum)
 					if err := client.Query(ctx, content, sessionID); err != nil {
@@ -3489,7 +3615,7 @@ func TestClientMessageOrdering(t *testing.T) {
 		// Verify reasonable number of messages were sent
 		expectedTotal := numWorkers * messagesPerWorker
 		actualCount := transport.getSentMessageCount()
-		
+
 		if actualCount < expectedTotal*8/10 { // Allow for some loss due to high contention
 			t.Errorf("Expected at least %d messages (80%% of %d), got %d", expectedTotal*8/10, expectedTotal, actualCount)
 		}
@@ -3522,10 +3648,10 @@ func TestClientMessageOrdering(t *testing.T) {
 		// Send messages with timestamps
 		const messageCount = 100
 		var wg sync.WaitGroup
-		
+
 		// Single session to ensure FIFO
 		sessionID := "fifo-test"
-		
+
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -3557,13 +3683,13 @@ func TestClientMessageOrdering(t *testing.T) {
 				t.Errorf("Failed to get FIFO message %d", i)
 				continue
 			}
-			
+
 			userMsg, ok := sentMsg.Message.(*UserMessage)
 			if !ok {
 				t.Errorf("FIFO message %d is not UserMessage", i)
 				continue
 			}
-			
+
 			// Extract message index from content
 			var msgIndex int
 			content, ok := userMsg.Content.(string)
@@ -3575,7 +3701,7 @@ func TestClientMessageOrdering(t *testing.T) {
 				t.Errorf("Could not parse FIFO message %d content: %s", i, content)
 				continue
 			}
-			
+
 			if msgIndex != i {
 				t.Errorf("FIFO violation: expected message index %d at position %d, got %d", i, i, msgIndex)
 			}

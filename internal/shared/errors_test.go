@@ -56,13 +56,13 @@ func TestCLINotFoundError(t *testing.T) {
 	path := "/usr/bin/claude"
 	fullMessage := "CLI not found"
 	errWithPath := NewCLINotFoundError(path, fullMessage)
-	
+
 	// Should format message with path
 	expectedMessage := fmt.Sprintf("%s: %s", fullMessage, path)
 	if errWithPath.Error() != expectedMessage {
 		t.Errorf("Expected error message %q, got %q", expectedMessage, errWithPath.Error())
 	}
-	
+
 	// Should store path
 	if errWithPath.Path != path {
 		t.Errorf("Expected path %q, got %q", path, errWithPath.Path)
@@ -236,7 +236,7 @@ func TestErrorHierarchy(t *testing.T) {
 
 	expectedTypes := []string{
 		"base_error",
-		"connection_error", 
+		"connection_error",
 		"cli_not_found_error",
 		"process_error",
 		"json_decode_error",
@@ -247,7 +247,7 @@ func TestErrorHierarchy(t *testing.T) {
 		if err.Type() != expectedTypes[i] {
 			t.Errorf("Error %d: expected type %q, got %q", i, expectedTypes[i], err.Type())
 		}
-		
+
 		// All must implement error interface
 		if err.Error() == "" {
 			t.Errorf("Error %d: Error() returned empty string", i)

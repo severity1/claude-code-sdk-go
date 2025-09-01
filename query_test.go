@@ -46,7 +46,7 @@ func TestSimpleQueryExecution(t *testing.T) {
 			}
 			t.Fatalf("Iterator error: %v", err)
 		}
-		if msg != nil {  // Only append non-nil messages
+		if msg != nil { // Only append non-nil messages
 			messages = append(messages, msg)
 		}
 	}
@@ -308,7 +308,7 @@ type mockStreamTransport struct {
 func (m *mockStreamTransport) Connect(ctx context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	
+
 	m.connected = true
 	m.msgChan = make(chan Message, 10)
 	m.errChan = make(chan error, 10)
@@ -339,7 +339,7 @@ func (m *mockStreamTransport) Connect(ctx context.Context) error {
 func (m *mockStreamTransport) SendMessage(ctx context.Context, message StreamMessage) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	
+
 	if !m.connected {
 		return fmt.Errorf("not connected")
 	}
@@ -351,7 +351,7 @@ func (m *mockStreamTransport) SendMessage(ctx context.Context, message StreamMes
 func (m *mockStreamTransport) ReceiveMessages(ctx context.Context) (<-chan Message, <-chan error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	
+
 	return m.msgChan, m.errChan
 }
 
@@ -362,7 +362,7 @@ func (m *mockStreamTransport) Interrupt(ctx context.Context) error {
 func (m *mockStreamTransport) Close() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	
+
 	m.connected = false
 	return nil
 }
@@ -370,7 +370,7 @@ func (m *mockStreamTransport) Close() error {
 func (m *mockStreamTransport) ReceivedMessageCount() int {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	
+
 	return len(m.receivedMessages)
 }
 
@@ -394,7 +394,7 @@ func TestQueryTransportError(t *testing.T) {
 	}
 }
 
-// Test stream transport error handling  
+// Test stream transport error handling
 func TestQueryStreamTransportError(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -448,7 +448,7 @@ func TestQueryTransportConnectionFailure(t *testing.T) {
 
 // Test transport send message failure during streaming
 func TestQueryStreamSendMessageFailure(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)  
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	transport := &failingTransport{
@@ -467,7 +467,7 @@ func TestQueryStreamSendMessageFailure(t *testing.T) {
 
 	// Start the iterator to trigger the send
 	_, err = iter.Next(ctx)
-	
+
 	// The send error should be handled gracefully (goroutine will exit)
 	// The iterator should eventually return ErrNoMoreMessages when channels close
 	if err != ErrNoMoreMessages {
@@ -475,7 +475,7 @@ func TestQueryStreamSendMessageFailure(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 		_, err = iter.Next(ctx)
 	}
-	
+
 	if err != ErrNoMoreMessages {
 		t.Errorf("Expected ErrNoMoreMessages after send failure, got %v", err)
 	}
@@ -483,10 +483,10 @@ func TestQueryStreamSendMessageFailure(t *testing.T) {
 
 // Helper function to check if a string contains a substring
 func contains(s, substr string) bool {
-	return len(s) >= len(substr) && 
-		   (s == substr || (len(s) > len(substr) && 
-		   (s[:len(substr)] == substr || s[len(s)-len(substr):] == substr ||
-		   containsMiddle(s, substr))))
+	return len(s) >= len(substr) &&
+		(s == substr || (len(s) > len(substr) &&
+			(s[:len(substr)] == substr || s[len(s)-len(substr):] == substr ||
+				containsMiddle(s, substr))))
 }
 
 func containsMiddle(s, substr string) bool {
@@ -514,11 +514,11 @@ func (f *failingTransport) Connect(ctx context.Context) error {
 	f.connected = true
 	f.msgChan = make(chan Message, 1)
 	f.errChan = make(chan error, 1)
-	
+
 	// Close channels immediately to simulate no responses
 	close(f.msgChan)
 	close(f.errChan)
-	
+
 	return nil
 }
 
@@ -566,7 +566,7 @@ func TestQueryWithOptions(t *testing.T) {
 	}
 	defer iter.Close()
 
-	// Collect messages 
+	// Collect messages
 	var messages []Message
 	for {
 		msg, err := iter.Next(ctx)
@@ -732,7 +732,7 @@ func TestQueryResponseProcessing(t *testing.T) {
 
 		if msg != nil {
 			messageCount++
-			
+
 			// Process messages by type (like Python SDK pattern)
 			switch m := msg.(type) {
 			case *UserMessage:
@@ -829,7 +829,7 @@ func (m *multiMessageTransport) Connect(ctx context.Context) error {
 		m.msgChan <- &UserMessage{
 			Content: "User input",
 		}
-		
+
 		// Small delay to ensure delivery
 		time.Sleep(1 * time.Millisecond)
 
@@ -841,7 +841,7 @@ func (m *multiMessageTransport) Connect(ctx context.Context) error {
 			},
 			Model: "claude-opus-4-1-20250805",
 		}
-		
+
 		time.Sleep(1 * time.Millisecond)
 
 		// Send system message
@@ -849,7 +849,7 @@ func (m *multiMessageTransport) Connect(ctx context.Context) error {
 			Subtype: "tool_use",
 			Data:    map[string]interface{}{"tool": "Read", "file": "test.txt"},
 		}
-		
+
 		time.Sleep(1 * time.Millisecond)
 
 		// Send result message
@@ -967,11 +967,11 @@ func TestQueryErrorHandling(t *testing.T) {
 			}
 			time.Sleep(10 * time.Millisecond)
 		}
-		
+
 		if finalErr == nil {
 			t.Fatal("Expected some error after send failure and channel closure")
 		}
-		
+
 		if finalErr != ErrNoMoreMessages {
 			t.Errorf("Expected ErrNoMoreMessages when channels close, got %v", finalErr)
 		}
@@ -1192,7 +1192,7 @@ func TestQueryContextCancellation(t *testing.T) {
 
 		// Give time for transport to detect cancellation
 		time.Sleep(50 * time.Millisecond)
-		
+
 		// Verify transport received the context cancellation
 		if !transport.IsContextCancelled() {
 			t.Error("Expected transport to detect context cancellation")
@@ -1217,7 +1217,7 @@ func TestQueryContextCancellation(t *testing.T) {
 		if !isContextError(err, context.Canceled) {
 			t.Errorf("First call: expected context.Canceled (or wrapped), got %v", err)
 		}
-		
+
 		// Subsequent calls should return ErrNoMoreMessages (iterator closed after first error)
 		for i := 1; i < 3; i++ {
 			_, err = iter.Next(ctx)
@@ -1287,11 +1287,11 @@ func (s *slowTransport) Close() error {
 
 // contextAwareTransport tracks context cancellation
 type contextAwareTransport struct {
-	mu                sync.RWMutex
-	connected         bool
-	contextCancelled  bool
-	msgChan           chan Message
-	errChan           chan error
+	mu               sync.RWMutex
+	connected        bool
+	contextCancelled bool
+	msgChan          chan Message
+	errChan          chan error
 }
 
 func (c *contextAwareTransport) Connect(ctx context.Context) error {
@@ -1334,7 +1334,7 @@ func (c *contextAwareTransport) SendMessage(ctx context.Context, message StreamM
 func (c *contextAwareTransport) ReceiveMessages(ctx context.Context) (<-chan Message, <-chan error) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	
+
 	return c.msgChan, c.errChan
 }
 
@@ -1345,7 +1345,7 @@ func (c *contextAwareTransport) Interrupt(ctx context.Context) error {
 func (c *contextAwareTransport) Close() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	
+
 	c.connected = false
 	return nil
 }
@@ -1353,7 +1353,7 @@ func (c *contextAwareTransport) Close() error {
 func (c *contextAwareTransport) IsContextCancelled() bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	
+
 	return c.contextCancelled
 }
 
@@ -1362,11 +1362,11 @@ func isContextError(err error, target error) bool {
 	if err == target {
 		return true
 	}
-	
+
 	// Check if the error message contains the target error
 	if err != nil && target != nil {
 		return contains(err.Error(), target.Error())
 	}
-	
+
 	return false
 }

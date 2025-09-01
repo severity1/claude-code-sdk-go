@@ -62,19 +62,19 @@ func TestErrorReExports(t *testing.T) {
 func TestErrorInterfaceCompatibility(t *testing.T) {
 	// Create error through public API
 	err := NewConnectionError("API test", nil)
-	
+
 	// Should work as SDKError
 	var sdkErr SDKError = err
 	if sdkErr.Type() != "connection_error" {
 		t.Errorf("Expected connection_error type through interface, got %s", sdkErr.Type())
 	}
-	
+
 	// Should work as regular error
 	var stdErr error = err
 	if stdErr.Error() == "" {
 		t.Error("Expected non-empty error message through standard error interface")
 	}
-	
+
 	// Test type assertion works
 	if connErr, ok := stdErr.(*ConnectionError); !ok {
 		t.Error("Expected type assertion to work with re-exported type")

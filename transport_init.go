@@ -14,9 +14,8 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
-		
+
 		// Create subprocess transport
 		return subprocess.New(cliPath, (*shared.Options)(options), closeStdin), nil
 	}
 }
-

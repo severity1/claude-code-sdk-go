@@ -12,7 +12,7 @@ func TestMessageTypesReExport(t *testing.T) {
 		t.Errorf("Expected UserMessage Type() = %s, got %s", MessageTypeUser, userMsg.Type())
 	}
 
-	// Test AssistantMessage re-export  
+	// Test AssistantMessage re-export
 	assistantMsg := &AssistantMessage{Content: []ContentBlock{}, Model: "test"}
 	if assistantMsg.Type() != MessageTypeAssistant {
 		t.Errorf("Expected AssistantMessage Type() = %s, got %s", MessageTypeAssistant, assistantMsg.Type())

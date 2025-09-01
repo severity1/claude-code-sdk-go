@@ -59,19 +59,19 @@ func (c *ClientImpl) validateOptions() error {
 	if c.options == nil {
 		return nil // Nil options are acceptable (use defaults)
 	}
-	
+
 	// Validate working directory
 	if c.options.Cwd != nil {
 		if _, err := os.Stat(*c.options.Cwd); os.IsNotExist(err) {
 			return fmt.Errorf("working directory does not exist: %s", *c.options.Cwd)
 		}
 	}
-	
+
 	// Validate max turns
 	if c.options.MaxTurns < 0 {
 		return fmt.Errorf("max_turns must be non-negative, got: %d", c.options.MaxTurns)
 	}
-	
+
 	// Validate permission mode
 	if c.options.PermissionMode != nil {
 		validModes := map[PermissionMode]bool{
@@ -84,7 +84,7 @@ func (c *ClientImpl) validateOptions() error {
 			return fmt.Errorf("invalid permission mode: %s", string(*c.options.PermissionMode))
 		}
 	}
-	
+
 	return nil
 }
 
@@ -94,20 +94,20 @@ func (c *ClientImpl) Connect(ctx context.Context, prompt ...StreamMessage) error
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
-	
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	
+
 	// Check context again after acquiring lock
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
-	
+
 	// Validate configuration before connecting
 	if err := c.validateOptions(); err != nil {
 		return fmt.Errorf("invalid configuration: %w", err)
 	}
-	
+
 	// Use custom transport if provided, otherwise create default
 	if c.customTransport != nil {
 		c.transport = c.customTransport
@@ -116,22 +116,22 @@ func (c *ClientImpl) Connect(ctx context.Context, prompt ...StreamMessage) error
 		if defaultTransportFactory == nil {
 			return fmt.Errorf("no default transport factory available - please install github.com/severity1/claude-code-sdk-go/transport package or use NewClientWithTransport")
 		}
-		
+
 		transport, err := defaultTransportFactory(c.options, false) // false = streaming mode
 		if err != nil {
 			return fmt.Errorf("failed to create default transport: %w", err)
 		}
 		c.transport = transport
 	}
-	
+
 	// Connect the transport
 	if err := c.transport.Connect(ctx); err != nil {
 		return fmt.Errorf("failed to connect transport: %w", err)
 	}
-	
+
 	// Get message channels
 	c.msgChan, c.errChan = c.transport.ReceiveMessages(ctx)
-	
+
 	c.connected = true
 	return nil
 }
@@ -140,7 +140,7 @@ func (c *ClientImpl) Connect(ctx context.Context, prompt ...StreamMessage) error
 func (c *ClientImpl) Disconnect() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	
+
 	if c.transport != nil && c.connected {
 		if err := c.transport.Close(); err != nil {
 			return fmt.Errorf("failed to close transport: %w", err)
@@ -159,28 +159,28 @@ func (c *ClientImpl) Query(ctx context.Context, prompt string, sessionID ...stri
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
-	
+
 	// Check connection status with read lock
 	c.mu.RLock()
 	connected := c.connected
 	transport := c.transport
 	c.mu.RUnlock()
-	
+
 	if !connected || transport == nil {
 		return fmt.Errorf("client not connected")
 	}
-	
+
 	// Check context again after acquiring connection info
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
-	
+
 	// Determine session ID - use first provided, otherwise default to "default"
 	sid := "default"
 	if len(sessionID) > 0 && sessionID[0] != "" {
 		sid = sessionID[0]
 	}
-	
+
 	// Create user message
 	userMsg := &UserMessage{Content: prompt}
 	streamMsg := StreamMessage{
@@ -188,7 +188,7 @@ func (c *ClientImpl) Query(ctx context.Context, prompt string, sessionID ...stri
 		Message:   userMsg,
 		SessionID: sid,
 	}
-	
+
 	// Send message via transport (without holding mutex to avoid blocking other operations)
 	return transport.SendMessage(ctx, streamMsg)
 }
@@ -200,11 +200,11 @@ func (c *ClientImpl) QueryStream(ctx context.Context, messages <-chan StreamMess
 	connected := c.connected
 	transport := c.transport
 	c.mu.RUnlock()
-	
+
 	if !connected || transport == nil {
 		return fmt.Errorf("client not connected")
 	}
-	
+
 	// Send messages from channel in a goroutine
 	go func() {
 		for {
@@ -222,7 +222,7 @@ func (c *ClientImpl) QueryStream(ctx context.Context, messages <-chan StreamMess
 			}
 		}
 	}()
-	
+
 	return nil
 }
 
@@ -233,14 +233,14 @@ func (c *ClientImpl) ReceiveMessages(ctx context.Context) <-chan Message {
 	connected := c.connected
 	msgChan := c.msgChan
 	c.mu.RUnlock()
-	
+
 	if !connected || msgChan == nil {
 		// Return closed channel if not connected
 		closedChan := make(chan Message)
 		close(closedChan)
 		return closedChan
 	}
-	
+
 	// Return the transport's message channel directly
 	return msgChan
 }
@@ -253,11 +253,11 @@ func (c *ClientImpl) ReceiveResponse(ctx context.Context) MessageIterator {
 	msgChan := c.msgChan
 	errChan := c.errChan
 	c.mu.RUnlock()
-	
+
 	if !connected || msgChan == nil {
 		return nil
 	}
-	
+
 	// Create a simple iterator over the message channel
 	return &clientIterator{
 		msgChan: msgChan,
@@ -271,20 +271,19 @@ func (c *ClientImpl) Interrupt(ctx context.Context) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
-	
+
 	// Check connection status with read lock
 	c.mu.RLock()
 	connected := c.connected
 	transport := c.transport
 	c.mu.RUnlock()
-	
+
 	if !connected || transport == nil {
 		return fmt.Errorf("client not connected")
 	}
-	
+
 	return transport.Interrupt(ctx)
 }
-
 
 // clientIterator implements MessageIterator for client message reception
 type clientIterator struct {
@@ -297,7 +296,7 @@ func (ci *clientIterator) Next(ctx context.Context) (Message, error) {
 	if ci.closed {
 		return nil, ErrNoMoreMessages
 	}
-	
+
 	select {
 	case msg, ok := <-ci.msgChan:
 		if !ok {

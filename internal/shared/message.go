@@ -101,16 +101,16 @@ func (m *SystemMessage) MarshalJSON() ([]byte, error) {
 
 // ResultMessage represents the final result of a conversation turn.
 type ResultMessage struct {
-	Type_          string          `json:"type"`
-	Subtype        string          `json:"subtype"`
-	DurationMs     int             `json:"duration_ms"`
-	DurationAPIMs  int             `json:"duration_api_ms"`
-	IsError        bool            `json:"is_error"`
-	NumTurns       int             `json:"num_turns"`
-	SessionID      string          `json:"session_id"`
-	TotalCostUSD   *float64        `json:"total_cost_usd,omitempty"`
-	Usage          *map[string]any `json:"usage,omitempty"`
-	Result         *map[string]any `json:"result,omitempty"`
+	Type_         string          `json:"type"`
+	Subtype       string          `json:"subtype"`
+	DurationMs    int             `json:"duration_ms"`
+	DurationAPIMs int             `json:"duration_api_ms"`
+	IsError       bool            `json:"is_error"`
+	NumTurns      int             `json:"num_turns"`
+	SessionID     string          `json:"session_id"`
+	TotalCostUSD  *float64        `json:"total_cost_usd,omitempty"`
+	Usage         *map[string]any `json:"usage,omitempty"`
+	Result        *map[string]any `json:"result,omitempty"`
 }
 
 func (m *ResultMessage) Type() string {
@@ -153,10 +153,10 @@ func (b *ThinkingBlock) BlockType() string {
 
 // ToolUseBlock represents a tool use request.
 type ToolUseBlock struct {
-	Type_      string         `json:"type"`
-	ToolUseID  string         `json:"tool_use_id"`
-	Name       string         `json:"name"`
-	Input      map[string]any `json:"input"`
+	Type_     string         `json:"type"`
+	ToolUseID string         `json:"tool_use_id"`
+	Name      string         `json:"name"`
+	Input     map[string]any `json:"input"`
 }
 
 func (b *ToolUseBlock) BlockType() string {
@@ -165,10 +165,10 @@ func (b *ToolUseBlock) BlockType() string {
 
 // ToolResultBlock represents the result of a tool use.
 type ToolResultBlock struct {
-	Type_       string      `json:"type"`
-	ToolUseID   string      `json:"tool_use_id"`
-	Content     interface{} `json:"content"` // string or structured data
-	IsError     *bool       `json:"is_error,omitempty"`
+	Type_     string      `json:"type"`
+	ToolUseID string      `json:"tool_use_id"`
+	Content   interface{} `json:"content"` // string or structured data
+	IsError   *bool       `json:"is_error,omitempty"`
 }
 
 func (b *ToolResultBlock) BlockType() string {
