@@ -115,11 +115,8 @@ func TestTransportInterfacePublicAPI(t *testing.T) {
 
 	// Test that Transport interface has expected methods (compile-time verification)
 	// This ensures the interface contract remains stable for public API
-	if transport != nil {
-		// These method calls would compile if interface is correctly defined
-		// We're testing interface availability, not implementation
-		t.Log("Transport interface methods: Connect, SendMessage, ReceiveMessages, Interrupt, Close")
-	}
+	// Transport interface methods: Connect, SendMessage, ReceiveMessages, Interrupt, Close
+	t.Log("Transport interface methods verified at compile time")
 }
 
 // TestStreamMessageReExport tests that StreamMessage re-export works through public API

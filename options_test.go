@@ -345,6 +345,7 @@ func TestExtraArgsSupport(t *testing.T) {
 	}
 	if debugValue == nil {
 		t.Error("Expected --debug to have a value, got nil")
+		return
 	}
 	if *debugValue != "verbose" {
 		t.Errorf("Expected --debug = %q, got %q", "verbose", *debugValue)
@@ -366,6 +367,7 @@ func TestExtraArgsSupport(t *testing.T) {
 	}
 	if outputValue == nil {
 		t.Error("Expected --output to have a value, got nil")
+		return
 	}
 	if *outputValue != "json" {
 		t.Errorf("Expected --output = %q, got %q", "json", *outputValue)
@@ -480,8 +482,9 @@ func assertOptionsSystemPrompt(t *testing.T, options *Options, expected string) 
 		t.Error("Expected SystemPrompt to be set, got nil")
 		return
 	}
-	if *options.SystemPrompt != expected {
-		t.Errorf("Expected SystemPrompt = %q, got %q", expected, *options.SystemPrompt)
+	actual := *options.SystemPrompt
+	if actual != expected {
+		t.Errorf("Expected SystemPrompt = %q, got %q", expected, actual)
 	}
 }
 

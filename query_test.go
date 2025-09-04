@@ -9,6 +9,11 @@ import (
 	"time"
 )
 
+// contextKey is a custom type for context keys to avoid collisions
+type contextKey string
+
+const cancelKey contextKey = "cancel"
+
 // TestQueryBasicExecution tests simple query functionality
 // Python Reference: test_client.py::TestQueryFunction::test_query_single_prompt
 func TestQueryBasicExecution(t *testing.T) {
@@ -382,7 +387,7 @@ func TestQueryContextCancellation(t *testing.T) {
 				// Cancel after 100ms
 				go func() {
 					time.Sleep(100 * time.Millisecond)
-					if cancel, ok := ctx.Value("cancel").(context.CancelFunc); ok {
+					if cancel, ok := ctx.Value(cancelKey).(context.CancelFunc); ok {
 						cancel()
 					}
 				}()
@@ -424,7 +429,7 @@ func TestQueryContextCancellation(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			ctx, cancel := test.setupContext()
 			if test.name == "manual_cancellation" {
-				ctx = context.WithValue(ctx, "cancel", cancel)
+				ctx = context.WithValue(ctx, cancelKey, cancel)
 			} else {
 				defer cancel()
 			}
