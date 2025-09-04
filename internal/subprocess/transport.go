@@ -103,6 +103,7 @@ func (t *Transport) Connect(ctx context.Context) error {
 	}
 
 	// Isolate stderr using temporary file to prevent deadlocks
+	// This matches Python SDK pattern to avoid subprocess pipe deadlocks
 	t.stderr, err = os.CreateTemp("", "claude_stderr_*.log")
 	if err != nil {
 		return fmt.Errorf("failed to create stderr file: %w", err)
@@ -222,8 +223,20 @@ func (t *Transport) Close() error {
 		t.stdin = nil
 	}
 
-	// Wait for goroutines to finish
-	t.wg.Wait()
+	// Wait for goroutines to finish with timeout
+	done := make(chan struct{})
+	go func() {
+		t.wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// Goroutines finished gracefully
+	case <-time.After(5 * time.Second):
+		// Timeout: proceed with cleanup anyway
+		// Goroutines should terminate when process is killed
+	}
 
 	// Terminate process with 5-second timeout
 	var err error
@@ -322,7 +335,17 @@ func (t *Transport) terminateProcess() error {
 		if killErr := t.cmd.Process.Kill(); killErr != nil {
 			return killErr
 		}
-		<-done // Wait for the process to actually exit
+		// Wait for process to exit after kill
+		<-done
+		return nil
+	case <-t.ctx.Done():
+		// Context cancelled - force kill immediately
+		if killErr := t.cmd.Process.Kill(); killErr != nil {
+			return killErr
+		}
+		// Wait for process to exit after kill, but don't return context error
+		// since this is normal cleanup behavior
+		<-done
 		return nil
 	}
 }
@@ -335,8 +358,10 @@ func (t *Transport) cleanup() {
 	}
 
 	if t.stderr != nil {
+		// Graceful cleanup matching Python SDK pattern
+		// Python: except Exception: pass
 		t.stderr.Close()
-		os.Remove(t.stderr.Name()) // Clean up temp file
+		_ = os.Remove(t.stderr.Name()) // Ignore cleanup errors
 		t.stderr = nil
 	}
 

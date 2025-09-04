@@ -10,18 +10,11 @@ func TestDefaultOptions(t *testing.T) {
 	options := NewOptions()
 
 	// Verify that functional options work with shared types
-	if options.MaxThinkingTokens != 8000 {
-		t.Errorf("Expected MaxThinkingTokens = 8000, got %d", options.MaxThinkingTokens)
-	}
+	assertOptionsMaxThinkingTokens(t, options, 8000)
 
 	// Test that we can apply functional options
 	optionsWithPrompt := NewOptions(WithSystemPrompt("test prompt"))
-	if optionsWithPrompt.SystemPrompt == nil {
-		t.Error("Expected SystemPrompt to be set")
-	}
-	if *optionsWithPrompt.SystemPrompt != "test prompt" {
-		t.Errorf("Expected SystemPrompt = 'test prompt', got %s", *optionsWithPrompt.SystemPrompt)
-	}
+	assertOptionsSystemPrompt(t, optionsWithPrompt, "test prompt")
 }
 
 // T016: Options with Tools
@@ -34,77 +27,39 @@ func TestOptionsWithTools(t *testing.T) {
 
 	// Verify allowed tools
 	expectedAllowed := []string{"Read", "Write", "Edit"}
-	if len(options.AllowedTools) != len(expectedAllowed) {
-		t.Errorf("Expected AllowedTools length = %d, got %d", len(expectedAllowed), len(options.AllowedTools))
-	}
-	for i, tool := range expectedAllowed {
-		if i >= len(options.AllowedTools) || options.AllowedTools[i] != tool {
-			t.Errorf("Expected AllowedTools[%d] = %q, got %q", i, tool, options.AllowedTools[i])
-		}
-	}
+	assertOptionsStringSlice(t, options.AllowedTools, expectedAllowed, "AllowedTools")
 
 	// Verify disallowed tools
 	expectedDisallowed := []string{"Bash"}
-	if len(options.DisallowedTools) != len(expectedDisallowed) {
-		t.Errorf("Expected DisallowedTools length = %d, got %d", len(expectedDisallowed), len(options.DisallowedTools))
-	}
-	for i, tool := range expectedDisallowed {
-		if i >= len(options.DisallowedTools) || options.DisallowedTools[i] != tool {
-			t.Errorf("Expected DisallowedTools[%d] = %q, got %q", i, tool, options.DisallowedTools[i])
-		}
-	}
+	assertOptionsStringSlice(t, options.DisallowedTools, expectedDisallowed, "DisallowedTools")
 
 	// Test with empty tools
 	emptyOptions := NewOptions(
 		WithAllowedTools(),
 		WithDisallowedTools(),
 	)
-	if len(emptyOptions.AllowedTools) != 0 {
-		t.Errorf("Expected empty AllowedTools, got %v", emptyOptions.AllowedTools)
-	}
-	if len(emptyOptions.DisallowedTools) != 0 {
-		t.Errorf("Expected empty DisallowedTools, got %v", emptyOptions.DisallowedTools)
-	}
+	assertOptionsStringSlice(t, emptyOptions.AllowedTools, []string{}, "AllowedTools")
+	assertOptionsStringSlice(t, emptyOptions.DisallowedTools, []string{}, "DisallowedTools")
 }
 
 // T017: Permission Mode Options
 func TestPermissionModeOptions(t *testing.T) {
-	// Test all permission modes: default, acceptEdits, plan, bypassPermissions
-
-	// Test default permission mode
-	defaultOptions := NewOptions(WithPermissionMode(PermissionModeDefault))
-	if defaultOptions.PermissionMode == nil {
-		t.Error("Expected PermissionMode to be set, got nil")
-	}
-	if *defaultOptions.PermissionMode != PermissionModeDefault {
-		t.Errorf("Expected PermissionMode = %q, got %q", PermissionModeDefault, *defaultOptions.PermissionMode)
-	}
-
-	// Test acceptEdits permission mode
-	acceptEditsOptions := NewOptions(WithPermissionMode(PermissionModeAcceptEdits))
-	if acceptEditsOptions.PermissionMode == nil {
-		t.Error("Expected PermissionMode to be set, got nil")
-	}
-	if *acceptEditsOptions.PermissionMode != PermissionModeAcceptEdits {
-		t.Errorf("Expected PermissionMode = %q, got %q", PermissionModeAcceptEdits, *acceptEditsOptions.PermissionMode)
+	// Test all permission modes using table-driven approach
+	tests := []struct {
+		name string
+		mode PermissionMode
+	}{
+		{"default", PermissionModeDefault},
+		{"accept_edits", PermissionModeAcceptEdits},
+		{"plan", PermissionModePlan},
+		{"bypass_permissions", PermissionModeBypassPermissions},
 	}
 
-	// Test plan permission mode
-	planOptions := NewOptions(WithPermissionMode(PermissionModePlan))
-	if planOptions.PermissionMode == nil {
-		t.Error("Expected PermissionMode to be set, got nil")
-	}
-	if *planOptions.PermissionMode != PermissionModePlan {
-		t.Errorf("Expected PermissionMode = %q, got %q", PermissionModePlan, *planOptions.PermissionMode)
-	}
-
-	// Test bypassPermissions permission mode
-	bypassOptions := NewOptions(WithPermissionMode(PermissionModeBypassPermissions))
-	if bypassOptions.PermissionMode == nil {
-		t.Error("Expected PermissionMode to be set, got nil")
-	}
-	if *bypassOptions.PermissionMode != PermissionModeBypassPermissions {
-		t.Errorf("Expected PermissionMode = %q, got %q", PermissionModeBypassPermissions, *bypassOptions.PermissionMode)
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			options := NewOptions(WithPermissionMode(test.mode))
+			assertOptionsPermissionMode(t, options, test.mode)
+		})
 	}
 }
 
@@ -120,44 +75,18 @@ func TestSystemPromptOptions(t *testing.T) {
 	)
 
 	// Verify system prompt is set
-	if options.SystemPrompt == nil {
-		t.Error("Expected SystemPrompt to be set, got nil")
-	}
-	if *options.SystemPrompt != systemPrompt {
-		t.Errorf("Expected SystemPrompt = %q, got %q", systemPrompt, *options.SystemPrompt)
-	}
-
-	// Verify append system prompt is set
-	if options.AppendSystemPrompt == nil {
-		t.Error("Expected AppendSystemPrompt to be set, got nil")
-	}
-	if *options.AppendSystemPrompt != appendPrompt {
-		t.Errorf("Expected AppendSystemPrompt = %q, got %q", appendPrompt, *options.AppendSystemPrompt)
-	}
+	assertOptionsSystemPrompt(t, options, systemPrompt)
+	assertOptionsAppendSystemPrompt(t, options, appendPrompt)
 
 	// Test with only system prompt
 	systemOnlyOptions := NewOptions(WithSystemPrompt("Only system prompt"))
-	if systemOnlyOptions.SystemPrompt == nil {
-		t.Error("Expected SystemPrompt to be set, got nil")
-	}
-	if *systemOnlyOptions.SystemPrompt != "Only system prompt" {
-		t.Errorf("Expected SystemPrompt = %q, got %q", "Only system prompt", *systemOnlyOptions.SystemPrompt)
-	}
-	if systemOnlyOptions.AppendSystemPrompt != nil {
-		t.Errorf("Expected AppendSystemPrompt = nil, got %v", systemOnlyOptions.AppendSystemPrompt)
-	}
+	assertOptionsSystemPrompt(t, systemOnlyOptions, "Only system prompt")
+	assertOptionsAppendSystemPromptNil(t, systemOnlyOptions)
 
 	// Test with only append prompt
 	appendOnlyOptions := NewOptions(WithAppendSystemPrompt("Only append prompt"))
-	if appendOnlyOptions.AppendSystemPrompt == nil {
-		t.Error("Expected AppendSystemPrompt to be set, got nil")
-	}
-	if *appendOnlyOptions.AppendSystemPrompt != "Only append prompt" {
-		t.Errorf("Expected AppendSystemPrompt = %q, got %q", "Only append prompt", *appendOnlyOptions.AppendSystemPrompt)
-	}
-	if appendOnlyOptions.SystemPrompt != nil {
-		t.Errorf("Expected SystemPrompt = nil, got %v", appendOnlyOptions.SystemPrompt)
-	}
+	assertOptionsAppendSystemPrompt(t, appendOnlyOptions, "Only append prompt")
+	assertOptionsSystemPromptNil(t, appendOnlyOptions)
 }
 
 // T019: Session Continuation Options
@@ -171,38 +100,18 @@ func TestSessionContinuationOptions(t *testing.T) {
 	)
 
 	// Verify continue conversation is set
-	if options.ContinueConversation != true {
-		t.Errorf("Expected ContinueConversation = true, got %v", options.ContinueConversation)
-	}
-
-	// Verify resume session ID is set
-	if options.Resume == nil {
-		t.Error("Expected Resume to be set, got nil")
-	}
-	if *options.Resume != sessionID {
-		t.Errorf("Expected Resume = %q, got %q", sessionID, *options.Resume)
-	}
+	assertOptionsContinueConversation(t, options, true)
+	assertOptionsResume(t, options, sessionID)
 
 	// Test with continue_conversation false
 	falseOptions := NewOptions(WithContinueConversation(false))
-	if falseOptions.ContinueConversation != false {
-		t.Errorf("Expected ContinueConversation = false, got %v", falseOptions.ContinueConversation)
-	}
-	if falseOptions.Resume != nil {
-		t.Errorf("Expected Resume = nil, got %v", falseOptions.Resume)
-	}
+	assertOptionsContinueConversation(t, falseOptions, false)
+	assertOptionsResumeNil(t, falseOptions)
 
 	// Test with only resume
 	resumeOnlyOptions := NewOptions(WithResume("another-session"))
-	if resumeOnlyOptions.Resume == nil {
-		t.Error("Expected Resume to be set, got nil")
-	}
-	if *resumeOnlyOptions.Resume != "another-session" {
-		t.Errorf("Expected Resume = %q, got %q", "another-session", *resumeOnlyOptions.Resume)
-	}
-	if resumeOnlyOptions.ContinueConversation != false {
-		t.Errorf("Expected ContinueConversation = false (default), got %v", resumeOnlyOptions.ContinueConversation)
-	}
+	assertOptionsResume(t, resumeOnlyOptions, "another-session")
+	assertOptionsContinueConversation(t, resumeOnlyOptions, false) // default
 }
 
 // T020: Model Specification Options
@@ -216,45 +125,19 @@ func TestModelSpecificationOptions(t *testing.T) {
 		WithPermissionPromptToolName(toolName),
 	)
 
-	// Verify model is set
-	if options.Model == nil {
-		t.Error("Expected Model to be set, got nil")
-	}
-	if *options.Model != model {
-		t.Errorf("Expected Model = %q, got %q", model, *options.Model)
-	}
-
-	// Verify permission prompt tool name is set
-	if options.PermissionPromptToolName == nil {
-		t.Error("Expected PermissionPromptToolName to be set, got nil")
-	}
-	if *options.PermissionPromptToolName != toolName {
-		t.Errorf("Expected PermissionPromptToolName = %q, got %q", toolName, *options.PermissionPromptToolName)
-	}
+	// Verify model and tool name are set
+	assertOptionsModel(t, options, model)
+	assertOptionsPermissionPromptToolName(t, options, toolName)
 
 	// Test with only model
 	modelOnlyOptions := NewOptions(WithModel("claude-opus-4"))
-	if modelOnlyOptions.Model == nil {
-		t.Error("Expected Model to be set, got nil")
-	}
-	if *modelOnlyOptions.Model != "claude-opus-4" {
-		t.Errorf("Expected Model = %q, got %q", "claude-opus-4", *modelOnlyOptions.Model)
-	}
-	if modelOnlyOptions.PermissionPromptToolName != nil {
-		t.Errorf("Expected PermissionPromptToolName = nil, got %v", modelOnlyOptions.PermissionPromptToolName)
-	}
+	assertOptionsModel(t, modelOnlyOptions, "claude-opus-4")
+	assertOptionsPermissionPromptToolNameNil(t, modelOnlyOptions)
 
 	// Test with only permission prompt tool name
 	toolOnlyOptions := NewOptions(WithPermissionPromptToolName("OnlyTool"))
-	if toolOnlyOptions.PermissionPromptToolName == nil {
-		t.Error("Expected PermissionPromptToolName to be set, got nil")
-	}
-	if *toolOnlyOptions.PermissionPromptToolName != "OnlyTool" {
-		t.Errorf("Expected PermissionPromptToolName = %q, got %q", "OnlyTool", *toolOnlyOptions.PermissionPromptToolName)
-	}
-	if toolOnlyOptions.Model != nil {
-		t.Errorf("Expected Model = nil, got %v", toolOnlyOptions.Model)
-	}
+	assertOptionsPermissionPromptToolName(t, toolOnlyOptions, "OnlyTool")
+	assertOptionsModelNil(t, toolOnlyOptions)
 }
 
 // T021: Functional Options Pattern
@@ -515,15 +398,11 @@ func TestOptionsValidationIntegration(t *testing.T) {
 		WithMaxThinkingTokens(8000),
 		WithSystemPrompt("Valid prompt"),
 	)
-	if err := validOptions.Validate(); err != nil {
-		t.Errorf("Expected valid options to pass validation, got error: %v", err)
-	}
+	assertOptionsValidationError(t, validOptions, false, "valid options should pass validation")
 
 	// Test that functional options can create invalid options that validation catches
 	invalidOptions := NewOptions(WithMaxThinkingTokens(-100))
-	if err := invalidOptions.Validate(); err == nil {
-		t.Error("Expected negative max thinking tokens to fail validation")
-	}
+	assertOptionsValidationError(t, invalidOptions, true, "negative max thinking tokens should fail validation")
 }
 
 // T025: NewOptions Constructor
@@ -532,22 +411,14 @@ func TestNewOptionsConstructor(t *testing.T) {
 
 	// Test NewOptions with no arguments should return defaults
 	defaultOptions := NewOptions()
-	if defaultOptions.MaxThinkingTokens != 8000 {
-		t.Errorf("Expected default MaxThinkingTokens = 8000, got %d", defaultOptions.MaxThinkingTokens)
-	}
-	if len(defaultOptions.AllowedTools) != 0 {
-		t.Errorf("Expected default AllowedTools = [], got %v", defaultOptions.AllowedTools)
-	}
+	assertOptionsMaxThinkingTokens(t, defaultOptions, 8000)
+	assertOptionsStringSlice(t, defaultOptions.AllowedTools, []string{}, "AllowedTools")
 
 	// Test NewOptions with single functional option
 	singleOptionOptions := NewOptions(WithSystemPrompt("Single option test"))
-	if singleOptionOptions.SystemPrompt == nil || *singleOptionOptions.SystemPrompt != "Single option test" {
-		t.Errorf("Expected SystemPrompt = %q, got %v", "Single option test", singleOptionOptions.SystemPrompt)
-	}
+	assertOptionsSystemPrompt(t, singleOptionOptions, "Single option test")
 	// Should still have defaults for other fields
-	if singleOptionOptions.MaxThinkingTokens != 8000 {
-		t.Errorf("Expected default MaxThinkingTokens = 8000, got %d", singleOptionOptions.MaxThinkingTokens)
-	}
+	assertOptionsMaxThinkingTokens(t, singleOptionOptions, 8000)
 
 	// Test NewOptions with multiple functional options applied in order
 	multipleOptions := NewOptions(
@@ -565,66 +436,222 @@ func TestNewOptionsConstructor(t *testing.T) {
 	)
 
 	// Verify options are applied in order (later options override earlier ones)
-	if multipleOptions.MaxThinkingTokens != 12000 {
-		t.Errorf("Expected MaxThinkingTokens = 12000 (final override), got %d", multipleOptions.MaxThinkingTokens)
-	}
-
-	expectedTools := []string{"Read", "Write", "Edit"}
-	if len(multipleOptions.AllowedTools) != len(expectedTools) {
-		t.Errorf("Expected AllowedTools length = %d, got %d", len(expectedTools), len(multipleOptions.AllowedTools))
-	}
-	for i, tool := range expectedTools {
-		if i >= len(multipleOptions.AllowedTools) || multipleOptions.AllowedTools[i] != tool {
-			t.Errorf("Expected AllowedTools[%d] = %q, got %q", i, tool, multipleOptions.AllowedTools[i])
-		}
-	}
-
-	if multipleOptions.SystemPrompt == nil || *multipleOptions.SystemPrompt != "Second prompt" {
-		t.Errorf("Expected SystemPrompt = %q (final override), got %v", "Second prompt", multipleOptions.SystemPrompt)
-	}
-
-	if len(multipleOptions.DisallowedTools) != 1 || multipleOptions.DisallowedTools[0] != "Bash" {
-		t.Errorf("Expected DisallowedTools = [Bash], got %v", multipleOptions.DisallowedTools)
-	}
-
-	if multipleOptions.PermissionMode == nil || *multipleOptions.PermissionMode != PermissionModeAcceptEdits {
-		t.Errorf("Expected PermissionMode = %q, got %v", PermissionModeAcceptEdits, multipleOptions.PermissionMode)
-	}
-
-	if multipleOptions.ContinueConversation != true {
-		t.Errorf("Expected ContinueConversation = true, got %v", multipleOptions.ContinueConversation)
-	}
-
-	if multipleOptions.MaxTurns != 5 {
-		t.Errorf("Expected MaxTurns = 5, got %d", multipleOptions.MaxTurns)
-	}
-
-	if multipleOptions.Settings == nil || *multipleOptions.Settings != "/path/to/settings.json" {
-		t.Errorf("Expected Settings = %q, got %v", "/path/to/settings.json", multipleOptions.Settings)
-	}
+	assertOptionsMaxThinkingTokens(t, multipleOptions, 12000) // final override
+	assertOptionsStringSlice(t, multipleOptions.AllowedTools, []string{"Read", "Write", "Edit"}, "AllowedTools")
+	assertOptionsSystemPrompt(t, multipleOptions, "Second prompt") // final override
+	assertOptionsStringSlice(t, multipleOptions.DisallowedTools, []string{"Bash"}, "DisallowedTools")
+	assertOptionsPermissionMode(t, multipleOptions, PermissionModeAcceptEdits)
+	assertOptionsContinueConversation(t, multipleOptions, true)
+	assertOptionsMaxTurns(t, multipleOptions, 5)
+	assertOptionsSettings(t, multipleOptions, "/path/to/settings.json")
 
 	// Test that unmodified fields retain defaults
-	if multipleOptions.Resume != nil {
-		t.Errorf("Expected Resume = nil (default), got %v", multipleOptions.Resume)
-	}
-
-	if multipleOptions.Cwd != nil {
-		t.Errorf("Expected Cwd = nil (default), got %v", multipleOptions.Cwd)
-	}
+	assertOptionsResumeNil(t, multipleOptions)
+	assertOptionsCwdNil(t, multipleOptions)
 
 	// Test that maps are properly initialized even with options
 	if multipleOptions.McpServers == nil {
 		t.Error("Expected McpServers to be initialized, got nil")
-	}
-	if len(multipleOptions.McpServers) != 0 {
-		t.Errorf("Expected McpServers = {} (default), got %v", multipleOptions.McpServers)
+	} else {
+		assertOptionsMapInitialized(t, len(multipleOptions.McpServers), "McpServers")
 	}
 
 	if multipleOptions.ExtraArgs == nil {
 		t.Error("Expected ExtraArgs to be initialized, got nil")
+	} else {
+		assertOptionsMapInitialized(t, len(multipleOptions.ExtraArgs), "ExtraArgs")
 	}
-	if len(multipleOptions.ExtraArgs) != 0 {
-		t.Errorf("Expected ExtraArgs = {} (default), got %v", multipleOptions.ExtraArgs)
+}
+
+// Helper Functions - following client_test.go patterns
+
+// assertOptionsMaxThinkingTokens verifies MaxThinkingTokens value
+func assertOptionsMaxThinkingTokens(t *testing.T, options *Options, expected int) {
+	t.Helper()
+	if options.MaxThinkingTokens != expected {
+		t.Errorf("Expected MaxThinkingTokens = %d, got %d", expected, options.MaxThinkingTokens)
+	}
+}
+
+// assertOptionsSystemPrompt verifies SystemPrompt value
+func assertOptionsSystemPrompt(t *testing.T, options *Options, expected string) {
+	t.Helper()
+	if options.SystemPrompt == nil {
+		t.Error("Expected SystemPrompt to be set, got nil")
+		return
+	}
+	if *options.SystemPrompt != expected {
+		t.Errorf("Expected SystemPrompt = %q, got %q", expected, *options.SystemPrompt)
+	}
+}
+
+// assertOptionsSystemPromptNil verifies SystemPrompt is nil
+func assertOptionsSystemPromptNil(t *testing.T, options *Options) {
+	t.Helper()
+	if options.SystemPrompt != nil {
+		t.Errorf("Expected SystemPrompt = nil, got %v", *options.SystemPrompt)
+	}
+}
+
+// assertOptionsAppendSystemPrompt verifies AppendSystemPrompt value
+func assertOptionsAppendSystemPrompt(t *testing.T, options *Options, expected string) {
+	t.Helper()
+	if options.AppendSystemPrompt == nil {
+		t.Error("Expected AppendSystemPrompt to be set, got nil")
+		return
+	}
+	if *options.AppendSystemPrompt != expected {
+		t.Errorf("Expected AppendSystemPrompt = %q, got %q", expected, *options.AppendSystemPrompt)
+	}
+}
+
+// assertOptionsAppendSystemPromptNil verifies AppendSystemPrompt is nil
+func assertOptionsAppendSystemPromptNil(t *testing.T, options *Options) {
+	t.Helper()
+	if options.AppendSystemPrompt != nil {
+		t.Errorf("Expected AppendSystemPrompt = nil, got %v", *options.AppendSystemPrompt)
+	}
+}
+
+// assertOptionsStringSlice verifies string slice values
+func assertOptionsStringSlice(t *testing.T, actual, expected []string, fieldName string) {
+	t.Helper()
+	if len(actual) != len(expected) {
+		t.Errorf("Expected %s length = %d, got %d", fieldName, len(expected), len(actual))
+		return
+	}
+	for i, expectedVal := range expected {
+		if i >= len(actual) || actual[i] != expectedVal {
+			t.Errorf("Expected %s[%d] = %q, got %q", fieldName, i, expectedVal, actual[i])
+		}
+	}
+}
+
+// assertOptionsPermissionMode verifies PermissionMode value
+func assertOptionsPermissionMode(t *testing.T, options *Options, expected PermissionMode) {
+	t.Helper()
+	if options.PermissionMode == nil {
+		t.Error("Expected PermissionMode to be set, got nil")
+		return
+	}
+	if *options.PermissionMode != expected {
+		t.Errorf("Expected PermissionMode = %q, got %q", expected, *options.PermissionMode)
+	}
+}
+
+// assertOptionsContinueConversation verifies ContinueConversation value
+func assertOptionsContinueConversation(t *testing.T, options *Options, expected bool) {
+	t.Helper()
+	if options.ContinueConversation != expected {
+		t.Errorf("Expected ContinueConversation = %v, got %v", expected, options.ContinueConversation)
+	}
+}
+
+// assertOptionsResume verifies Resume value
+func assertOptionsResume(t *testing.T, options *Options, expected string) {
+	t.Helper()
+	if options.Resume == nil {
+		t.Error("Expected Resume to be set, got nil")
+		return
+	}
+	if *options.Resume != expected {
+		t.Errorf("Expected Resume = %q, got %q", expected, *options.Resume)
+	}
+}
+
+// assertOptionsResumeNil verifies Resume is nil
+func assertOptionsResumeNil(t *testing.T, options *Options) {
+	t.Helper()
+	if options.Resume != nil {
+		t.Errorf("Expected Resume = nil, got %v", *options.Resume)
+	}
+}
+
+// assertOptionsModel verifies Model value
+func assertOptionsModel(t *testing.T, options *Options, expected string) {
+	t.Helper()
+	if options.Model == nil {
+		t.Error("Expected Model to be set, got nil")
+		return
+	}
+	if *options.Model != expected {
+		t.Errorf("Expected Model = %q, got %q", expected, *options.Model)
+	}
+}
+
+// assertOptionsModelNil verifies Model is nil
+func assertOptionsModelNil(t *testing.T, options *Options) {
+	t.Helper()
+	if options.Model != nil {
+		t.Errorf("Expected Model = nil, got %v", *options.Model)
+	}
+}
+
+// assertOptionsPermissionPromptToolName verifies PermissionPromptToolName value
+func assertOptionsPermissionPromptToolName(t *testing.T, options *Options, expected string) {
+	t.Helper()
+	if options.PermissionPromptToolName == nil {
+		t.Error("Expected PermissionPromptToolName to be set, got nil")
+		return
+	}
+	if *options.PermissionPromptToolName != expected {
+		t.Errorf("Expected PermissionPromptToolName = %q, got %q", expected, *options.PermissionPromptToolName)
+	}
+}
+
+// assertOptionsPermissionPromptToolNameNil verifies PermissionPromptToolName is nil
+func assertOptionsPermissionPromptToolNameNil(t *testing.T, options *Options) {
+	t.Helper()
+	if options.PermissionPromptToolName != nil {
+		t.Errorf("Expected PermissionPromptToolName = nil, got %v", *options.PermissionPromptToolName)
+	}
+}
+
+// assertOptionsCwdNil verifies Cwd is nil
+func assertOptionsCwdNil(t *testing.T, options *Options) {
+	t.Helper()
+	if options.Cwd != nil {
+		t.Errorf("Expected Cwd = nil, got %v", *options.Cwd)
+	}
+}
+
+// assertOptionsMaxTurns verifies MaxTurns value
+func assertOptionsMaxTurns(t *testing.T, options *Options, expected int) {
+	t.Helper()
+	if options.MaxTurns != expected {
+		t.Errorf("Expected MaxTurns = %d, got %d", expected, options.MaxTurns)
+	}
+}
+
+// assertOptionsSettings verifies Settings value
+func assertOptionsSettings(t *testing.T, options *Options, expected string) {
+	t.Helper()
+	if options.Settings == nil {
+		t.Error("Expected Settings to be set, got nil")
+		return
+	}
+	if *options.Settings != expected {
+		t.Errorf("Expected Settings = %q, got %q", expected, *options.Settings)
+	}
+}
+
+// assertOptionsMapInitialized verifies a map field is initialized but empty
+func assertOptionsMapInitialized(t *testing.T, actualLen int, fieldName string) {
+	t.Helper()
+	if actualLen != 0 {
+		t.Errorf("Expected %s = {} (empty but initialized), got length %d", fieldName, actualLen)
+	}
+}
+
+// assertOptionsValidationError verifies validation returns error
+func assertOptionsValidationError(t *testing.T, options *Options, shouldError bool, description string) {
+	t.Helper()
+	err := options.Validate()
+	if shouldError && err == nil {
+		t.Errorf("%s: expected validation error, got nil", description)
+	}
+	if !shouldError && err != nil {
+		t.Errorf("%s: expected no validation error, got: %v", description, err)
 	}
 }
 

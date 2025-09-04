@@ -105,10 +105,18 @@ func WithError(err error) MockOption { return func(m *mockType) { m.err = err } 
 // Usage: newMockWithOptions(WithError(expectedErr))
 ```
 
-**Context Management**: Consistent timeout handling in all tests:
+**Context Management**: Only add context when tests actually need it (blocking operations, timeouts, cancellation). Don't add unused context just for consistency:
 ```go
+// ✅ Good - context used for blocking operations
 ctx, cancel := setupTestContext(t, 10*time.Second)
 defer cancel()
+err := client.Connect(ctx)
+
+// ❌ Avoid - unused context violates Go principles
+ctx, cancel := setupTestContext(t, 10*time.Second)
+defer cancel()
+_ = ctx // Don't do this
+err := NewConnectionError("test", nil)  // No blocking operation
 ```
 
 **Resource Cleanup**: Test defer behavior and cleanup:
@@ -121,6 +129,19 @@ func() {
 ```
 
 **Thread Safety**: All mocks must be thread-safe with proper mutex usage for concurrent testing.
+
+**Self-Contained Test Files**: Each test file should have its own helper functions with descriptive names to avoid dependencies between test files:
+```go
+// ✅ Good - each file has its own helpers
+// client_test.go
+func setupClientTestContext(t *testing.T, timeout time.Duration) (context.Context, context.CancelFunc) {...}
+
+// errors_test.go  
+func setupErrorTestContext(t *testing.T, timeout time.Duration) (context.Context, context.CancelFunc) {...}
+
+// ❌ Avoid - shared helpers create hidden dependencies
+// Shared setupTestContext used across multiple test files
+```
 
 ## Project Documentation
 
