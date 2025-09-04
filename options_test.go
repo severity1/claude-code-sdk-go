@@ -1,6 +1,7 @@
 package claudecode
 
 import (
+	"context"
 	"testing"
 )
 
@@ -465,6 +466,148 @@ func TestNewOptionsConstructor(t *testing.T) {
 	}
 }
 
+// TestWithCLIPath tests the WithCLIPath option function
+func TestWithCLIPath(t *testing.T) {
+	tests := []struct {
+		name     string
+		cliPath  string
+		expected *string
+	}{
+		{
+			name:     "valid_cli_path",
+			cliPath:  "/usr/local/bin/claude",
+			expected: stringPtr("/usr/local/bin/claude"),
+		},
+		{
+			name:     "relative_cli_path",
+			cliPath:  "./claude",
+			expected: stringPtr("./claude"),
+		},
+		{
+			name:     "empty_cli_path",
+			cliPath:  "",
+			expected: stringPtr(""),
+		},
+		{
+			name:     "windows_cli_path",
+			cliPath:  "C:\\Program Files\\Claude\\claude.exe",
+			expected: stringPtr("C:\\Program Files\\Claude\\claude.exe"),
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			options := NewOptions(WithCLIPath(test.cliPath))
+
+			if options.CLIPath == nil && test.expected != nil {
+				t.Errorf("Expected CLIPath to be set to %q, got nil", *test.expected)
+			}
+
+			if options.CLIPath != nil && test.expected == nil {
+				t.Errorf("Expected CLIPath to be nil, got %q", *options.CLIPath)
+			}
+
+			if options.CLIPath != nil && test.expected != nil && *options.CLIPath != *test.expected {
+				t.Errorf("Expected CLIPath %q, got %q", *test.expected, *options.CLIPath)
+			}
+		})
+	}
+
+	// Test integration with other options
+	t.Run("cli_path_with_other_options", func(t *testing.T) {
+		options := NewOptions(
+			WithCLIPath("/custom/claude"),
+			WithSystemPrompt("Test system prompt"),
+			WithModel("claude-sonnet-3-5-20241022"),
+		)
+
+		if options.CLIPath == nil || *options.CLIPath != "/custom/claude" {
+			t.Errorf("Expected CLIPath to be preserved with other options")
+		}
+
+		assertOptionsSystemPrompt(t, options, "Test system prompt")
+		assertOptionsModel(t, options, "claude-sonnet-3-5-20241022")
+	})
+}
+
+// TestWithTransport tests the WithTransport option function
+func TestWithTransport(t *testing.T) {
+	// Create a mock transport for testing
+	mockTransport := &mockTransportForOptions{}
+
+	t.Run("transport_marker_in_extra_args", func(t *testing.T) {
+		options := NewOptions(WithTransport(mockTransport))
+
+		if options.ExtraArgs == nil {
+			t.Fatal("Expected ExtraArgs to be initialized")
+		}
+
+		marker, exists := options.ExtraArgs["__transport_marker__"]
+		if !exists {
+			t.Error("Expected transport marker to be set in ExtraArgs")
+		}
+
+		if marker == nil || *marker != "custom_transport" {
+			t.Errorf("Expected transport marker value 'custom_transport', got %v", marker)
+		}
+	})
+
+	t.Run("transport_with_existing_extra_args", func(t *testing.T) {
+		options := NewOptions(
+			WithExtraArgs(map[string]*string{"existing": stringPtr("value")}),
+			WithTransport(mockTransport),
+		)
+
+		if options.ExtraArgs == nil {
+			t.Fatal("Expected ExtraArgs to be preserved")
+		}
+
+		// Check existing arg is preserved
+		existing, exists := options.ExtraArgs["existing"]
+		if !exists || existing == nil || *existing != "value" {
+			t.Error("Expected existing ExtraArgs to be preserved")
+		}
+
+		// Check transport marker is added
+		marker, exists := options.ExtraArgs["__transport_marker__"]
+		if !exists || marker == nil || *marker != "custom_transport" {
+			t.Error("Expected transport marker to be added to existing ExtraArgs")
+		}
+	})
+
+	t.Run("transport_with_nil_extra_args", func(t *testing.T) {
+		// Create options with nil ExtraArgs
+		options := &Options{}
+
+		// Apply WithTransport option
+		WithTransport(mockTransport)(options)
+
+		if options.ExtraArgs == nil {
+			t.Error("Expected ExtraArgs to be initialized")
+		}
+
+		marker, exists := options.ExtraArgs["__transport_marker__"]
+		if !exists || marker == nil || *marker != "custom_transport" {
+			t.Error("Expected transport marker to be set when ExtraArgs was nil")
+		}
+	})
+
+	t.Run("multiple_transport_calls", func(t *testing.T) {
+		anotherMockTransport := &mockTransportForOptions{}
+
+		options := NewOptions(
+			WithTransport(mockTransport),
+			WithTransport(anotherMockTransport), // Should overwrite
+		)
+
+		// Should only have one transport marker (last one wins)
+		marker, exists := options.ExtraArgs["__transport_marker__"]
+		if !exists || marker == nil || *marker != "custom_transport" {
+			t.Error("Expected last transport to set the marker")
+		}
+	})
+}
+
 // Helper Functions - following client_test.go patterns
 
 // assertOptionsMaxThinkingTokens verifies MaxThinkingTokens value
@@ -662,3 +805,16 @@ func assertOptionsValidationError(t *testing.T, options *Options, shouldError bo
 func stringPtr(s string) *string {
 	return &s
 }
+
+// mockTransportForOptions is a minimal mock transport for testing options
+type mockTransportForOptions struct{}
+
+func (m *mockTransportForOptions) Connect(ctx context.Context) error { return nil }
+func (m *mockTransportForOptions) SendMessage(ctx context.Context, msg StreamMessage) error {
+	return nil
+}
+func (m *mockTransportForOptions) ReceiveMessages(ctx context.Context) (<-chan Message, <-chan error) {
+	return nil, nil
+}
+func (m *mockTransportForOptions) Interrupt(ctx context.Context) error { return nil }
+func (m *mockTransportForOptions) Close() error                        { return nil }
