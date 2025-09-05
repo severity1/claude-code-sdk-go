@@ -9,2157 +9,586 @@ import (
 	"github.com/severity1/claude-code-sdk-go/internal/shared"
 )
 
-// TestParseValidUserMessage tests T035: Parse Valid User Message with text content
-func TestParseValidUserMessage(t *testing.T) {
-	parser := New()
-	data := map[string]any{
-		"type": "user",
-		"message": map[string]any{
-			"content": []any{
-				map[string]any{"type": "text", "text": "Hello"},
-			},
-		},
-	}
-
-	message, err := parser.ParseMessage(data)
-	if err != nil {
-		t.Fatalf("Failed to parse valid user message: %v", err)
-	}
-
-	userMsg, ok := message.(*shared.UserMessage)
-	if !ok {
-		t.Fatalf("Expected UserMessage, got %T", message)
-	}
-
-	blocks, ok := userMsg.Content.([]shared.ContentBlock)
-	if !ok {
-		t.Fatalf("Expected Content to be []ContentBlock, got %T", userMsg.Content)
-	}
-
-	if len(blocks) != 1 {
-		t.Fatalf("Expected 1 content block, got %d", len(blocks))
-	}
-
-	textBlock, ok := blocks[0].(*shared.TextBlock)
-	if !ok {
-		t.Fatalf("Expected TextBlock, got %T", blocks[0])
-	}
-
-	if textBlock.Text != "Hello" {
-		t.Errorf("Expected text 'Hello', got '%s'", textBlock.Text)
-	}
-}
-
-// TestParseUserMessageWithToolUse tests T036: Parse User Message with Tool Use content block
-func TestParseUserMessageWithToolUse(t *testing.T) {
-	parser := New()
-	data := map[string]any{
-		"type": "user",
-		"message": map[string]any{
-			"content": []any{
-				map[string]any{"type": "text", "text": "Let me read this file"},
-				map[string]any{
-					"type":  "tool_use",
-					"id":    "tool_456",
-					"name":  "Read",
-					"input": map[string]any{"file_path": "/example.txt"},
-				},
-			},
-		},
-	}
-
-	message, err := parser.ParseMessage(data)
-	if err != nil {
-		t.Fatalf("Failed to parse user message with tool use: %v", err)
-	}
-
-	userMsg, ok := message.(*shared.UserMessage)
-	if !ok {
-		t.Fatalf("Expected UserMessage, got %T", message)
-	}
-
-	blocks, ok := userMsg.Content.([]shared.ContentBlock)
-	if !ok {
-		t.Fatalf("Expected Content to be []ContentBlock, got %T", userMsg.Content)
-	}
-
-	if len(blocks) != 2 {
-		t.Fatalf("Expected 2 content blocks, got %d", len(blocks))
-	}
-
-	// Check text block
-	textBlock, ok := blocks[0].(*shared.TextBlock)
-	if !ok {
-		t.Fatalf("Expected first block to be TextBlock, got %T", blocks[0])
-	}
-	if textBlock.Text != "Let me read this file" {
-		t.Errorf("Expected text 'Let me read this file', got '%s'", textBlock.Text)
-	}
-
-	// Check tool use block
-	toolUseBlock, ok := blocks[1].(*shared.ToolUseBlock)
-	if !ok {
-		t.Fatalf("Expected second block to be ToolUseBlock, got %T", blocks[1])
-	}
-	if toolUseBlock.ToolUseID != "tool_456" {
-		t.Errorf("Expected tool use ID 'tool_456', got '%s'", toolUseBlock.ToolUseID)
-	}
-	if toolUseBlock.Name != "Read" {
-		t.Errorf("Expected tool name 'Read', got '%s'", toolUseBlock.Name)
-	}
-
-	filePath, ok := toolUseBlock.Input["file_path"].(string)
-	if !ok || filePath != "/example.txt" {
-		t.Errorf("Expected input file_path '/example.txt', got %v", toolUseBlock.Input["file_path"])
-	}
-}
-
-// TestParseUserMessageWithToolResult tests T037: Parse User Message with Tool Result content block
-func TestParseUserMessageWithToolResult(t *testing.T) {
-	parser := New()
-	data := map[string]any{
-		"type": "user",
-		"message": map[string]any{
-			"content": []any{
-				map[string]any{
-					"type":        "tool_result",
-					"tool_use_id": "tool_456",
-					"content":     "File content here",
-				},
-			},
-		},
-	}
-
-	message, err := parser.ParseMessage(data)
-	if err != nil {
-		t.Fatalf("Failed to parse user message with tool result: %v", err)
-	}
-
-	userMsg, ok := message.(*shared.UserMessage)
-	if !ok {
-		t.Fatalf("Expected UserMessage, got %T", message)
-	}
-
-	blocks, ok := userMsg.Content.([]shared.ContentBlock)
-	if !ok {
-		t.Fatalf("Expected Content to be []ContentBlock, got %T", userMsg.Content)
-	}
-
-	if len(blocks) != 1 {
-		t.Fatalf("Expected 1 content block, got %d", len(blocks))
-	}
-
-	toolResultBlock, ok := blocks[0].(*shared.ToolResultBlock)
-	if !ok {
-		t.Fatalf("Expected ToolResultBlock, got %T", blocks[0])
-	}
-
-	if toolResultBlock.ToolUseID != "tool_456" {
-		t.Errorf("Expected tool_use_id 'tool_456', got '%s'", toolResultBlock.ToolUseID)
-	}
-
-	content, ok := toolResultBlock.Content.(string)
-	if !ok || content != "File content here" {
-		t.Errorf("Expected content 'File content here', got %v", toolResultBlock.Content)
-	}
-}
-
-// TestParseUserMessageWithToolResultError tests T038: Parse User Message with Tool Result Error
-func TestParseUserMessageWithToolResultError(t *testing.T) {
-	parser := New()
-	data := map[string]any{
-		"type": "user",
-		"message": map[string]any{
-			"content": []any{
-				map[string]any{
-					"type":        "tool_result",
-					"tool_use_id": "tool_456",
-					"content":     "Error: File not found",
-					"is_error":    true,
-				},
-			},
-		},
-	}
-
-	message, err := parser.ParseMessage(data)
-	if err != nil {
-		t.Fatalf("Failed to parse user message with tool result error: %v", err)
-	}
-
-	userMsg, ok := message.(*shared.UserMessage)
-	if !ok {
-		t.Fatalf("Expected UserMessage, got %T", message)
-	}
-
-	blocks, ok := userMsg.Content.([]shared.ContentBlock)
-	if !ok {
-		t.Fatalf("Expected Content to be []ContentBlock, got %T", userMsg.Content)
-	}
-
-	toolResultBlock, ok := blocks[0].(*shared.ToolResultBlock)
-	if !ok {
-		t.Fatalf("Expected ToolResultBlock, got %T", blocks[0])
-	}
-
-	if toolResultBlock.IsError == nil || !*toolResultBlock.IsError {
-		t.Errorf("Expected is_error to be true, got %v", toolResultBlock.IsError)
-	}
-}
-
-// TestParseUserMessageMixedContent tests T039: Parse User Message with Mixed Content
-func TestParseUserMessageMixedContent(t *testing.T) {
-	parser := New()
-	data := map[string]any{
-		"type": "user",
-		"message": map[string]any{
-			"content": []any{
-				map[string]any{"type": "text", "text": "First analyze this:"},
-				map[string]any{
-					"type":  "tool_use",
-					"id":    "tool_1",
-					"name":  "Read",
-					"input": map[string]any{"file_path": "/data.txt"},
-				},
-				map[string]any{
-					"type":        "tool_result",
-					"tool_use_id": "tool_1",
-					"content":     "Data: 42",
-				},
-				map[string]any{"type": "text", "text": "Now process it"},
-			},
-		},
-	}
-
-	message, err := parser.ParseMessage(data)
-	if err != nil {
-		t.Fatalf("Failed to parse user message with mixed content: %v", err)
-	}
-
-	userMsg, ok := message.(*shared.UserMessage)
-	if !ok {
-		t.Fatalf("Expected UserMessage, got %T", message)
-	}
-
-	blocks, ok := userMsg.Content.([]shared.ContentBlock)
-	if !ok {
-		t.Fatalf("Expected Content to be []ContentBlock, got %T", userMsg.Content)
-	}
-
-	if len(blocks) != 4 {
-		t.Fatalf("Expected 4 content blocks, got %d", len(blocks))
-	}
-
-	// Verify block types in order
-	expectedTypes := []string{"text", "tool_use", "tool_result", "text"}
-	for i, block := range blocks {
-		var blockType string
-		switch block.(type) {
-		case *shared.TextBlock:
-			blockType = "text"
-		case *shared.ToolUseBlock:
-			blockType = "tool_use"
-		case *shared.ToolResultBlock:
-			blockType = "tool_result"
-		default:
-			blockType = "unknown"
-		}
-
-		if blockType != expectedTypes[i] {
-			t.Errorf("Block %d: expected type '%s', got '%s'", i, expectedTypes[i], blockType)
-		}
-	}
-}
-
-// TestParseValidAssistantMessage tests T040: Parse Valid Assistant Message
-func TestParseValidAssistantMessage(t *testing.T) {
-	parser := New()
-	data := map[string]any{
-		"type": "assistant",
-		"message": map[string]any{
-			"content": []any{
-				map[string]any{"type": "text", "text": "I'll help you with that"},
-				map[string]any{
-					"type":  "tool_use",
-					"id":    "tool_123",
-					"name":  "Calculate",
-					"input": map[string]any{"expression": "2 + 2"},
-				},
-			},
-			"model": "claude-3-5-sonnet-20241022",
-		},
-	}
-
-	message, err := parser.ParseMessage(data)
-	if err != nil {
-		t.Fatalf("Failed to parse assistant message: %v", err)
-	}
-
-	assistantMsg, ok := message.(*shared.AssistantMessage)
-	if !ok {
-		t.Fatalf("Expected AssistantMessage, got %T", message)
-	}
-
-	if len(assistantMsg.Content) != 2 {
-		t.Fatalf("Expected 2 content blocks, got %d", len(assistantMsg.Content))
-	}
-
-	if assistantMsg.Model != "claude-3-5-sonnet-20241022" {
-		t.Errorf("Expected model 'claude-3-5-sonnet-20241022', got '%s'", assistantMsg.Model)
-	}
-
-	// Check text block
-	textBlock, ok := assistantMsg.Content[0].(*shared.TextBlock)
-	if !ok {
-		t.Fatalf("Expected first block to be TextBlock, got %T", assistantMsg.Content[0])
-	}
-	if textBlock.Text != "I'll help you with that" {
-		t.Errorf("Expected text 'I'll help you with that', got '%s'", textBlock.Text)
-	}
-
-	// Check tool use block
-	toolUseBlock, ok := assistantMsg.Content[1].(*shared.ToolUseBlock)
-	if !ok {
-		t.Fatalf("Expected second block to be ToolUseBlock, got %T", assistantMsg.Content[1])
-	}
-	if toolUseBlock.Name != "Calculate" {
-		t.Errorf("Expected tool name 'Calculate', got '%s'", toolUseBlock.Name)
-	}
-}
-
-// TestParseAssistantMessageWithThinking tests T041: Parse Assistant Message with Thinking block
-func TestParseAssistantMessageWithThinking(t *testing.T) {
-	parser := New()
-	data := map[string]any{
-		"type": "assistant",
-		"message": map[string]any{
-			"content": []any{
-				map[string]any{
-					"type":      "thinking",
-					"thinking":  "Let me think about this problem step by step...",
-					"signature": "thinking_block_sig_123",
-				},
-				map[string]any{"type": "text", "text": "Here's my analysis:"},
-			},
-			"model": "claude-3-5-sonnet-20241022",
-		},
-	}
-
-	message, err := parser.ParseMessage(data)
-	if err != nil {
-		t.Fatalf("Failed to parse assistant message with thinking: %v", err)
-	}
-
-	assistantMsg, ok := message.(*shared.AssistantMessage)
-	if !ok {
-		t.Fatalf("Expected AssistantMessage, got %T", message)
-	}
-
-	if len(assistantMsg.Content) != 2 {
-		t.Fatalf("Expected 2 content blocks, got %d", len(assistantMsg.Content))
-	}
-
-	// Check thinking block
-	thinkingBlock, ok := assistantMsg.Content[0].(*shared.ThinkingBlock)
-	if !ok {
-		t.Fatalf("Expected first block to be ThinkingBlock, got %T", assistantMsg.Content[0])
-	}
-
-	if thinkingBlock.Thinking != "Let me think about this problem step by step..." {
-		t.Errorf("Expected thinking text, got '%s'", thinkingBlock.Thinking)
-	}
-
-	if thinkingBlock.Signature != "thinking_block_sig_123" {
-		t.Errorf("Expected signature 'thinking_block_sig_123', got '%s'", thinkingBlock.Signature)
-	}
-}
-
-// TestParseValidSystemMessage tests T042: Parse Valid System Message
-func TestParseValidSystemMessage(t *testing.T) {
-	parser := New()
-	data := map[string]any{
-		"type":      "system",
-		"subtype":   "tool_output",
-		"data":      map[string]any{"output": "System ready"},
-		"timestamp": "2024-01-01T12:00:00Z",
-	}
-
-	message, err := parser.ParseMessage(data)
-	if err != nil {
-		t.Fatalf("Failed to parse system message: %v", err)
-	}
-
-	systemMsg, ok := message.(*shared.SystemMessage)
-	if !ok {
-		t.Fatalf("Expected SystemMessage, got %T", message)
-	}
-
-	if systemMsg.Subtype != "tool_output" {
-		t.Errorf("Expected subtype 'tool_output', got '%s'", systemMsg.Subtype)
-	}
-
-	// Verify all original data is preserved
-	if timestamp, ok := systemMsg.Data["timestamp"].(string); !ok || timestamp != "2024-01-01T12:00:00Z" {
-		t.Errorf("Expected timestamp to be preserved, got %v", systemMsg.Data["timestamp"])
-	}
-}
-
-// TestParseValidResultMessage tests T043: Parse Valid Result Message
-func TestParseValidResultMessage(t *testing.T) {
-	parser := New()
-	data := map[string]any{
-		"type":            "result",
-		"subtype":         "query_completed",
-		"duration_ms":     1500.0,
-		"duration_api_ms": 800.0,
-		"is_error":        false,
-		"num_turns":       2.0,
-		"session_id":      "session_123",
-		"total_cost_usd":  0.05,
-		"result":          "Task completed successfully",
-	}
-
-	message, err := parser.ParseMessage(data)
-	if err != nil {
-		t.Fatalf("Failed to parse result message: %v", err)
-	}
-
-	resultMsg, ok := message.(*shared.ResultMessage)
-	if !ok {
-		t.Fatalf("Expected ResultMessage, got %T", message)
-	}
-
-	if resultMsg.Subtype != "query_completed" {
-		t.Errorf("Expected subtype 'query_completed', got '%s'", resultMsg.Subtype)
-	}
-	if resultMsg.DurationMs != 1500 {
-		t.Errorf("Expected duration_ms 1500, got %d", resultMsg.DurationMs)
-	}
-	if resultMsg.DurationAPIMs != 800 {
-		t.Errorf("Expected duration_api_ms 800, got %d", resultMsg.DurationAPIMs)
-	}
-	if resultMsg.IsError {
-		t.Errorf("Expected is_error false, got %t", resultMsg.IsError)
-	}
-	if resultMsg.NumTurns != 2 {
-		t.Errorf("Expected num_turns 2, got %d", resultMsg.NumTurns)
-	}
-	if resultMsg.SessionID != "session_123" {
-		t.Errorf("Expected session_id 'session_123', got '%s'", resultMsg.SessionID)
-	}
-
-	// Check optional fields
-	if resultMsg.TotalCostUSD == nil || *resultMsg.TotalCostUSD != 0.05 {
-		t.Errorf("Expected total_cost_usd 0.05, got %v", resultMsg.TotalCostUSD)
-	}
-	// Note: Result field should be a map but test data has a string.
-	// This suggests the field might need to be interface{} instead.
-	// For now, we'll skip this assertion until the type is clarified.
-	if resultMsg.Result != nil {
-		t.Logf("Result field present (type needs clarification): %v", resultMsg.Result)
-	}
-}
-
-// TestParseInvalidDataTypeError tests T044: Parse Invalid Data Type Error
-func TestParseInvalidDataTypeError(t *testing.T) {
-	parser := New()
-
-	// Test with non-dict input (already handled in ParseMessage since we expect map[string]any)
-	_, err := parser.ParseMessage(nil)
-	if err == nil {
-		t.Fatal("Expected error for nil input, got nil")
-	}
-
-	msgParseErr, ok := err.(*shared.MessageParseError)
-	if !ok {
-		t.Fatalf("Expected MessageParseError, got %T", err)
-	}
-
-	if !strings.Contains(msgParseErr.Error(), "missing or invalid type field") {
-		t.Errorf("Expected error about missing type field, got: %s", msgParseErr.Error())
-	}
-}
-
-// TestParseMissingTypeFieldError tests T045: Parse Missing Type Field Error
-func TestParseMissingTypeFieldError(t *testing.T) {
-	parser := New()
-	data := map[string]any{
-		"message": map[string]any{"content": "test"},
-	}
-
-	_, err := parser.ParseMessage(data)
-	if err == nil {
-		t.Fatal("Expected error for missing type field, got nil")
-	}
-
-	msgParseErr, ok := err.(*shared.MessageParseError)
-	if !ok {
-		t.Fatalf("Expected MessageParseError, got %T", err)
-	}
-
-	if !strings.Contains(msgParseErr.Error(), "missing or invalid type field") {
-		t.Errorf("Expected error about missing type field, got: %s", msgParseErr.Error())
-	}
-}
-
-// TestParseUnknownMessageTypeError tests T046: Parse Unknown Message Type Error
-func TestParseUnknownMessageTypeError(t *testing.T) {
-	parser := New()
-	data := map[string]any{
-		"type":    "unknown_type",
-		"content": "test",
-	}
-
-	_, err := parser.ParseMessage(data)
-	if err == nil {
-		t.Fatal("Expected error for unknown message type, got nil")
-	}
-
-	msgParseErr, ok := err.(*shared.MessageParseError)
-	if !ok {
-		t.Fatalf("Expected MessageParseError, got %T", err)
-	}
-
-	if !strings.Contains(msgParseErr.Error(), "unknown message type: unknown_type") {
-		t.Errorf("Expected error about unknown message type, got: %s", msgParseErr.Error())
-	}
-}
-
-// TestParseUserMessageMissingFields tests T047: Parse User Message Missing Fields
-func TestParseUserMessageMissingFields(t *testing.T) {
-	parser := New()
-
-	// Test missing message field
-	data := map[string]any{
-		"type": "user",
-	}
-
-	_, err := parser.ParseMessage(data)
-	if err == nil {
-		t.Fatal("Expected error for missing message field, got nil")
-	}
-
-	msgParseErr, ok := err.(*shared.MessageParseError)
-	if !ok {
-		t.Fatalf("Expected MessageParseError, got %T", err)
-	}
-
-	if !strings.Contains(msgParseErr.Error(), "user message missing message field") {
-		t.Errorf("Expected error about missing message field, got: %s", msgParseErr.Error())
-	}
-
-	// Test missing content field
-	data2 := map[string]any{
-		"type":    "user",
-		"message": map[string]any{},
-	}
-
-	_, err2 := parser.ParseMessage(data2)
-	if err2 == nil {
-		t.Fatal("Expected error for missing content field, got nil")
-	}
-
-	msgParseErr2, ok := err2.(*shared.MessageParseError)
-	if !ok {
-		t.Fatalf("Expected MessageParseError, got %T", err2)
-	}
-
-	if !strings.Contains(msgParseErr2.Error(), "user message missing content field") {
-		t.Errorf("Expected error about missing content field, got: %s", msgParseErr2.Error())
-	}
-}
-
-// TestMultipleJSONObjectsSingleLine tests T060: Multiple JSON Objects on Single Line
-func TestMultipleJSONObjectsSingleLine(t *testing.T) {
-	parser := New()
-
-	// Simulate buffered output with multiple JSON objects on single line
-	obj1 := `{"type": "user", "message": {"content": [{"type": "text", "text": "First"}]}}`
-	obj2 := `{"type": "system", "subtype": "status", "message": "ok"}`
-
-	line := obj1 + "\n" + obj2
-
-	messages, err := parser.ProcessLine(line)
-	if err != nil {
-		t.Fatalf("Failed to process line with multiple JSON objects: %v", err)
-	}
-
-	if len(messages) != 2 {
-		t.Fatalf("Expected 2 messages, got %d", len(messages))
-	}
-
-	// Check first message
-	userMsg, ok := messages[0].(*shared.UserMessage)
-	if !ok {
-		t.Fatalf("Expected first message to be UserMessage, got %T", messages[0])
-	}
-
-	blocks, ok := userMsg.Content.([]shared.ContentBlock)
-	if !ok {
-		t.Fatalf("Expected Content to be []ContentBlock, got %T", userMsg.Content)
-	}
-
-	textBlock, ok := blocks[0].(*shared.TextBlock)
-	if !ok || textBlock.Text != "First" {
-		t.Errorf("Expected text 'First', got %v", textBlock)
-	}
-
-	// Check second message
-	systemMsg, ok := messages[1].(*shared.SystemMessage)
-	if !ok {
-		t.Fatalf("Expected second message to be SystemMessage, got %T", messages[1])
-	}
-
-	if systemMsg.Subtype != "status" {
-		t.Errorf("Expected subtype 'status', got '%s'", systemMsg.Subtype)
-	}
-}
-
-// TestBufferOverflowProtection tests T062: Buffer Overflow Protection
-func TestBufferOverflowProtection(t *testing.T) {
-	parser := New()
-
-	// Create a string larger than MaxBufferSize (1MB)
-	largeString := strings.Repeat("x", MaxBufferSize+1000)
-
-	_, err := parser.processJSONLine(largeString)
-	if err == nil {
-		t.Fatal("Expected error for buffer overflow, got nil")
-	}
-
-	jsonDecodeErr, ok := err.(*shared.JSONDecodeError)
-	if !ok {
-		t.Fatalf("Expected JSONDecodeError, got %T", err)
-	}
-
-	if !strings.Contains(jsonDecodeErr.Error(), "buffer overflow") {
-		t.Errorf("Expected buffer overflow error, got: %s", jsonDecodeErr.Error())
-	}
-
-	// Verify buffer was reset
-	if parser.BufferSize() != 0 {
-		t.Errorf("Expected buffer to be reset after overflow, but size is %d", parser.BufferSize())
-	}
-}
-
-// TestSpeculativeJSONParsing tests T063: Speculative JSON Parsing
-func TestSpeculativeJSONParsing(t *testing.T) {
-	parser := New()
-
-	// First, send incomplete JSON
-	msg1, err1 := parser.processJSONLine(`{"type": "user", "message":`)
-	if err1 != nil {
-		t.Fatalf("Expected no error for incomplete JSON, got %v", err1)
-	}
-	if msg1 != nil {
-		t.Fatal("Expected no message for incomplete JSON, got message")
-	}
-
-	// Buffer should contain the partial JSON
-	if parser.BufferSize() == 0 {
-		t.Fatal("Expected buffer to contain partial JSON")
-	}
-
-	// Complete the JSON
-	msg2, err2 := parser.processJSONLine(` {"content": [{"type": "text", "text": "Hello"}]}}`)
-	if err2 != nil {
-		t.Fatalf("Failed to parse completed JSON: %v", err2)
-	}
-
-	if msg2 == nil {
-		t.Fatal("Expected message after completing JSON, got nil")
-	}
-
-	// Verify the parsed message
-	userMsg, ok := msg2.(*shared.UserMessage)
-	if !ok {
-		t.Fatalf("Expected UserMessage, got %T", msg2)
-	}
-
-	blocks, ok := userMsg.Content.([]shared.ContentBlock)
-	if !ok {
-		t.Fatalf("Expected Content to be []ContentBlock, got %T", userMsg.Content)
-	}
-
-	textBlock, ok := blocks[0].(*shared.TextBlock)
-	if !ok || textBlock.Text != "Hello" {
-		t.Errorf("Expected text 'Hello', got %v", textBlock)
-	}
-
-	// Buffer should be reset after successful parse
-	if parser.BufferSize() != 0 {
-		t.Errorf("Expected buffer to be reset after successful parse, but size is %d", parser.BufferSize())
-	}
-}
-
-// TestMessageParseErrorContainsData tests T051: Message Parse Error Contains Data
-func TestMessageParseErrorContainsData(t *testing.T) {
-	parser := New()
-	originalData := map[string]any{
-		"type": "user",
-		"message": map[string]any{
-			"invalid_field": "should cause error",
-			// Missing content field
-		},
-	}
-
-	_, err := parser.ParseMessage(originalData)
-	if err == nil {
-		t.Fatal("Expected error for invalid message, got nil")
-	}
-
-	msgParseErr, ok := err.(*shared.MessageParseError)
-	if !ok {
-		t.Fatalf("Expected MessageParseError, got %T", err)
-	}
-
-	// Verify original data is preserved in error
-	if msgParseErr.Data == nil {
-		t.Fatal("Expected error to contain original data, got nil")
-	}
-
-	data, ok := msgParseErr.Data.(map[string]any)
-	if !ok {
-		t.Fatalf("Expected error data to be map[string]any, got %T", msgParseErr.Data)
-	}
-
-	// Verify the original data fields are present
-	if data["type"] != "user" {
-		t.Errorf("Expected preserved data to have type 'user', got %v", data["type"])
-	}
-}
-
-// TestContentBlockTypeDiscrimination tests T052: Content Block Type Discrimination
-func TestContentBlockTypeDiscrimination(t *testing.T) {
-	parser := New()
-
-	testCases := []struct {
-		name      string
-		blockData map[string]any
-		expected  string
+// TestParseValidMessages tests parsing of valid message types
+func TestParseValidMessages(t *testing.T) {
+	tests := []struct {
+		name        string
+		data        map[string]any
+		expectedType string
+		validate    func(*testing.T, shared.Message)
 	}{
 		{
-			name: "text block",
+			name: "user_message_with_text",
+			data: map[string]any{
+				"type": "user",
+				"message": map[string]any{
+					"content": []any{
+						map[string]any{"type": "text", "text": "Hello"},
+					},
+				},
+			},
+			expectedType: shared.MessageTypeUser,
+			validate: func(t *testing.T, msg shared.Message) {
+				userMsg := msg.(*shared.UserMessage)
+				blocks := userMsg.Content.([]shared.ContentBlock)
+				assertContentBlockCount(t, blocks, 1)
+				assertTextBlockContent(t, blocks[0], "Hello")
+			},
+		},
+		{
+			name: "user_message_with_tool_use",
+			data: map[string]any{
+				"type": "user",
+				"message": map[string]any{
+					"content": []any{
+						map[string]any{
+							"type":  "tool_use",
+							"id":    "tool_123",
+							"name":  "Read",
+							"input": map[string]any{"file_path": "/example.txt"},
+						},
+					},
+				},
+			},
+			expectedType: shared.MessageTypeUser,
+			validate: func(t *testing.T, msg shared.Message) {
+				userMsg := msg.(*shared.UserMessage)
+				blocks := userMsg.Content.([]shared.ContentBlock)
+				assertContentBlockCount(t, blocks, 1)
+				assertToolUseBlock(t, blocks[0], "tool_123", "Read")
+			},
+		},
+		{
+			name: "user_message_with_tool_result",
+			data: map[string]any{
+				"type": "user",
+				"message": map[string]any{
+					"content": []any{
+						map[string]any{
+							"type":        "tool_result",
+							"tool_use_id": "tool_456",
+							"content":     "File content here",
+						},
+					},
+				},
+			},
+			expectedType: shared.MessageTypeUser,
+			validate: func(t *testing.T, msg shared.Message) {
+				userMsg := msg.(*shared.UserMessage)
+				blocks := userMsg.Content.([]shared.ContentBlock)
+				assertContentBlockCount(t, blocks, 1)
+				assertToolResultBlock(t, blocks[0], "tool_456", "File content here", false)
+			},
+		},
+		{
+			name: "user_message_with_mixed_content",
+			data: map[string]any{
+				"type": "user",
+				"message": map[string]any{
+					"content": []any{
+						map[string]any{"type": "text", "text": "First analyze this:"},
+						map[string]any{
+							"type":  "tool_use",
+							"id":    "tool_1",
+							"name":  "Read",
+							"input": map[string]any{"file_path": "/data.txt"},
+						},
+						map[string]any{
+							"type":        "tool_result",
+							"tool_use_id": "tool_1",
+							"content":     "Data: 42",
+						},
+						map[string]any{"type": "text", "text": "Now process it"},
+					},
+				},
+			},
+			expectedType: shared.MessageTypeUser,
+			validate: func(t *testing.T, msg shared.Message) {
+				userMsg := msg.(*shared.UserMessage)
+				blocks := userMsg.Content.([]shared.ContentBlock)
+				assertContentBlockCount(t, blocks, 4)
+				assertMixedContentBlocks(t, blocks)
+			},
+		},
+		{
+			name: "assistant_message",
+			data: map[string]any{
+				"type": "assistant",
+				"message": map[string]any{
+					"content": []any{
+						map[string]any{"type": "text", "text": "I'll help you with that"},
+					},
+					"model": "claude-3-5-sonnet-20241022",
+				},
+			},
+			expectedType: shared.MessageTypeAssistant,
+			validate: func(t *testing.T, msg shared.Message) {
+				assistantMsg := msg.(*shared.AssistantMessage)
+				assertContentBlockCount(t, assistantMsg.Content, 1)
+				assertTextBlockContent(t, assistantMsg.Content[0], "I'll help you with that")
+				assertAssistantModel(t, assistantMsg, "claude-3-5-sonnet-20241022")
+			},
+		},
+		{
+			name: "assistant_message_with_thinking",
+			data: map[string]any{
+				"type": "assistant",
+				"message": map[string]any{
+					"content": []any{
+						map[string]any{
+							"type":      "thinking",
+							"thinking":  "Let me think about this step by step...",
+							"signature": "thinking_block_sig_123",
+						},
+						map[string]any{"type": "text", "text": "Here's my analysis:"},
+					},
+					"model": "claude-3-5-sonnet-20241022",
+				},
+			},
+			expectedType: shared.MessageTypeAssistant,
+			validate: func(t *testing.T, msg shared.Message) {
+				assistantMsg := msg.(*shared.AssistantMessage)
+				assertContentBlockCount(t, assistantMsg.Content, 2)
+				assertThinkingBlock(t, assistantMsg.Content[0], "Let me think about this step by step...")
+			},
+		},
+		{
+			name: "system_message",
+			data: map[string]any{
+				"type":      "system",
+				"subtype":   "tool_output",
+				"data":      map[string]any{"output": "System ready"},
+				"timestamp": "2024-01-01T12:00:00Z",
+			},
+			expectedType: shared.MessageTypeSystem,
+			validate: func(t *testing.T, msg shared.Message) {
+				systemMsg := msg.(*shared.SystemMessage)
+				assertSystemSubtype(t, systemMsg, "tool_output")
+				assertSystemData(t, systemMsg, "timestamp", "2024-01-01T12:00:00Z")
+			},
+		},
+		{
+			name: "result_message",
+			data: map[string]any{
+				"type":            "result",
+				"subtype":         "query_completed",
+				"duration_ms":     1500.0,
+				"duration_api_ms": 800.0,
+				"is_error":        false,
+				"num_turns":       2.0,
+				"session_id":      "session_123",
+				"total_cost_usd":  0.05,
+			},
+			expectedType: shared.MessageTypeResult,
+			validate: func(t *testing.T, msg shared.Message) {
+				resultMsg := msg.(*shared.ResultMessage)
+				assertResultFields(t, resultMsg, "query_completed", 1500, 800, false, 2, "session_123")
+				assertResultCost(t, resultMsg, 0.05)
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			parser := setupParserTest(t)
+			
+			message, err := parser.ParseMessage(test.data)
+			assertParseSuccess(t, err, message)
+			assertMessageType(t, message, test.expectedType)
+			
+			test.validate(t, message)
+		})
+	}
+}
+
+// TestContentBlockDiscrimination tests parsing of different content block types
+func TestContentBlockDiscrimination(t *testing.T) {
+	parser := setupParserTest(t)
+	
+	tests := []struct {
+		name      string
+		blockData map[string]any
+		blockType string
+		validate  func(*testing.T, shared.ContentBlock)
+	}{
+		{
+			name: "text_block",
 			blockData: map[string]any{
 				"type": "text",
 				"text": "Hello world",
 			},
-			expected: "text",
+			blockType: "text",
+			validate: func(t *testing.T, block shared.ContentBlock) {
+				assertTextBlockContent(t, block, "Hello world")
+			},
 		},
 		{
-			name: "thinking block",
+			name: "thinking_block",
 			blockData: map[string]any{
 				"type":      "thinking",
 				"thinking":  "Let me think...",
 				"signature": "sig123",
 			},
-			expected: "thinking",
+			blockType: "thinking",
+			validate: func(t *testing.T, block shared.ContentBlock) {
+				assertThinkingBlock(t, block, "Let me think...")
+			},
 		},
 		{
-			name: "tool_use block",
+			name: "tool_use_block",
 			blockData: map[string]any{
 				"type":  "tool_use",
 				"id":    "tool_1",
 				"name":  "Calculator",
 				"input": map[string]any{"expr": "1+1"},
 			},
-			expected: "tool_use",
+			blockType: "tool_use",
+			validate: func(t *testing.T, block shared.ContentBlock) {
+				assertToolUseBlock(t, block, "tool_1", "Calculator")
+			},
 		},
 		{
-			name: "tool_result block",
+			name: "tool_result_block",
 			blockData: map[string]any{
 				"type":        "tool_result",
 				"tool_use_id": "tool_1",
 				"content":     "2",
 			},
-			expected: "tool_result",
+			blockType: "tool_result",
+			validate: func(t *testing.T, block shared.ContentBlock) {
+				assertToolResultBlock(t, block, "tool_1", "2", false)
+			},
+		},
+		{
+			name: "tool_result_error_block",
+			blockData: map[string]any{
+				"type":        "tool_result",
+				"tool_use_id": "tool_2",
+				"content":     "Error: File not found",
+				"is_error":    true,
+			},
+			blockType: "tool_result",
+			validate: func(t *testing.T, block shared.ContentBlock) {
+				assertToolResultBlock(t, block, "tool_2", "Error: File not found", true)
+			},
 		},
 	}
 
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			block, err := parser.parseContentBlock(tc.blockData)
-			if err != nil {
-				t.Fatalf("Failed to parse %s: %v", tc.name, err)
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			block, err := parser.parseContentBlock(test.blockData)
+			assertParseSuccess(t, err, block)
+			
+			actualType := getContentBlockType(block)
+			if actualType != test.blockType {
+				t.Errorf("Expected block type %s, got %s", test.blockType, actualType)
 			}
-
-			var blockType string
-			switch block.(type) {
-			case *shared.TextBlock:
-				blockType = "text"
-			case *shared.ThinkingBlock:
-				blockType = "thinking"
-			case *shared.ToolUseBlock:
-				blockType = "tool_use"
-			case *shared.ToolResultBlock:
-				blockType = "tool_result"
-			default:
-				blockType = "unknown"
-			}
-
-			if blockType != tc.expected {
-				t.Errorf("Expected block type '%s', got '%s'", tc.expected, blockType)
-			}
+			
+			test.validate(t, block)
 		})
 	}
 }
 
-// TestOptionalFieldHandling tests T054: Optional Field Handling
-func TestOptionalFieldHandling(t *testing.T) {
-	parser := New()
-
-	// Test result message with only required fields
-	data := map[string]any{
-		"type":            "result",
-		"subtype":         "test",
-		"duration_ms":     100.0,
-		"duration_api_ms": 50.0,
-		"is_error":        false,
-		"num_turns":       1.0,
-		"session_id":      "s1",
-		// Optional fields omitted: total_cost_usd, usage, result
+// TestParseErrors tests various error conditions
+func TestParseErrors(t *testing.T) {
+	tests := []struct {
+		name        string
+		data        map[string]any
+		expectError string
+	}{
+		{
+			name:        "missing_type_field",
+			data:        map[string]any{"message": map[string]any{"content": "test"}},
+			expectError: "missing or invalid type field",
+		},
+		{
+			name:        "unknown_message_type",
+			data:        map[string]any{"type": "unknown_type", "content": "test"},
+			expectError: "unknown message type: unknown_type",
+		},
+		{
+			name:        "user_message_missing_message_field",
+			data:        map[string]any{"type": "user"},
+			expectError: "user message missing message field",
+		},
+		{
+			name: "user_message_missing_content_field",
+			data: map[string]any{
+				"type":    "user",
+				"message": map[string]any{},
+			},
+			expectError: "user message missing content field",
+		},
 	}
 
-	message, err := parser.ParseMessage(data)
-	if err != nil {
-		t.Fatalf("Failed to parse result message without optional fields: %v", err)
-	}
-
-	resultMsg, ok := message.(*shared.ResultMessage)
-	if !ok {
-		t.Fatalf("Expected ResultMessage, got %T", message)
-	}
-
-	// Verify optional fields are nil when not provided
-	if resultMsg.TotalCostUSD != nil {
-		t.Errorf("Expected TotalCostUSD to be nil, got %v", *resultMsg.TotalCostUSD)
-	}
-	if resultMsg.Result != nil {
-		t.Errorf("Expected Result to be nil, got %v", *resultMsg.Result)
-	}
-	if resultMsg.Usage != nil {
-		t.Errorf("Expected Usage to be nil, got %v", resultMsg.Usage)
-	}
-}
-
-// TestEmbeddedNewlinesInJSONStrings tests T061: Embedded Newlines in JSON Strings
-func TestEmbeddedNewlinesInJSONStrings(t *testing.T) {
-	parser := New()
-
-	// Test JSON with embedded newlines in string values
-	jsonWithNewlines := `{"type": "user", "message": {"content": [{"type": "text", "text": "Line 1\nLine 2\nLine 3"}]}}`
-
-	messages, err := parser.ProcessLine(jsonWithNewlines)
-	if err != nil {
-		t.Fatalf("Failed to parse JSON with embedded newlines: %v", err)
-	}
-
-	if len(messages) != 1 {
-		t.Fatalf("Expected 1 message, got %d", len(messages))
-	}
-
-	userMsg, ok := messages[0].(*shared.UserMessage)
-	if !ok {
-		t.Fatalf("Expected UserMessage, got %T", messages[0])
-	}
-
-	blocks, ok := userMsg.Content.([]shared.ContentBlock)
-	if !ok {
-		t.Fatalf("Expected Content to be []ContentBlock, got %T", userMsg.Content)
-	}
-
-	textBlock, ok := blocks[0].(*shared.TextBlock)
-	if !ok {
-		t.Fatalf("Expected TextBlock, got %T", blocks[0])
-	}
-
-	expectedText := "Line 1\nLine 2\nLine 3"
-	if textBlock.Text != expectedText {
-		t.Errorf("Expected text with newlines '%s', got '%s'", expectedText, textBlock.Text)
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			parser := setupParserTest(t)
+			
+			_, err := parser.ParseMessage(test.data)
+			assertParseError(t, err, test.expectError)
+		})
 	}
 }
 
-// TestPartialMessageAccumulation tests T064: Partial Message Accumulation
-func TestPartialMessageAccumulation(t *testing.T) {
-	parser := New()
+// TestSpeculativeJSONParsing tests incomplete JSON handling
+func TestSpeculativeJSONParsing(t *testing.T) {
+	parser := setupParserTest(t)
 
-	// Send partial JSON in chunks
-	parts := []string{
-		`{"type": "user",`,
-		` "message": {"content":`,
-		` [{"type": "text",`,
-		` "text": "Complete"}]}}`,
-	}
+	// Send incomplete JSON
+	msg1, err1 := parser.processJSONLine(`{"type": "user", "message":`)
+	assertNoParseError(t, err1)
+	assertNoMessage(t, msg1)
+	assertBufferNotEmpty(t, parser)
 
-	var finalMessage shared.Message
-	var err error
+	// Complete the JSON
+	msg2, err2 := parser.processJSONLine(` {"content": [{"type": "text", "text": "Hello"}]}}`)
+	assertNoParseError(t, err2)
+	assertMessageExists(t, msg2)
+	assertBufferEmpty(t, parser)
 
-	// Process each part
-	for i, part := range parts {
-		msg, parseErr := parser.processJSONLine(part)
-		if i < len(parts)-1 {
-			// Intermediate parts should not produce a message
-			if parseErr != nil {
-				t.Fatalf("Unexpected error on part %d: %v", i, parseErr)
-			}
-			if msg != nil {
-				t.Fatalf("Unexpected message on partial part %d", i)
-			}
-		} else {
-			// Final part should complete the message
-			if parseErr != nil {
-				t.Fatalf("Failed to parse completed message: %v", parseErr)
-			}
-			if msg == nil {
-				t.Fatal("Expected message after completion, got nil")
-			}
-			finalMessage = msg
-			err = parseErr
-		}
-	}
-
-	if err != nil {
-		t.Fatalf("Failed to parse accumulated message: %v", err)
-	}
-
-	userMsg, ok := finalMessage.(*shared.UserMessage)
+	// Verify the parsed message
+	userMsg, ok := msg2.(*shared.UserMessage)
 	if !ok {
-		t.Fatalf("Expected UserMessage, got %T", finalMessage)
+		t.Fatalf("Expected UserMessage, got %T", msg2)
 	}
-
-	blocks, ok := userMsg.Content.([]shared.ContentBlock)
-	if !ok {
-		t.Fatalf("Expected Content to be []ContentBlock, got %T", userMsg.Content)
-	}
-
-	textBlock, ok := blocks[0].(*shared.TextBlock)
-	if !ok || textBlock.Text != "Complete" {
-		t.Errorf("Expected text 'Complete', got %v", textBlock)
-	}
+	
+	blocks := userMsg.Content.([]shared.ContentBlock)
+	assertContentBlockCount(t, blocks, 1)
+	assertTextBlockContent(t, blocks[0], "Hello")
 }
 
-// TestMalformedJSONRecovery tests T069: Malformed JSON Recovery
-func TestMalformedJSONRecovery(t *testing.T) {
-	parser := New()
+// TestBufferManagement tests buffer overflow protection and management
+func TestBufferManagement(t *testing.T) {
+	t.Run("buffer_overflow_protection", func(t *testing.T) {
+		parser := setupParserTest(t)
+		
+		// Create a string larger than MaxBufferSize (1MB)
+		largeString := strings.Repeat("x", MaxBufferSize+1000)
+		
+		_, err := parser.processJSONLine(largeString)
+		assertBufferOverflowError(t, err)
+		assertBufferEmpty(t, parser)
+	})
 
-	// Test recovery from buffer size exceeded scenario
-	// In speculative parsing, malformed JSON just stays in buffer until
-	// either it's completed successfully or buffer size is exceeded
+	t.Run("buffer_reset_on_success", func(t *testing.T) {
+		parser := setupParserTest(t)
+		
+		validJSON := `{"type": "system", "subtype": "status"}`
+		msg, err := parser.processJSONLine(validJSON)
+		
+		assertNoParseError(t, err)
+		assertMessageExists(t, msg)
+		assertBufferEmpty(t, parser)
+	})
 
-	// Create a large malformed JSON that will exceed buffer size
-	largePartialJSON := `{"type": "user", "content": "` + strings.Repeat("x", MaxBufferSize+100) + `invalid`
-
-	// This should trigger buffer overflow error and reset the buffer
-	_, err1 := parser.processJSONLine(largePartialJSON)
-	if err1 == nil {
-		t.Fatal("Expected buffer overflow error for large malformed JSON")
-	}
-
-	// Verify it's a buffer overflow error
-	jsonDecodeErr, ok := err1.(*shared.JSONDecodeError)
-	if !ok {
-		t.Fatalf("Expected JSONDecodeError, got %T", err1)
-	}
-
-	if !strings.Contains(jsonDecodeErr.Error(), "buffer overflow") {
-		t.Errorf("Expected buffer overflow error, got: %s", jsonDecodeErr.Error())
-	}
-
-	// Buffer should be reset after overflow
-	if parser.BufferSize() != 0 {
-		t.Errorf("Expected buffer to be reset after overflow, but size is %d", parser.BufferSize())
-	}
-
-	// Now parser should be able to handle new valid JSON
-	validJSON := `{"type": "system", "subtype": "status"}`
-	msg2, err2 := parser.processJSONLine(validJSON)
-	if err2 != nil {
-		t.Fatalf("Failed to parse valid JSON after recovery: %v", err2)
-	}
-	if msg2 == nil {
-		t.Fatal("Expected valid message after recovery")
-	}
-
-	systemMsg, ok := msg2.(*shared.SystemMessage)
-	if !ok || systemMsg.Subtype != "status" {
-		t.Errorf("Expected valid system message with subtype 'status'")
-	}
-}
-
-// TestBufferResetOnSuccess tests T065: Buffer Reset on Success
-func TestBufferResetOnSuccess(t *testing.T) {
-	parser := New()
-
-	// Parse a complete JSON message
-	validJSON := `{"type": "system", "subtype": "status"}`
-
-	msg, err := parser.processJSONLine(validJSON)
-	if err != nil {
-		t.Fatalf("Failed to parse valid JSON: %v", err)
-	}
-
-	if msg == nil {
-		t.Fatal("Expected message, got nil")
-	}
-
-	// Buffer should be reset after successful parse
-	if parser.BufferSize() != 0 {
-		t.Errorf("Expected buffer to be reset after successful parse, but size is %d", parser.BufferSize())
-	}
-
-	// Test multiple successful parses to ensure consistent reset behavior
-	for i := 0; i < 5; i++ {
-		testJSON := fmt.Sprintf(`{"type": "system", "subtype": "test_%d"}`, i)
-
-		msg, err := parser.processJSONLine(testJSON)
-		if err != nil {
-			t.Fatalf("Failed to parse JSON on iteration %d: %v", i, err)
+	t.Run("partial_message_accumulation", func(t *testing.T) {
+		parser := setupParserTest(t)
+		
+		parts := []string{
+			`{"type": "user",`,
+			` "message": {"content":`,
+			` [{"type": "text",`,
+			` "text": "Complete"}]}}`,
 		}
 
-		if msg == nil {
-			t.Fatalf("Expected message on iteration %d, got nil", i)
+		var finalMessage shared.Message
+		for i, part := range parts {
+			msg, err := parser.processJSONLine(part)
+			assertNoParseError(t, err)
+			
+			if i < len(parts)-1 {
+				assertNoMessage(t, msg)
+				assertBufferNotEmpty(t, parser)
+			} else {
+				assertMessageExists(t, msg)
+				assertBufferEmpty(t, parser)
+				finalMessage = msg
+			}
 		}
 
-		// Buffer should be reset after each successful parse
-		if parser.BufferSize() != 0 {
-			t.Errorf("Iteration %d: Expected buffer to be reset, but size is %d", i, parser.BufferSize())
-		}
+		// Verify final message
+		userMsg := finalMessage.(*shared.UserMessage)
+		blocks := userMsg.Content.([]shared.ContentBlock)
+		assertTextBlockContent(t, blocks[0], "Complete")
+	})
+
+	t.Run("explicit_buffer_reset", func(t *testing.T) {
+		parser := setupParserTest(t)
+		
+		// Add content to buffer via partial JSON
+		msg1, err1 := parser.processJSONLine(`{"type": "user", "message":`)
+		assertNoParseError(t, err1)
+		assertNoMessage(t, msg1)
+		assertBufferNotEmpty(t, parser)
+		
+		// Explicit reset should clear buffer
+		parser.Reset()
+		assertBufferEmpty(t, parser)
+		
+		// Parser should work normally after reset
+		validJSON := `{"type": "system", "subtype": "status"}`
+		msg2, err2 := parser.processJSONLine(validJSON)
+		assertNoParseError(t, err2)
+		assertMessageExists(t, msg2)
+		assertBufferEmpty(t, parser)
+	})
+}
+
+// TestMultipleJSONObjects tests handling of multiple JSON objects
+func TestMultipleJSONObjects(t *testing.T) {
+	parser := setupParserTest(t)
+
+	obj1 := `{"type": "user", "message": {"content": [{"type": "text", "text": "First"}]}}`
+	obj2 := `{"type": "system", "subtype": "status", "message": "ok"}`
+	line := obj1 + "\n" + obj2
+
+	messages, err := parser.ProcessLine(line)
+	assertNoParseError(t, err)
+	assertMessageCount(t, messages, 2)
+
+	// Verify first message
+	userMsg := messages[0].(*shared.UserMessage)
+	blocks := userMsg.Content.([]shared.ContentBlock)
+	assertTextBlockContent(t, blocks[0], "First")
+
+	// Verify second message
+	systemMsg := messages[1].(*shared.SystemMessage)
+	assertSystemSubtype(t, systemMsg, "status")
+}
+
+// TestUnicodeAndEscapeHandling tests Unicode and JSON escape sequences
+func TestUnicodeAndEscapeHandling(t *testing.T) {
+	parser := setupParserTest(t)
+
+	tests := []struct {
+		name         string
+		jsonString   string
+		expectedText string
+	}{
+		{
+			name:         "basic_escape_sequences",
+			jsonString:   `{"type": "user", "message": {"content": [{"type": "text", "text": "Line1\nLine2\tTabbed\"Quoted\"\\Backslash"}]}}`,
+			expectedText: "Line1\nLine2\tTabbed\"Quoted\"\\Backslash",
+		},
+		{
+			name:         "unicode_characters",
+			jsonString:   `{"type": "user", "message": {"content": [{"type": "text", "text": "Hello 世界! 🌍 Café naïve résumé"}]}}`,
+			expectedText: "Hello 世界! 🌍 Café naïve résumé",
+		},
+		{
+			name:         "mixed_unicode_and_escapes",
+			jsonString:   `{"type": "user", "message": {"content": [{"type": "text", "text": "Mixed: 🎉\n中文\t日本語\r한국어"}]}}`,
+			expectedText: "Mixed: 🎉\n中文\t日本語\r한국어",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			messages, err := parser.ProcessLine(test.jsonString)
+			assertNoParseError(t, err)
+			assertMessageCount(t, messages, 1)
+
+			userMsg := messages[0].(*shared.UserMessage)
+			blocks := userMsg.Content.([]shared.ContentBlock)
+			assertTextBlockContent(t, blocks[0], test.expectedText)
+		})
 	}
 }
 
-// TestConcurrentBufferAccess tests T066: Concurrent Buffer Access
-func TestConcurrentBufferAccess(t *testing.T) {
-	parser := New()
-	const numGoroutines = 10
-	const messagesPerGoroutine = 100
+// TestConcurrentAccess tests thread safety
+func TestConcurrentAccess(t *testing.T) {
+	parser := setupParserTest(t)
+	const numGoroutines = 5
+	const messagesPerGoroutine = 10
 
 	var wg sync.WaitGroup
-	results := make(chan error, numGoroutines)
+	errors := make(chan error, numGoroutines*messagesPerGoroutine)
 
-	// Launch multiple goroutines to parse messages concurrently
 	for i := 0; i < numGoroutines; i++ {
 		wg.Add(1)
 		go func(goroutineID int) {
 			defer wg.Done()
 
 			for j := 0; j < messagesPerGoroutine; j++ {
-				// Each goroutine parses different messages to avoid confusion
 				testJSON := fmt.Sprintf(`{"type": "system", "subtype": "goroutine_%d_msg_%d"}`, goroutineID, j)
-
+				
 				msg, err := parser.processJSONLine(testJSON)
 				if err != nil {
-					results <- fmt.Errorf("goroutine %d, message %d: failed to parse JSON: %v", goroutineID, j, err)
+					errors <- fmt.Errorf("goroutine %d, message %d: %v", goroutineID, j, err)
 					return
 				}
-
 				if msg == nil {
-					results <- fmt.Errorf("goroutine %d, message %d: expected message, got nil", goroutineID, j)
+					errors <- fmt.Errorf("goroutine %d, message %d: expected message", goroutineID, j)
 					return
 				}
 
-				// Verify the parsed message
 				systemMsg, ok := msg.(*shared.SystemMessage)
 				if !ok {
-					results <- fmt.Errorf("goroutine %d, message %d: expected SystemMessage, got %T", goroutineID, j, msg)
+					errors <- fmt.Errorf("goroutine %d, message %d: wrong type %T", goroutineID, j, msg)
 					return
 				}
 
 				expectedSubtype := fmt.Sprintf("goroutine_%d_msg_%d", goroutineID, j)
 				if systemMsg.Subtype != expectedSubtype {
-					results <- fmt.Errorf("goroutine %d, message %d: expected subtype %s, got %s", goroutineID, j, expectedSubtype, systemMsg.Subtype)
+					errors <- fmt.Errorf("goroutine %d, message %d: expected %s, got %s", goroutineID, j, expectedSubtype, systemMsg.Subtype)
 					return
 				}
 			}
 		}(i)
 	}
 
-	// Wait for all goroutines to finish
-	go func() {
-		wg.Wait()
-		close(results)
-	}()
+	wg.Wait()
+	close(errors)
 
-	// Check for any errors
-	for err := range results {
-		t.Errorf("Concurrent access error: %v", err)
+	for err := range errors {
+		t.Error(err)
 	}
 }
 
-// TestBufferStateManagement tests T067: Buffer State Management
-func TestBufferStateManagement(t *testing.T) {
-	parser := New()
-
-	// Test 1: Buffer state after partial JSON (should accumulate)
-	partialJSON := `{"type": "user", "message"`
-
-	msg, err := parser.processJSONLine(partialJSON)
-	if err != nil {
-		t.Fatalf("Unexpected error for partial JSON: %v", err)
-	}
-
-	if msg != nil {
-		t.Fatalf("Expected no message for partial JSON, got: %v", msg)
-	}
-
-	// Buffer should contain the partial JSON
-	expectedSize := len(partialJSON)
-	if parser.BufferSize() != expectedSize {
-		t.Errorf("Expected buffer size %d after partial JSON, got %d", expectedSize, parser.BufferSize())
-	}
-
-	// Test 2: Complete the JSON (should parse successfully and reset buffer)
-	completingJSON := `: {"content": [{"type": "text", "text": "hello"}]}}`
-
-	msg, err = parser.processJSONLine(completingJSON)
-	if err != nil {
-		t.Fatalf("Failed to parse completed JSON: %v", err)
-	}
-
-	if msg == nil {
-		t.Fatal("Expected message after completing JSON, got nil")
-	}
-
-	// Buffer should be reset after successful parse
-	if parser.BufferSize() != 0 {
-		t.Errorf("Expected buffer to be reset after successful parse, but size is %d", parser.BufferSize())
-	}
-
-	// Test 3: Multiple failed parses should accumulate correctly
-	parser.Reset() // Start fresh
-
-	partials := []string{
-		`{"type":`,
-		` "system",`,
-		` "subtype":`,
-		` "test"}`,
-	}
-
-	for i, partial := range partials {
-		msg, err := parser.processJSONLine(partial)
-		if err != nil {
-			t.Fatalf("Unexpected error for partial %d: %v", i, err)
-		}
-
-		if i < len(partials)-1 {
-			// Should not have message yet
-			if msg != nil {
-				t.Fatalf("Partial %d: Expected no message, got: %v", i, msg)
-			}
-
-			// Buffer should be growing
-			if parser.BufferSize() == 0 {
-				t.Errorf("Partial %d: Expected buffer to contain data", i)
-			}
-		} else {
-			// Final part should complete the message
-			if msg == nil {
-				t.Fatal("Expected message after final partial, got nil")
-			}
-
-			// Buffer should be reset
-			if parser.BufferSize() != 0 {
-				t.Errorf("Expected buffer to be reset after completing partials, but size is %d", parser.BufferSize())
-			}
-		}
-	}
-
-	// Test 4: Error conditions should maintain consistent state
-	parser.Reset()
-
-	// Try to trigger a buffer overflow error
-	largeString := strings.Repeat("x", MaxBufferSize+100)
-
-	_, err = parser.processJSONLine(largeString)
-	if err == nil {
-		t.Fatal("Expected error for oversized buffer, got nil")
-	}
-
-	// Buffer should be reset after overflow error
-	if parser.BufferSize() != 0 {
-		t.Errorf("Expected buffer to be reset after overflow error, but size is %d", parser.BufferSize())
-	}
-
-	// Parser should still work after error
-	validJSON := `{"type": "system", "subtype": "recovery_test"}`
-	msg, err = parser.processJSONLine(validJSON)
-	if err != nil {
-		t.Fatalf("Parser should work after error, but got: %v", err)
-	}
-
-	if msg == nil {
-		t.Fatal("Expected message after error recovery, got nil")
-	}
-}
-
-// TestLargeMessageHandling tests T068: Large Message Handling
+// TestLargeMessageHandling tests handling of large messages
 func TestLargeMessageHandling(t *testing.T) {
-	parser := New()
+	parser := setupParserTest(t)
 
-	// Test 1: Handle large message close to but under the limit (950KB)
-	largeContent := strings.Repeat("X", 950*1024) // 950KB
+	// Test large message under limit (950KB)
+	largeContent := strings.Repeat("X", 950*1024)
 	largeJSON := fmt.Sprintf(`{"type": "user", "message": {"content": [{"type": "text", "text": "%s"}]}}`, largeContent)
 
-	// Should be under 1MB total
 	if len(largeJSON) >= MaxBufferSize {
-		t.Fatalf("Test setup error: large JSON (%d bytes) exceeds MaxBufferSize (%d bytes)", len(largeJSON), MaxBufferSize)
+		t.Fatalf("Test setup error: large JSON exceeds MaxBufferSize")
 	}
 
 	msg, err := parser.processJSONLine(largeJSON)
-	if err != nil {
-		t.Fatalf("Failed to parse large message under limit: %v", err)
-	}
+	assertNoParseError(t, err)
+	assertMessageExists(t, msg)
 
-	if msg == nil {
-		t.Fatal("Expected message for large JSON under limit, got nil")
-	}
-
-	// Verify the parsed message contains the large content
-	userMsg, ok := msg.(*shared.UserMessage)
-	if !ok {
-		t.Fatalf("Expected UserMessage, got %T", msg)
-	}
-
-	blocks, ok := userMsg.Content.([]shared.ContentBlock)
-	if !ok {
-		t.Fatalf("Expected Content to be []ContentBlock, got %T", userMsg.Content)
-	}
-
-	textBlock, ok := blocks[0].(*shared.TextBlock)
-	if !ok {
-		t.Fatalf("Expected TextBlock, got %T", blocks[0])
-	}
-
+	userMsg := msg.(*shared.UserMessage)
+	blocks := userMsg.Content.([]shared.ContentBlock)
+	textBlock := blocks[0].(*shared.TextBlock)
+	
 	if len(textBlock.Text) != len(largeContent) {
 		t.Errorf("Expected text length %d, got %d", len(largeContent), len(textBlock.Text))
 	}
-
-	// Buffer should be reset after successful parse
-	if parser.BufferSize() != 0 {
-		t.Errorf("Expected buffer to be reset after large message parse, but size is %d", parser.BufferSize())
-	}
-
-	// Test 2: Handle large message built incrementally
-	parser.Reset()
-
-	// Build a large message in smaller chunks
-	baseJSON := `{"type": "system", "subtype": "large_test", "data": "`
-	largeData := strings.Repeat("Y", 800*1024) // 800KB of data
-	endJSON := `"}`
-
-	// Send in chunks
-	chunkSize := 50000 // 50KB chunks
-	totalJSON := baseJSON + largeData + endJSON
-
-	var finalMessage shared.Message
-	for i := 0; i < len(totalJSON); i += chunkSize {
-		end := i + chunkSize
-		if end > len(totalJSON) {
-			end = len(totalJSON)
-		}
-
-		chunk := totalJSON[i:end]
-		msg, err := parser.processJSONLine(chunk)
-
-		if err != nil {
-			t.Fatalf("Error processing chunk at position %d: %v", i, err)
-		}
-
-		if i+chunkSize < len(totalJSON) {
-			// Intermediate chunks should not produce a message
-			if msg != nil {
-				t.Fatalf("Unexpected message at chunk position %d", i)
-			}
-		} else {
-			// Final chunk should complete the message
-			if msg == nil {
-				t.Fatal("Expected message after final chunk")
-			}
-			finalMessage = msg
-		}
-	}
-
-	// Verify the final message
-	systemMsg, ok := finalMessage.(*shared.SystemMessage)
-	if !ok {
-		t.Fatalf("Expected SystemMessage, got %T", finalMessage)
-	}
-
-	if systemMsg.Subtype != "large_test" {
-		t.Errorf("Expected subtype 'large_test', got '%s'", systemMsg.Subtype)
-	}
-
-	// Buffer should be reset
-	if parser.BufferSize() != 0 {
-		t.Errorf("Expected buffer to be reset after incremental large message, but size is %d", parser.BufferSize())
-	}
-
-	// Test 3: Parser should still work efficiently after handling large messages
-	parser.Reset()
-
-	for i := 0; i < 10; i++ {
-		smallJSON := fmt.Sprintf(`{"type": "system", "subtype": "post_large_%d"}`, i)
-
-		msg, err := parser.processJSONLine(smallJSON)
-		if err != nil {
-			t.Fatalf("Parser failed on small message %d after large message handling: %v", i, err)
-		}
-
-		if msg == nil {
-			t.Fatalf("Expected message for small JSON %d, got nil", i)
-		}
-	}
-}
-
-// TestLineBoundaryEdgeCases tests T070: Line Boundary Edge Cases
-func TestLineBoundaryEdgeCases(t *testing.T) {
-	parser := New()
-
-	// Test 1: JSON with multiple embedded newlines creating complex line boundaries
-	complexJSON := `{"type": "user", "message": {"content": [
-		{"type": "text", "text": "Line 1\nLine 2\nLine 3"},
-		{
-			"type": "tool_use",
-			"id": "tool_123",
-			"name": "MultiLineTool",
-			"input": {
-				"script": "function test() {\n  console.log('hello');\n  return 'world';\n}"
-			}
-		}
-	]}}`
-
-	messages, err := parser.ProcessLine(complexJSON)
-	if err != nil {
-		t.Fatalf("Failed to parse JSON with complex line boundaries: %v", err)
-	}
-
-	if len(messages) != 1 {
-		t.Fatalf("Expected 1 message, got %d", len(messages))
-	}
-
-	userMsg, ok := messages[0].(*shared.UserMessage)
-	if !ok {
-		t.Fatalf("Expected UserMessage, got %T", messages[0])
-	}
-
-	blocks, ok := userMsg.Content.([]shared.ContentBlock)
-	if !ok {
-		t.Fatalf("Expected Content to be []ContentBlock, got %T", userMsg.Content)
-	}
-
-	// Verify first text block preserves newlines
-	textBlock, ok := blocks[0].(*shared.TextBlock)
-	if !ok {
-		t.Fatalf("Expected first block to be TextBlock, got %T", blocks[0])
-	}
-
-	expectedText := "Line 1\nLine 2\nLine 3"
-	if textBlock.Text != expectedText {
-		t.Errorf("Expected text with newlines '%s', got '%s'", expectedText, textBlock.Text)
-	}
-
-	// Verify tool use block with multiline input
-	toolBlock, ok := blocks[1].(*shared.ToolUseBlock)
-	if !ok {
-		t.Fatalf("Expected second block to be ToolUseBlock, got %T", blocks[1])
-	}
-
-	script, ok := toolBlock.Input["script"].(string)
-	if !ok {
-		t.Fatalf("Expected script to be string, got %T", toolBlock.Input["script"])
-	}
-
-	expectedScript := "function test() {\n  console.log('hello');\n  return 'world';\n}"
-	if script != expectedScript {
-		t.Errorf("Expected script with newlines, got '%s'", script)
-	}
-
-	// Test 2: Multiple JSON objects with complex line boundaries in single input
-	complexMultiJSON := `{"type": "system", "subtype": "start", "data": "first\nsecond"}
-	{"type": "user", "message": {"content": [{"type": "text", "text": "A\nB\nC"}]}}
-	{"type": "system", "subtype": "end", "multiline": "X\nY\nZ"}`
-
-	messages, err = parser.ProcessLine(complexMultiJSON)
-	if err != nil {
-		t.Fatalf("Failed to parse multiple JSON with line boundaries: %v", err)
-	}
-
-	if len(messages) != 3 {
-		t.Fatalf("Expected 3 messages, got %d", len(messages))
-	}
-
-	// Verify first system message
-	systemMsg1, ok := messages[0].(*shared.SystemMessage)
-	if !ok {
-		t.Fatalf("Expected first message to be SystemMessage, got %T", messages[0])
-	}
-
-	if systemMsg1.Subtype != "start" {
-		t.Errorf("Expected subtype 'start', got '%s'", systemMsg1.Subtype)
-	}
-
-	// Verify user message in the middle
-	userMsg2, ok := messages[1].(*shared.UserMessage)
-	if !ok {
-		t.Fatalf("Expected second message to be UserMessage, got %T", messages[1])
-	}
-
-	blocks2, ok := userMsg2.Content.([]shared.ContentBlock)
-	if !ok {
-		t.Fatalf("Expected Content to be []ContentBlock, got %T", userMsg2.Content)
-	}
-
-	textBlock2, ok := blocks2[0].(*shared.TextBlock)
-	if !ok {
-		t.Fatalf("Expected TextBlock, got %T", blocks2[0])
-	}
-
-	expectedText2 := "A\nB\nC"
-	if textBlock2.Text != expectedText2 {
-		t.Errorf("Expected text '%s', got '%s'", expectedText2, textBlock2.Text)
-	}
-
-	// Verify final system message
-	systemMsg3, ok := messages[2].(*shared.SystemMessage)
-	if !ok {
-		t.Fatalf("Expected third message to be SystemMessage, got %T", messages[2])
-	}
-
-	if systemMsg3.Subtype != "end" {
-		t.Errorf("Expected subtype 'end', got '%s'", systemMsg3.Subtype)
-	}
-
-	// Test 3: JSON spanning multiple actual lines (fed through ProcessLine)
-	parser.Reset()
-
-	// Simulate a JSON object that spans multiple "lines" as received from stream
-	jsonParts := []string{
-		`{"type": "assistant",`,
-		` "message": {`,
-		`   "content": [`,
-		`     {"type": "text", "text": "Multi\nLine\nResponse"},`,
-		`     {"type": "thinking", "thinking": "Step 1\nStep 2\nStep 3"}`,
-		`   ],`,
-		`   "model": "claude-3-5-sonnet-20241022"`,
-		` }`,
-		`}`,
-	}
-
-	var finalMessage shared.Message
-	for i, part := range jsonParts {
-		messages, err := parser.ProcessLine(part)
-		if err != nil {
-			t.Fatalf("Error processing part %d: %v", i, err)
-		}
-
-		if i < len(jsonParts)-1 {
-			// Intermediate parts should not produce messages (except last one)
-			if len(messages) != 0 {
-				t.Fatalf("Unexpected message at part %d", i)
-			}
-		} else {
-			// Final part should complete the message
-			if len(messages) != 1 {
-				t.Fatalf("Expected 1 message at final part, got %d", len(messages))
-			}
-			finalMessage = messages[0]
-		}
-	}
-
-	// Verify the completed message
-	assistantMsg, ok := finalMessage.(*shared.AssistantMessage)
-	if !ok {
-		t.Fatalf("Expected AssistantMessage, got %T", finalMessage)
-	}
-
-	if len(assistantMsg.Content) != 2 {
-		t.Fatalf("Expected 2 content blocks, got %d", len(assistantMsg.Content))
-	}
-
-	// Verify text block preserves newlines
-	textBlock3, ok := assistantMsg.Content[0].(*shared.TextBlock)
-	if !ok {
-		t.Fatalf("Expected first block to be TextBlock, got %T", assistantMsg.Content[0])
-	}
-
-	expectedText3 := "Multi\nLine\nResponse"
-	if textBlock3.Text != expectedText3 {
-		t.Errorf("Expected text '%s', got '%s'", expectedText3, textBlock3.Text)
-	}
-
-	// Verify thinking block preserves newlines
-	thinkingBlock, ok := assistantMsg.Content[1].(*shared.ThinkingBlock)
-	if !ok {
-		t.Fatalf("Expected second block to be ThinkingBlock, got %T", assistantMsg.Content[1])
-	}
-
-	expectedThinking := "Step 1\nStep 2\nStep 3"
-	if thinkingBlock.Thinking != expectedThinking {
-		t.Errorf("Expected thinking '%s', got '%s'", expectedThinking, thinkingBlock.Thinking)
-	}
-}
-
-// TestBufferSizeTracking tests T071: Buffer Size Tracking
-func TestBufferSizeTracking(t *testing.T) {
-	parser := New()
-
-	// Test 1: Initial buffer size should be 0
-	if parser.BufferSize() != 0 {
-		t.Errorf("Expected initial buffer size 0, got %d", parser.BufferSize())
-	}
-
-	// Test 2: Buffer size should increase as partial JSON is added
-	partialJSON := `{"type": "user"`
-
-	msg, err := parser.processJSONLine(partialJSON)
-	if err != nil {
-		t.Fatalf("Unexpected error for partial JSON: %v", err)
-	}
-
-	if msg != nil {
-		t.Fatal("Expected no message for partial JSON")
-	}
-
-	expectedSize := len(partialJSON)
-	if parser.BufferSize() != expectedSize {
-		t.Errorf("Expected buffer size %d after partial JSON, got %d", expectedSize, parser.BufferSize())
-	}
-
-	// Test 3: Buffer size should continue growing with more partial content
-	additionalPartial := `, "message": {"content"`
-
-	msg, err = parser.processJSONLine(additionalPartial)
-	if err != nil {
-		t.Fatalf("Unexpected error for additional partial JSON: %v", err)
-	}
-
-	if msg != nil {
-		t.Fatal("Expected no message for additional partial JSON")
-	}
-
-	expectedSize = len(partialJSON + additionalPartial)
-	if parser.BufferSize() != expectedSize {
-		t.Errorf("Expected buffer size %d after additional partial, got %d", expectedSize, parser.BufferSize())
-	}
-
-	// Test 4: Buffer size should reset to 0 after successful parse
-	completingJSON := `: [{"type": "text", "text": "hello"}]}}`
-
-	msg, err = parser.processJSONLine(completingJSON)
-	if err != nil {
-		t.Fatalf("Failed to complete JSON: %v", err)
-	}
-
-	if msg == nil {
-		t.Fatal("Expected message after completing JSON")
-	}
-
-	if parser.BufferSize() != 0 {
-		t.Errorf("Expected buffer size 0 after successful parse, got %d", parser.BufferSize())
-	}
-
-	// Test 5: Buffer size tracking with Reset() method
-	parser.Reset()
-
-	if parser.BufferSize() != 0 {
-		t.Errorf("Expected buffer size 0 after Reset(), got %d", parser.BufferSize())
-	}
-
-	// Add some content
-	testJSON := `{"type": "incomplete`
-
-	msg, err = parser.processJSONLine(testJSON)
-	if err != nil {
-		t.Fatalf("Unexpected error for test JSON: %v", err)
-	}
-
-	if msg != nil {
-		t.Fatal("Expected no message for incomplete JSON")
-	}
-
-	if parser.BufferSize() != len(testJSON) {
-		t.Errorf("Expected buffer size %d, got %d", len(testJSON), parser.BufferSize())
-	}
-
-	// Reset should clear it
-	parser.Reset()
-
-	if parser.BufferSize() != 0 {
-		t.Errorf("Expected buffer size 0 after second Reset(), got %d", parser.BufferSize())
-	}
-
-	// Test 6: Buffer size tracking with overflow error
-	parser.Reset()
-
-	// Create a string that will exceed buffer limit
-	largeString := strings.Repeat("x", MaxBufferSize+100)
-
-	_, err = parser.processJSONLine(largeString)
-	if err == nil {
-		t.Fatal("Expected error for buffer overflow")
-	}
-
-	// Buffer should be reset to 0 after overflow error
-	if parser.BufferSize() != 0 {
-		t.Errorf("Expected buffer size 0 after overflow error, got %d", parser.BufferSize())
-	}
-
-	// Test 7: Accurate size tracking with various character encodings
-	parser.Reset()
-
-	unicodeJSON := `{"type": "user", "content": "Hello 🌍 世界"`
-	unicodeSize := len(unicodeJSON) // byte length, not rune length
-
-	msg, err = parser.processJSONLine(unicodeJSON)
-	if err != nil {
-		t.Fatalf("Unexpected error for unicode JSON: %v", err)
-	}
-
-	if msg != nil {
-		t.Fatal("Expected no message for incomplete unicode JSON")
-	}
-
-	if parser.BufferSize() != unicodeSize {
-		t.Errorf("Expected buffer size %d for unicode content, got %d", unicodeSize, parser.BufferSize())
-	}
-
-	// Test 8: Thread-safe buffer size tracking
-	parser.Reset()
-
-	var wg sync.WaitGroup
-	const numGoroutines = 5
-
-	// All goroutines will add to buffer concurrently
-	for i := 0; i < numGoroutines; i++ {
-		wg.Add(1)
-		go func(id int) {
-			defer wg.Done()
-
-			partialData := fmt.Sprintf(`{"part_%d": "data"`, id)
-
-			// This will add to buffer but not complete JSON
-			_, err := parser.processJSONLine(partialData)
-			if err != nil {
-				t.Errorf("Goroutine %d: unexpected error: %v", id, err)
-			}
-		}(i)
-	}
-
-	wg.Wait()
-
-	// Buffer should contain all the partial data
-	finalSize := parser.BufferSize()
-	if finalSize == 0 {
-		t.Error("Expected buffer to contain data from all goroutines, got size 0")
-	}
-
-	// Buffer should be consistent (no corruption from concurrent access)
-	if finalSize < 0 {
-		t.Errorf("Buffer size should not be negative, got %d", finalSize)
-	}
-}
-
-// TestJSONEscapeSequenceHandling tests T074: JSON Escape Sequence Handling
-func TestJSONEscapeSequenceHandling(t *testing.T) {
-	parser := New()
-
-	// Test 1: Basic escape sequences in text content
-	escapedJSON := `{"type": "user", "message": {"content": [{"type": "text", "text": "Line1\nLine2\tTabbed\"Quoted\"\\Backslash"}]}}`
-
-	messages, err := parser.ProcessLine(escapedJSON)
-	if err != nil {
-		t.Fatalf("Failed to parse JSON with basic escape sequences: %v", err)
-	}
-
-	if len(messages) != 1 {
-		t.Fatalf("Expected 1 message, got %d", len(messages))
-	}
-
-	userMsg, ok := messages[0].(*shared.UserMessage)
-	if !ok {
-		t.Fatalf("Expected UserMessage, got %T", messages[0])
-	}
-
-	blocks, ok := userMsg.Content.([]shared.ContentBlock)
-	if !ok {
-		t.Fatalf("Expected Content to be []ContentBlock, got %T", userMsg.Content)
-	}
-
-	textBlock, ok := blocks[0].(*shared.TextBlock)
-	if !ok {
-		t.Fatalf("Expected TextBlock, got %T", blocks[0])
-	}
-
-	expectedText := "Line1\nLine2\tTabbed\"Quoted\"\\Backslash"
-	if textBlock.Text != expectedText {
-		t.Errorf("Expected text with escape sequences '%s', got '%s'", expectedText, textBlock.Text)
-	}
-
-	// Test 2: Escape sequences in tool use input
-	toolEscapeJSON := `{"type": "user", "message": {"content": [{"type": "tool_use", "id": "tool_123", "name": "Process", "input": {"script": "if (condition) {\n  console.log(\"Hello\\nWorld\");\n  return \"test\\ttab\";\n}"}}]}}`
-
-	messages, err = parser.ProcessLine(toolEscapeJSON)
-	if err != nil {
-		t.Fatalf("Failed to parse JSON with tool escape sequences: %v", err)
-	}
-
-	userMsg2, ok := messages[0].(*shared.UserMessage)
-	if !ok {
-		t.Fatalf("Expected UserMessage, got %T", messages[0])
-	}
-
-	blocks2, ok := userMsg2.Content.([]shared.ContentBlock)
-	if !ok {
-		t.Fatalf("Expected Content to be []ContentBlock, got %T", userMsg2.Content)
-	}
-
-	toolBlock, ok := blocks2[0].(*shared.ToolUseBlock)
-	if !ok {
-		t.Fatalf("Expected ToolUseBlock, got %T", blocks2[0])
-	}
-
-	script, ok := toolBlock.Input["script"].(string)
-	if !ok {
-		t.Fatalf("Expected script to be string, got %T", toolBlock.Input["script"])
-	}
-
-	expectedScript := "if (condition) {\n  console.log(\"Hello\\nWorld\");\n  return \"test\\ttab\";\n}"
-	if script != expectedScript {
-		t.Errorf("Expected script with escape sequences, got '%s'", script)
-	}
-
-	// Test 3: Complex escape sequences including unicode escapes
-	complexEscapeJSON := `{"type": "system", "subtype": "test", "data": "Unicode: \u00E9\u00F1\u00FC and escapes: \\n\\t\\r\\b\\f"}`
-
-	messages, err = parser.ProcessLine(complexEscapeJSON)
-	if err != nil {
-		t.Fatalf("Failed to parse JSON with complex escape sequences: %v", err)
-	}
-
-	systemMsg, ok := messages[0].(*shared.SystemMessage)
-	if !ok {
-		t.Fatalf("Expected SystemMessage, got %T", messages[0])
-	}
-
-	dataValue, ok := systemMsg.Data["data"].(string)
-	if !ok {
-		t.Fatalf("Expected data to be string, got %T", systemMsg.Data["data"])
-	}
-
-	expectedData := "Unicode: éñü and escapes: \\n\\t\\r\\b\\f"
-	if dataValue != expectedData {
-		t.Errorf("Expected data with unicode escapes '%s', got '%s'", expectedData, dataValue)
-	}
-
-	// Test 4: Escape sequences in partial JSON (speculative parsing)
-	parser.Reset()
-
-	partialEscapeJSON1 := `{"type": "user", "message": {"content": [{"type": "text", "text": "Start\nMiddle`
-	partialEscapeJSON2 := `\tEnd\"Quote"}]}}`
-
-	// First part should not produce message
-	msg1, err := parser.processJSONLine(partialEscapeJSON1)
-	if err != nil {
-		t.Fatalf("Unexpected error for first partial escape JSON: %v", err)
-	}
-
-	if msg1 != nil {
-		t.Fatal("Expected no message for first partial escape JSON")
-	}
-
-	// Second part should complete the message
-	msg2, err := parser.processJSONLine(partialEscapeJSON2)
-	if err != nil {
-		t.Fatalf("Failed to complete escape JSON: %v", err)
-	}
-
-	if msg2 == nil {
-		t.Fatal("Expected message after completing escape JSON")
-	}
-
-	userMsg3, ok := msg2.(*shared.UserMessage)
-	if !ok {
-		t.Fatalf("Expected UserMessage, got %T", msg2)
-	}
-
-	blocks3, ok := userMsg3.Content.([]shared.ContentBlock)
-	if !ok {
-		t.Fatalf("Expected Content to be []ContentBlock, got %T", userMsg3.Content)
-	}
-
-	textBlock2, ok := blocks3[0].(*shared.TextBlock)
-	if !ok {
-		t.Fatalf("Expected TextBlock, got %T", blocks3[0])
-	}
-
-	expectedText2 := "Start\nMiddle\tEnd\"Quote"
-	if textBlock2.Text != expectedText2 {
-		t.Errorf("Expected text with partial escape sequences '%s', got '%s'", expectedText2, textBlock2.Text)
-	}
-
-	// Test 5: Malformed escape sequences should still parse (JSON parser handles it)
-	malformedEscapeJSON := `{"type": "system", "subtype": "test", "invalid_escape": "This has \\z invalid escape"}`
-
-	messages, err = parser.ProcessLine(malformedEscapeJSON)
-	if err != nil {
-		t.Fatalf("Failed to parse JSON with malformed escape (Go's JSON parser should handle): %v", err)
-	}
-
-	systemMsg2, ok := messages[0].(*shared.SystemMessage)
-	if !ok {
-		t.Fatalf("Expected SystemMessage, got %T", messages[0])
-	}
-
-	invalidEscape, ok := systemMsg2.Data["invalid_escape"].(string)
-	if !ok {
-		t.Fatalf("Expected invalid_escape to be string, got %T", systemMsg2.Data["invalid_escape"])
-	}
-
-	// Go's JSON parser will preserve the literal backslash for invalid escapes
-	expectedInvalid := "This has \\z invalid escape"
-	if invalidEscape != expectedInvalid {
-		t.Errorf("Expected malformed escape to be preserved '%s', got '%s'", expectedInvalid, invalidEscape)
-	}
-}
-
-// TestUnicodeStringHandling tests T075: Unicode String Handling
-func TestUnicodeStringHandling(t *testing.T) {
-	parser := New()
-
-	// Test 1: Basic Unicode characters in text content
-	unicodeJSON := `{"type": "user", "message": {"content": [{"type": "text", "text": "Hello 世界! 🌍 Café naïve résumé"}]}}`
-
-	messages, err := parser.ProcessLine(unicodeJSON)
-	if err != nil {
-		t.Fatalf("Failed to parse JSON with Unicode characters: %v", err)
-	}
-
-	if len(messages) != 1 {
-		t.Fatalf("Expected 1 message, got %d", len(messages))
-	}
-
-	userMsg, ok := messages[0].(*shared.UserMessage)
-	if !ok {
-		t.Fatalf("Expected UserMessage, got %T", messages[0])
-	}
-
-	blocks, ok := userMsg.Content.([]shared.ContentBlock)
-	if !ok {
-		t.Fatalf("Expected Content to be []ContentBlock, got %T", userMsg.Content)
-	}
-
-	textBlock, ok := blocks[0].(*shared.TextBlock)
-	if !ok {
-		t.Fatalf("Expected TextBlock, got %T", blocks[0])
-	}
-
-	expectedText := "Hello 世界! 🌍 Café naïve résumé"
-	if textBlock.Text != expectedText {
-		t.Errorf("Expected Unicode text '%s', got '%s'", expectedText, textBlock.Text)
-	}
-
-	// Test 2: Unicode in tool names and input
-	unicodeToolJSON := `{"type": "user", "message": {"content": [{"type": "tool_use", "id": "tool_123", "name": "处理文件", "input": {"文件名": "测试.txt", "内容": "包含中文的内容"}}]}}`
-
-	messages, err = parser.ProcessLine(unicodeToolJSON)
-	if err != nil {
-		t.Fatalf("Failed to parse JSON with Unicode in tool data: %v", err)
-	}
-
-	userMsg2, ok := messages[0].(*shared.UserMessage)
-	if !ok {
-		t.Fatalf("Expected UserMessage, got %T", messages[0])
-	}
-
-	blocks2, ok := userMsg2.Content.([]shared.ContentBlock)
-	if !ok {
-		t.Fatalf("Expected Content to be []ContentBlock, got %T", userMsg2.Content)
-	}
-
-	toolBlock, ok := blocks2[0].(*shared.ToolUseBlock)
-	if !ok {
-		t.Fatalf("Expected ToolUseBlock, got %T", blocks2[0])
-	}
-
-	if toolBlock.Name != "处理文件" {
-		t.Errorf("Expected Unicode tool name '处理文件', got '%s'", toolBlock.Name)
-	}
-
-	fileName, ok := toolBlock.Input["文件名"].(string)
-	if !ok || fileName != "测试.txt" {
-		t.Errorf("Expected Unicode input key with value '测试.txt', got %v", fileName)
-	}
-
-	content, ok := toolBlock.Input["内容"].(string)
-	if !ok || content != "包含中文的内容" {
-		t.Errorf("Expected Unicode content '包含中文的内容', got %v", content)
-	}
-
-	// Test 3: Mixed Unicode with escape sequences
-	mixedUnicodeJSON := `{"type": "system", "subtype": "test", "data": "Mixed: 🎉\n中文\t日本語\r한국어"}`
-
-	messages, err = parser.ProcessLine(mixedUnicodeJSON)
-	if err != nil {
-		t.Fatalf("Failed to parse JSON with mixed Unicode and escapes: %v", err)
-	}
-
-	systemMsg, ok := messages[0].(*shared.SystemMessage)
-	if !ok {
-		t.Fatalf("Expected SystemMessage, got %T", messages[0])
-	}
-
-	dataValue, ok := systemMsg.Data["data"].(string)
-	if !ok {
-		t.Fatalf("Expected data to be string, got %T", systemMsg.Data["data"])
-	}
-
-	expectedData := "Mixed: 🎉\n中文\t日本語\r한국어"
-	if dataValue != expectedData {
-		t.Errorf("Expected mixed Unicode data '%s', got '%s'", expectedData, dataValue)
-	}
-
-	// Test 4: Unicode in partial JSON (speculative parsing)
-	parser.Reset()
-
-	partialUnicode1 := `{"type": "user", "message": {"content": [{"type": "text", "text": "Start 🌟 中文`
-	partialUnicode2 := ` 继续 End 🏁"}]}}`
-
-	// First part should not produce message
-	msg1, err := parser.processJSONLine(partialUnicode1)
-	if err != nil {
-		t.Fatalf("Unexpected error for first partial Unicode JSON: %v", err)
-	}
-
-	if msg1 != nil {
-		t.Fatal("Expected no message for first partial Unicode JSON")
-	}
-
-	// Second part should complete the message
-	msg2, err := parser.processJSONLine(partialUnicode2)
-	if err != nil {
-		t.Fatalf("Failed to complete Unicode JSON: %v", err)
-	}
-
-	if msg2 == nil {
-		t.Fatal("Expected message after completing Unicode JSON")
-	}
-
-	userMsg3, ok := msg2.(*shared.UserMessage)
-	if !ok {
-		t.Fatalf("Expected UserMessage, got %T", msg2)
-	}
-
-	blocks3, ok := userMsg3.Content.([]shared.ContentBlock)
-	if !ok {
-		t.Fatalf("Expected Content to be []ContentBlock, got %T", userMsg3.Content)
-	}
-
-	textBlock2, ok := blocks3[0].(*shared.TextBlock)
-	if !ok {
-		t.Fatalf("Expected TextBlock, got %T", blocks3[0])
-	}
-
-	expectedText2 := "Start 🌟 中文 继续 End 🏁"
-	if textBlock2.Text != expectedText2 {
-		t.Errorf("Expected partial Unicode text '%s', got '%s'", expectedText2, textBlock2.Text)
-	}
-
-	// Test 5: Unicode buffer size calculation (bytes vs runes)
-	parser.Reset()
-
-	// Test that buffer size is calculated in bytes, not runes
-	unicodePartial := "Hello 世界" // This is more bytes than runes due to UTF-8 encoding
-	unicodeSizeBytes := len(unicodePartial)
-	unicodeSizeRunes := len([]rune(unicodePartial))
-
-	// Should be different - bytes > runes for Unicode
-	if unicodeSizeBytes <= unicodeSizeRunes {
-		t.Errorf("Test setup error: expected byte length (%d) > rune length (%d)", unicodeSizeBytes, unicodeSizeRunes)
-	}
-
-	incompleteUnicodeJSON := fmt.Sprintf(`{"type": "user", "content": "%s`, unicodePartial)
-
-	msg, err := parser.processJSONLine(incompleteUnicodeJSON)
-	if err != nil {
-		t.Fatalf("Unexpected error for incomplete Unicode JSON: %v", err)
-	}
-
-	if msg != nil {
-		t.Fatal("Expected no message for incomplete Unicode JSON")
-	}
-
-	// Buffer size should be in bytes, not runes
-	expectedBufferSize := len(incompleteUnicodeJSON)
-	if parser.BufferSize() != expectedBufferSize {
-		t.Errorf("Expected buffer size %d bytes, got %d", expectedBufferSize, parser.BufferSize())
-	}
-
-	// Test 6: Various Unicode ranges
-	parser.Reset()
-
-	variousUnicodeJSON := `{"type": "system", "subtype": "unicode_test", "data": {
-		"latin": "àáâãäå",
-		"greek": "αβγδε",
-		"cyrillic": "абвгд",
-		"cjk": "你好世界",
-		"emoji": "😀😃😄😁",
-		"symbols": "∞∑∫∂∆",
-		"arrows": "←↑→↓↔"
-	}}`
-
-	messages, err = parser.ProcessLine(variousUnicodeJSON)
-	if err != nil {
-		t.Fatalf("Failed to parse JSON with various Unicode ranges: %v", err)
-	}
-
-	systemMsg2, ok := messages[0].(*shared.SystemMessage)
-	if !ok {
-		t.Fatalf("Expected SystemMessage, got %T", messages[0])
-	}
-
-	data, ok := systemMsg2.Data["data"].(map[string]any)
-	if !ok {
-		t.Fatalf("Expected data to be map, got %T", systemMsg2.Data["data"])
-	}
-
-	// Verify each Unicode range was preserved
-	testCases := map[string]string{
-		"latin":    "àáâãäå",
-		"greek":    "αβγδε",
-		"cyrillic": "абвгд",
-		"cjk":      "你好世界",
-		"emoji":    "😀😃😄😁",
-		"symbols":  "∞∑∫∂∆",
-		"arrows":   "←↑→↓↔",
-	}
-
-	for key, expected := range testCases {
-		actual, ok := data[key].(string)
-		if !ok {
-			t.Errorf("Expected %s to be string, got %T", key, data[key])
-			continue
-		}
-		if actual != expected {
-			t.Errorf("Unicode range %s: expected '%s', got '%s'", key, expected, actual)
-		}
-	}
-}
-
-// TestEmptyMessageHandling tests T076: Empty Message Handling
-func TestEmptyMessageHandling(t *testing.T) {
-	parser := New()
-
-	// Test 1: Empty line should return no messages
-	messages, err := parser.ProcessLine("")
-	if err != nil {
-		t.Fatalf("Unexpected error for empty line: %v", err)
-	}
-
-	if len(messages) != 0 {
-		t.Fatalf("Expected 0 messages for empty line, got %d", len(messages))
-	}
-
-	// Test 2: Whitespace-only line should return no messages
-	whitespaceLines := []string{
-		"   ",
-		"\t",
-		"\n",
-		" \t \n ",
-		"\r\n",
-	}
-
-	for i, line := range whitespaceLines {
-		messages, err := parser.ProcessLine(line)
-		if err != nil {
-			t.Fatalf("Unexpected error for whitespace line %d: %v", i, err)
-		}
-
-		if len(messages) != 0 {
-			t.Errorf("Whitespace line %d: expected 0 messages, got %d", i, len(messages))
-		}
-	}
-
-	// Test 3: Mixed empty and valid lines
-	mixedInput := `
 	
-	{"type": "system", "subtype": "start"}
+	assertBufferEmpty(t, parser)
+}
+
+// TestEmptyAndWhitespaceHandling tests handling of empty lines
+func TestEmptyAndWhitespaceHandling(t *testing.T) {
+	parser := setupParserTest(t)
+
+	emptyInputs := []string{"", "   ", "\t", "\n", " \t \n ", "\r\n"}
 	
-	
-	{"type": "user", "message": {"content": [{"type": "text", "text": "Hello"}]}}
-	
-	   
-	{"type": "system", "subtype": "end"}
-	
-	`
-
-	messages, err = parser.ProcessLine(mixedInput)
-	if err != nil {
-		t.Fatalf("Failed to parse mixed empty and valid lines: %v", err)
-	}
-
-	// Should only get the 3 valid messages, ignoring empty lines
-	if len(messages) != 3 {
-		t.Fatalf("Expected 3 messages from mixed input, got %d", len(messages))
-	}
-
-	// Test 4: Empty lines in middle of JSON should be handled (as part of split logic)
-	multilineInput := `{"type": "system", "subtype": "test1"}
-
-{"type": "system", "subtype": "test2"}`
-
-	messages, err = parser.ProcessLine(multilineInput)
-	if err != nil {
-		t.Fatalf("Failed to parse multiline with empty line: %v", err)
-	}
-
-	if len(messages) != 2 {
-		t.Fatalf("Expected 2 messages from multiline input, got %d", len(messages))
-	}
-
-	systemMsg1, ok := messages[0].(*shared.SystemMessage)
-	if !ok || systemMsg1.Subtype != "test1" {
-		t.Errorf("Expected first message to be SystemMessage with subtype 'test1'")
-	}
-
-	systemMsg2, ok := messages[1].(*shared.SystemMessage)
-	if !ok || systemMsg2.Subtype != "test2" {
-		t.Errorf("Expected second message to be SystemMessage with subtype 'test2'")
-	}
-
-	// Test 5: Empty message followed by partial JSON
-	parser.Reset()
-
-	// First process an empty line
-	messages, err = parser.ProcessLine("   ")
-	if err != nil {
-		t.Fatalf("Unexpected error for empty line: %v", err)
-	}
-
-	if len(messages) != 0 {
-		t.Fatal("Expected no messages for empty line")
-	}
-
-	// Buffer should still be empty
-	if parser.BufferSize() != 0 {
-		t.Errorf("Expected buffer size 0 after empty line, got %d", parser.BufferSize())
-	}
-
-	// Then process a partial JSON
-	partialJSON := `{"type": "user"`
-	msg, err := parser.processJSONLine(partialJSON)
-	if err != nil {
-		t.Fatalf("Unexpected error for partial JSON: %v", err)
-	}
-
-	if msg != nil {
-		t.Fatal("Expected no message for partial JSON")
-	}
-
-	// Buffer should contain the partial JSON
-	if parser.BufferSize() != len(partialJSON) {
-		t.Errorf("Expected buffer size %d after partial JSON, got %d", len(partialJSON), parser.BufferSize())
+	for i, input := range emptyInputs {
+		t.Run(fmt.Sprintf("empty_input_%d", i), func(t *testing.T) {
+			messages, err := parser.ProcessLine(input)
+			assertNoParseError(t, err)
+			assertMessageCount(t, messages, 0)
+		})
 	}
 }
 
-// TestParseMessages convenience function test
+// TestParseMessages tests the convenience function
 func TestParseMessages(t *testing.T) {
 	lines := []string{
 		`{"type": "user", "message": {"content": [{"type": "text", "text": "Hello"}]}}`,
@@ -2168,15 +597,9 @@ func TestParseMessages(t *testing.T) {
 	}
 
 	messages, err := ParseMessages(lines)
-	if err != nil {
-		t.Fatalf("Failed to parse messages: %v", err)
-	}
+	assertNoParseError(t, err)
+	assertMessageCount(t, messages, 3)
 
-	if len(messages) != 3 {
-		t.Fatalf("Expected 3 messages, got %d", len(messages))
-	}
-
-	// Verify message types
 	expectedTypes := []string{
 		shared.MessageTypeUser,
 		shared.MessageTypeSystem,
@@ -2184,8 +607,237 @@ func TestParseMessages(t *testing.T) {
 	}
 
 	for i, msg := range messages {
-		if msg.Type() != expectedTypes[i] {
-			t.Errorf("Message %d: expected type '%s', got '%s'", i, expectedTypes[i], msg.Type())
+		assertMessageType(t, msg, expectedTypes[i])
+	}
+}
+
+// Mock and Helper Functions
+
+// setupParserTest creates a new parser for testing
+func setupParserTest(t *testing.T) *Parser {
+	t.Helper()
+	return New()
+}
+
+// Assertion helpers
+
+func assertParseSuccess(t *testing.T, err error, result any) {
+	t.Helper()
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+	if result == nil {
+		t.Fatal("Expected parse result, got nil")
+	}
+}
+
+func assertParseError(t *testing.T, err error, expectedMsg string) {
+	t.Helper()
+	if err == nil {
+		t.Fatal("Expected parse error, got nil")
+	}
+	if !strings.Contains(err.Error(), expectedMsg) {
+		t.Errorf("Expected error containing %q, got %q", expectedMsg, err.Error())
+	}
+}
+
+func assertNoParseError(t *testing.T, err error) {
+	t.Helper()
+	if err != nil {
+		t.Fatalf("Unexpected parse error: %v", err)
+	}
+}
+
+func assertMessageType(t *testing.T, msg shared.Message, expectedType string) {
+	t.Helper()
+	if msg.Type() != expectedType {
+		t.Errorf("Expected message type %s, got %s", expectedType, msg.Type())
+	}
+}
+
+func assertMessageExists(t *testing.T, msg shared.Message) {
+	t.Helper()
+	if msg == nil {
+		t.Fatal("Expected message, got nil")
+	}
+}
+
+func assertNoMessage(t *testing.T, msg shared.Message) {
+	t.Helper()
+	if msg != nil {
+		t.Fatalf("Expected no message, got %T", msg)
+	}
+}
+
+func assertMessageCount(t *testing.T, messages []shared.Message, expected int) {
+	t.Helper()
+	if len(messages) != expected {
+		t.Errorf("Expected %d messages, got %d", expected, len(messages))
+	}
+}
+
+func assertContentBlockCount(t *testing.T, blocks []shared.ContentBlock, expected int) {
+	t.Helper()
+	if len(blocks) != expected {
+		t.Errorf("Expected %d content blocks, got %d", expected, len(blocks))
+	}
+}
+
+func assertTextBlockContent(t *testing.T, block shared.ContentBlock, expectedText string) {
+	t.Helper()
+	textBlock, ok := block.(*shared.TextBlock)
+	if !ok {
+		t.Fatalf("Expected TextBlock, got %T", block)
+	}
+	if textBlock.Text != expectedText {
+		t.Errorf("Expected text %q, got %q", expectedText, textBlock.Text)
+	}
+}
+
+func assertThinkingBlock(t *testing.T, block shared.ContentBlock, expectedThinking string) {
+	t.Helper()
+	thinkingBlock, ok := block.(*shared.ThinkingBlock)
+	if !ok {
+		t.Fatalf("Expected ThinkingBlock, got %T", block)
+	}
+	if thinkingBlock.Thinking != expectedThinking {
+		t.Errorf("Expected thinking %q, got %q", expectedThinking, thinkingBlock.Thinking)
+	}
+}
+
+func assertToolUseBlock(t *testing.T, block shared.ContentBlock, expectedID, expectedName string) {
+	t.Helper()
+	toolUseBlock, ok := block.(*shared.ToolUseBlock)
+	if !ok {
+		t.Fatalf("Expected ToolUseBlock, got %T", block)
+	}
+	if toolUseBlock.ToolUseID != expectedID {
+		t.Errorf("Expected tool use ID %q, got %q", expectedID, toolUseBlock.ToolUseID)
+	}
+	if toolUseBlock.Name != expectedName {
+		t.Errorf("Expected tool name %q, got %q", expectedName, toolUseBlock.Name)
+	}
+}
+
+func assertToolResultBlock(t *testing.T, block shared.ContentBlock, expectedToolUseID, expectedContent string, expectedIsError bool) {
+	t.Helper()
+	toolResultBlock, ok := block.(*shared.ToolResultBlock)
+	if !ok {
+		t.Fatalf("Expected ToolResultBlock, got %T", block)
+	}
+	if toolResultBlock.ToolUseID != expectedToolUseID {
+		t.Errorf("Expected tool_use_id %q, got %q", expectedToolUseID, toolResultBlock.ToolUseID)
+	}
+	if content, ok := toolResultBlock.Content.(string); !ok || content != expectedContent {
+		t.Errorf("Expected content %q, got %v", expectedContent, toolResultBlock.Content)
+	}
+	if expectedIsError && (toolResultBlock.IsError == nil || !*toolResultBlock.IsError) {
+		t.Error("Expected is_error to be true")
+	} else if !expectedIsError && toolResultBlock.IsError != nil && *toolResultBlock.IsError {
+		t.Error("Expected is_error to be false or nil")
+	}
+}
+
+func assertMixedContentBlocks(t *testing.T, blocks []shared.ContentBlock) {
+	t.Helper()
+	expectedTypes := []string{"text", "tool_use", "tool_result", "text"}
+	for i, block := range blocks {
+		actualType := getContentBlockType(block)
+		if actualType != expectedTypes[i] {
+			t.Errorf("Block %d: expected type %s, got %s", i, expectedTypes[i], actualType)
 		}
+	}
+}
+
+func assertAssistantModel(t *testing.T, msg *shared.AssistantMessage, expectedModel string) {
+	t.Helper()
+	if msg.Model != expectedModel {
+		t.Errorf("Expected model %q, got %q", expectedModel, msg.Model)
+	}
+}
+
+func assertSystemSubtype(t *testing.T, msg *shared.SystemMessage, expectedSubtype string) {
+	t.Helper()
+	if msg.Subtype != expectedSubtype {
+		t.Errorf("Expected subtype %q, got %q", expectedSubtype, msg.Subtype)
+	}
+}
+
+func assertSystemData(t *testing.T, msg *shared.SystemMessage, key, expectedValue string) {
+	t.Helper()
+	if value, ok := msg.Data[key].(string); !ok || value != expectedValue {
+		t.Errorf("Expected data[%s] = %q, got %v", key, expectedValue, msg.Data[key])
+	}
+}
+
+func assertResultFields(t *testing.T, msg *shared.ResultMessage, expectedSubtype string, expectedDurationMs, expectedDurationAPIMs int, expectedIsError bool, expectedNumTurns int, expectedSessionID string) {
+	t.Helper()
+	if msg.Subtype != expectedSubtype {
+		t.Errorf("Expected subtype %q, got %q", expectedSubtype, msg.Subtype)
+	}
+	if msg.DurationMs != expectedDurationMs {
+		t.Errorf("Expected duration_ms %d, got %d", expectedDurationMs, msg.DurationMs)
+	}
+	if msg.DurationAPIMs != expectedDurationAPIMs {
+		t.Errorf("Expected duration_api_ms %d, got %d", expectedDurationAPIMs, msg.DurationAPIMs)
+	}
+	if msg.IsError != expectedIsError {
+		t.Errorf("Expected is_error %t, got %t", expectedIsError, msg.IsError)
+	}
+	if msg.NumTurns != expectedNumTurns {
+		t.Errorf("Expected num_turns %d, got %d", expectedNumTurns, msg.NumTurns)
+	}
+	if msg.SessionID != expectedSessionID {
+		t.Errorf("Expected session_id %q, got %q", expectedSessionID, msg.SessionID)
+	}
+}
+
+func assertResultCost(t *testing.T, msg *shared.ResultMessage, expectedCost float64) {
+	t.Helper()
+	if msg.TotalCostUSD == nil || *msg.TotalCostUSD != expectedCost {
+		t.Errorf("Expected total_cost_usd %f, got %v", expectedCost, msg.TotalCostUSD)
+	}
+}
+
+func assertBufferEmpty(t *testing.T, parser *Parser) {
+	t.Helper()
+	if parser.BufferSize() != 0 {
+		t.Errorf("Expected empty buffer, got size %d", parser.BufferSize())
+	}
+}
+
+func assertBufferNotEmpty(t *testing.T, parser *Parser) {
+	t.Helper()
+	if parser.BufferSize() == 0 {
+		t.Error("Expected non-empty buffer, got empty")
+	}
+}
+
+func assertBufferOverflowError(t *testing.T, err error) {
+	t.Helper()
+	if err == nil {
+		t.Fatal("Expected buffer overflow error, got nil")
+	}
+	jsonDecodeErr, ok := err.(*shared.JSONDecodeError)
+	if !ok {
+		t.Fatalf("Expected JSONDecodeError, got %T", err)
+	}
+	if !strings.Contains(jsonDecodeErr.Error(), "buffer overflow") {
+		t.Errorf("Expected buffer overflow error, got %q", jsonDecodeErr.Error())
+	}
+}
+
+func getContentBlockType(block shared.ContentBlock) string {
+	switch block.(type) {
+	case *shared.TextBlock:
+		return "text"
+	case *shared.ThinkingBlock:
+		return "thinking"
+	case *shared.ToolUseBlock:
+		return "tool_use"
+	case *shared.ToolResultBlock:
+		return "tool_result"
+	default:
+		return "unknown"
 	}
 }

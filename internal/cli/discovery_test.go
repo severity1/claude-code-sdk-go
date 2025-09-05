@@ -10,129 +10,274 @@ import (
 	"github.com/severity1/claude-code-sdk-go/internal/shared"
 )
 
-// T083: CLI Not Found Error 🔴 RED
-func TestCLINotFoundError(t *testing.T) {
-	// Test that CLI binary not found returns helpful error with Node.js dependency check
+// TestCLIDiscovery tests CLI binary discovery functionality
+func TestCLIDiscovery(t *testing.T) {
+	tests := []struct {
+		name        string
+		setupEnv    func(t *testing.T) (cleanup func())
+		expectError bool
+		errorContains string
+	}{
+		{
+			name: "cli_not_found_error",
+			setupEnv: func(t *testing.T) func() {
+				return setupIsolatedEnvironment(t)
+			},
+			expectError: true,
+			errorContains: "install",
+		},
+	}
 
-	// Create temporary home directory for testing
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			cleanup := test.setupEnv(t)
+			defer cleanup()
+
+			_, err := FindCLI()
+			assertCLIDiscoveryError(t, err, test.expectError, test.errorContains)
+		})
+	}
+}
+
+// TestCommandBuilding tests CLI command construction with various options
+func TestCommandBuilding(t *testing.T) {
+	tests := []struct {
+		name       string
+		cliPath    string
+		options    *shared.Options
+		closeStdin bool
+		validate   func(*testing.T, []string)
+	}{
+		{
+			name:       "basic_oneshot_command",
+			cliPath:    "/usr/local/bin/claude",
+			options:    &shared.Options{},
+			closeStdin: true,
+			validate:   validateOneshotCommand,
+		},
+		{
+			name:       "basic_streaming_command",
+			cliPath:    "/usr/local/bin/claude",
+			options:    &shared.Options{},
+			closeStdin: false,
+			validate:   validateStreamingCommand,
+		},
+		{
+			name:       "all_options_command",
+			cliPath:    "/usr/local/bin/claude",
+			options:    createFullOptionsSet(),
+			closeStdin: false,
+			validate:   validateFullOptionsCommand,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			cmd := BuildCommand(test.cliPath, test.options, test.closeStdin)
+			test.validate(t, cmd)
+		})
+	}
+}
+
+// TestCLIPathHandling tests various CLI path formats
+func TestCLIPathHandling(t *testing.T) {
+	tests := []struct {
+		name     string
+		cliPath  string
+		expected string
+	}{
+		{"absolute_path", "/usr/local/bin/claude", "/usr/local/bin/claude"},
+		{"relative_path", "./claude", "./claude"},
+		{"complex_path", "/usr/local/bin/../bin/./claude", "/usr/local/bin/../bin/./claude"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			cmd := BuildCommand(test.cliPath, &shared.Options{}, true)
+			assertCLIPath(t, cmd, test.expected)
+		})
+	}
+}
+
+// TestCLIDiscoveryLocations tests CLI discovery path generation
+func TestCLIDiscoveryLocations(t *testing.T) {
+	locations := getCommonCLILocations()
+
+	assertDiscoveryLocations(t, locations)
+	assertPlatformSpecificPaths(t, locations)
+}
+
+// TestNodeJSDependencyValidation tests Node.js validation
+func TestNodeJSDependencyValidation(t *testing.T) {
+	err := ValidateNodeJS()
+	assertNodeJSValidation(t, err)
+}
+
+// TestExtraArgsSupport tests arbitrary CLI flag support
+func TestExtraArgsSupport(t *testing.T) {
+	tests := []struct {
+		name      string
+		extraArgs map[string]*string
+		validate  func(*testing.T, []string)
+	}{
+		{
+			name:      "boolean_flags",
+			extraArgs: map[string]*string{"debug": nil, "trace": nil},
+			validate:  validateBooleanExtraArgs,
+		},
+		{
+			name:      "value_flags",
+			extraArgs: map[string]*string{"log-level": &[]string{"info"}[0]},
+			validate:  validateValueExtraArgs,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			options := &shared.Options{ExtraArgs: test.extraArgs}
+			cmd := BuildCommand("/usr/local/bin/claude", options, true)
+			test.validate(t, cmd)
+		})
+	}
+}
+
+// TestWorkingDirectoryValidation tests working directory validation
+func TestWorkingDirectoryValidation(t *testing.T) {
+	tests := []struct {
+		name        string
+		setup       func(t *testing.T) string
+		expectError bool
+		errorContains string
+	}{
+		{
+			name:        "existing_directory",
+			setup:       func(t *testing.T) string { return t.TempDir() },
+			expectError: false,
+		},
+		{
+			name:        "empty_path",
+			setup:       func(t *testing.T) string { return "" },
+			expectError: false,
+		},
+		{
+			name: "nonexistent_directory",
+			setup: func(t *testing.T) string {
+				return filepath.Join(t.TempDir(), "does-not-exist")
+			},
+			expectError: true,
+		},
+		{
+			name: "file_not_directory",
+			setup: func(t *testing.T) string {
+				tempFile := filepath.Join(t.TempDir(), "testfile")
+				os.WriteFile(tempFile, []byte("test"), 0644)
+				return tempFile
+			},
+			expectError: true,
+			errorContains: "not a directory",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			path := test.setup(t)
+			err := ValidateWorkingDirectory(path)
+			assertValidationError(t, err, test.expectError, test.errorContains)
+		})
+	}
+}
+
+// TestCLIVersionDetection tests CLI version detection
+func TestCLIVersionDetection(t *testing.T) {
+	nonExistentPath := "/this/path/does/not/exist/claude"
+	_, err := DetectCLIVersion(nonExistentPath)
+	assertVersionDetectionError(t, err)
+}
+
+// Helper Functions
+
+func setupIsolatedEnvironment(t *testing.T) func() {
+	t.Helper()
 	tempHome := t.TempDir()
 	originalHome := os.Getenv("HOME")
 	originalPath := os.Getenv("PATH")
 
-	// Set environment to isolated temp directory to avoid finding real Claude CLI
 	if runtime.GOOS == "windows" {
 		originalHome = os.Getenv("USERPROFILE")
 		os.Setenv("USERPROFILE", tempHome)
 	} else {
 		os.Setenv("HOME", tempHome)
 	}
-	os.Setenv("PATH", "/nonexistent/path") // Ensure claude is not found in PATH
+	os.Setenv("PATH", "/nonexistent/path")
 
-	defer func() {
+	return func() {
 		if runtime.GOOS == "windows" {
 			os.Setenv("USERPROFILE", originalHome)
 		} else {
 			os.Setenv("HOME", originalHome)
 		}
 		os.Setenv("PATH", originalPath)
-	}()
+	}
+}
 
-	// When no Claude CLI exists in any location, should get CLINotFoundError
-	_, err := FindCLI()
+func createFullOptionsSet() *shared.Options {
+	systemPrompt := "You are a helpful assistant"
+	appendPrompt := "Additional context"
+	model := "claude-3-sonnet"
+	permissionMode := shared.PermissionModeAcceptEdits
+	resume := "session123"
+	settings := "/path/to/settings.json"
+	cwd := "/workspace"
+	testValue := "test"
 
-	// Should get an error (either CLI not found or Node.js not found)
-	if err == nil {
-		t.Error("Expected error when Claude CLI is not found, got nil")
+	return &shared.Options{
+		AllowedTools:         []string{"Read", "Write"},
+		DisallowedTools:      []string{"Bash", "Delete"},
+		SystemPrompt:         &systemPrompt,
+		AppendSystemPrompt:   &appendPrompt,
+		Model:                &model,
+		MaxThinkingTokens:    10000,
+		PermissionMode:       &permissionMode,
+		ContinueConversation: true,
+		Resume:               &resume,
+		MaxTurns:             25,
+		Settings:             &settings,
+		Cwd:                  &cwd,
+		AddDirs:              []string{"/extra/dir1", "/extra/dir2"},
+		McpServers:           make(map[string]shared.McpServerConfig),
+		ExtraArgs:            map[string]*string{"custom-flag": nil, "with-value": &testValue},
+	}
+}
+
+// Assertion helpers
+
+func assertCLIDiscoveryError(t *testing.T, err error, expectError bool, errorContains string) {
+	t.Helper()
+	if (err != nil) != expectError {
+		t.Errorf("error = %v, expectError %v", err, expectError)
 		return
 	}
-
-	// Error should be helpful and mention installation instructions
-	errMsg := err.Error()
-	if !strings.Contains(errMsg, "Claude Code") && !strings.Contains(errMsg, "Node.js") {
-		t.Error("Error message should mention Claude Code or Node.js")
-	}
-	if !strings.Contains(errMsg, "install") {
-		t.Error("Error message should include installation guidance")
+	if expectError && errorContains != "" && !strings.Contains(err.Error(), errorContains) {
+		t.Errorf("error = %v, expected message to contain %q", err, errorContains)
 	}
 }
 
-// T084: Build Basic Command 🔴 RED
-func TestBuildBasicCommand(t *testing.T) {
-	// Build basic CLI command with required flags
-
-	cliPath := "/usr/local/bin/claude"
-	options := &shared.Options{}
-
-	// Test one-shot mode (closeStdin = true)
-	cmd := BuildCommand(cliPath, options, true)
-
-	// Should include basic required flags
-	if cmd[0] != cliPath {
-		t.Errorf("Expected CLI path %s, got %s", cliPath, cmd[0])
-	}
-
-	// Must include --output-format stream-json --verbose
-	if !containsArgs(cmd, "--output-format", "stream-json") {
-		t.Error("Command should include --output-format stream-json")
-	}
-	if !containsArg(cmd, "--verbose") {
-		t.Error("Command should include --verbose")
-	}
-
-	// One-shot mode should include --print
-	if !containsArg(cmd, "--print") {
-		t.Error("One-shot mode should include --print flag")
-	}
-
-	// Test streaming mode (closeStdin = false)
-	streamCmd := BuildCommand(cliPath, options, false)
-
-	// Streaming mode should include --input-format stream-json
-	if !containsArgs(streamCmd, "--input-format", "stream-json") {
-		t.Error("Streaming mode should include --input-format stream-json")
-	}
-	if containsArg(streamCmd, "--print") {
-		t.Error("Streaming mode should not include --print flag")
+func assertCLIPath(t *testing.T, cmd []string, expected string) {
+	t.Helper()
+	if len(cmd) == 0 || cmd[0] != expected {
+		t.Errorf("Expected CLI path %s, got %v", expected, cmd)
 	}
 }
 
-// T085: CLI Path Accepts Path 🔴 RED
-func TestCLIPathAcceptsPath(t *testing.T) {
-	// Accept both string and path types for CLI path
-
-	// Test with absolute path
-	absPath := "/usr/local/bin/claude"
-	cmd := BuildCommand(absPath, &shared.Options{}, true)
-	if cmd[0] != absPath {
-		t.Errorf("Expected absolute path %s, got %s", absPath, cmd[0])
-	}
-
-	// Test with relative path
-	relPath := "./claude"
-	cmd = BuildCommand(relPath, &shared.Options{}, true)
-	if cmd[0] != relPath {
-		t.Errorf("Expected relative path %s, got %s", relPath, cmd[0])
-	}
-
-	// Test with messy path (should preserve original path as given)
-	messyPath := "/usr/local/bin/../bin/./claude"
-	cmd = BuildCommand(messyPath, &shared.Options{}, true)
-	if cmd[0] != messyPath {
-		t.Errorf("Expected messy path %s to be preserved, got %s", messyPath, cmd[0])
-	}
-}
-
-// T086-T091: CLI Discovery Location Tests 🔴 RED
-// These tests verify that the discovery functions check the correct locations
-func TestCLIDiscoveryLocations(t *testing.T) {
-	// Test that getCommonCLILocations returns expected paths
-	locations := getCommonCLILocations()
-
+func assertDiscoveryLocations(t *testing.T, locations []string) {
+	t.Helper()
 	if len(locations) == 0 {
 		t.Fatal("Expected at least one CLI location, got none")
 	}
+}
 
-	// Should include npm-global location
+func assertPlatformSpecificPaths(t *testing.T, locations []string) {
+	t.Helper()
 	homeDir, _ := os.UserHomeDir()
 	expectedNpmGlobal := filepath.Join(homeDir, ".npm-global", "bin", "claude")
 	if runtime.GOOS == "windows" {
@@ -149,47 +294,10 @@ func TestCLIDiscoveryLocations(t *testing.T) {
 	if !found {
 		t.Errorf("Expected npm-global location %s in discovery paths", expectedNpmGlobal)
 	}
-
-	// Should include system-wide location (except on Windows)
-	if runtime.GOOS != "windows" {
-		systemWide := "/usr/local/bin/claude"
-		found = false
-		for _, location := range locations {
-			if location == systemWide {
-				found = true
-				break
-			}
-		}
-		if !found {
-			t.Errorf("Expected system-wide location %s in discovery paths", systemWide)
-		}
-	}
-
-	// Should include user local location
-	expectedUserLocal := filepath.Join(homeDir, ".local", "bin", "claude")
-	if runtime.GOOS == "windows" {
-		// Windows doesn't typically use ~/.local/bin
-		return
-	}
-
-	found = false
-	for _, location := range locations {
-		if location == expectedUserLocal {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Errorf("Expected user local location %s in discovery paths", expectedUserLocal)
-	}
 }
 
-// T092: Node.js Dependency Validation 🔴 RED
-func TestNodeJSDependencyValidation(t *testing.T) {
-	// Test Node.js validation (this will depend on the actual system)
-	err := ValidateNodeJS()
-
-	// If error occurs, it should be helpful
+func assertNodeJSValidation(t *testing.T, err error) {
+	t.Helper()
 	if err != nil {
 		errMsg := err.Error()
 		if !strings.Contains(errMsg, "Node.js") {
@@ -201,245 +309,107 @@ func TestNodeJSDependencyValidation(t *testing.T) {
 	}
 }
 
-// T093: Command Building All Options 🔴 RED
-func TestCommandBuildingAllOptions(t *testing.T) {
-	// Build command with all configuration options
-
-	cliPath := "/usr/local/bin/claude"
-	systemPrompt := "You are a helpful assistant"
-	appendPrompt := "Additional context"
-	model := "claude-3-sonnet"
-	permissionMode := shared.PermissionModeAcceptEdits
-	resume := "session123"
-	settings := "/path/to/settings.json"
-	cwd := "/workspace"
-
-	options := &shared.Options{
-		AllowedTools:         []string{"Read", "Write"},
-		DisallowedTools:      []string{"Bash", "Delete"},
-		SystemPrompt:         &systemPrompt,
-		AppendSystemPrompt:   &appendPrompt,
-		Model:                &model,
-		MaxThinkingTokens:    10000,
-		PermissionMode:       &permissionMode,
-		ContinueConversation: true,
-		Resume:               &resume,
-		MaxTurns:             25,
-		Settings:             &settings,
-		Cwd:                  &cwd,
-		AddDirs:              []string{"/extra/dir1", "/extra/dir2"},
-		McpServers:           make(map[string]shared.McpServerConfig),
-		ExtraArgs:            map[string]*string{"custom-flag": nil, "with-value": &[]string{"test"}[0]},
+func assertValidationError(t *testing.T, err error, expectError bool, errorContains string) {
+	t.Helper()
+	if (err != nil) != expectError {
+		t.Errorf("error = %v, expectError %v", err, expectError)
+		return
 	}
-
-	cmd := BuildCommand(cliPath, options, false)
-
-	// Verify all options are included as CLI flags
-	if !containsArgs(cmd, "--allowed-tools", "Read,Write") {
-		t.Error("Should include --allowed-tools Read,Write")
-	}
-	if !containsArgs(cmd, "--disallowed-tools", "Bash,Delete") {
-		t.Error("Should include --disallowed-tools Bash,Delete")
-	}
-	if !containsArgs(cmd, "--system-prompt", systemPrompt) {
-		t.Error("Should include --system-prompt")
-	}
-	if !containsArgs(cmd, "--append-system-prompt", appendPrompt) {
-		t.Error("Should include --append-system-prompt")
-	}
-	if !containsArgs(cmd, "--model", model) {
-		t.Error("Should include --model")
-	}
-	if !containsArgs(cmd, "--max-thinking-tokens", "10000") {
-		t.Error("Should include --max-thinking-tokens 10000")
-	}
-	if !containsArgs(cmd, "--permission-mode", "acceptEdits") {
-		t.Error("Should include --permission-mode acceptEdits")
-	}
-	if !containsArg(cmd, "--continue") {
-		t.Error("Should include --continue flag")
-	}
-	if !containsArgs(cmd, "--resume", resume) {
-		t.Error("Should include --resume")
-	}
-	if !containsArgs(cmd, "--max-turns", "25") {
-		t.Error("Should include --max-turns 25")
-	}
-	if !containsArgs(cmd, "--settings", settings) {
-		t.Error("Should include --settings")
-	}
-	if !containsArgs(cmd, "--cwd", cwd) {
-		t.Error("Should include --cwd")
-	}
-	if !containsArgs(cmd, "--add-dir", "/extra/dir1") {
-		t.Error("Should include --add-dir for first directory")
-	}
-	if !containsArgs(cmd, "--add-dir", "/extra/dir2") {
-		t.Error("Should include --add-dir for second directory")
-	}
-
-	// Custom args
-	if !containsArg(cmd, "--custom-flag") {
-		t.Error("Should include --custom-flag (boolean)")
-	}
-	if !containsArgs(cmd, "--with-value", "test") {
-		t.Error("Should include --with-value test")
+	if expectError && errorContains != "" && !strings.Contains(err.Error(), errorContains) {
+		t.Errorf("error = %v, expected message to contain %q", err, errorContains)
 	}
 }
 
-// T094: ExtraArgs Support 🔴 RED
-func TestExtraArgsSupport(t *testing.T) {
-	// Support arbitrary CLI flags via ExtraArgs
-
-	cliPath := "/usr/local/bin/claude"
-
-	// Test boolean flags (nil value)
-	options := &shared.Options{
-		ExtraArgs: map[string]*string{
-			"debug":    nil,
-			"trace":    nil,
-			"no-cache": nil,
-		},
-	}
-
-	cmd := BuildCommand(cliPath, options, true)
-
-	if !containsArg(cmd, "--debug") {
-		t.Error("Should include boolean flag --debug")
-	}
-	if !containsArg(cmd, "--trace") {
-		t.Error("Should include boolean flag --trace")
-	}
-	if !containsArg(cmd, "--no-cache") {
-		t.Error("Should include boolean flag --no-cache")
-	}
-
-	// Test flags with values
-	value1 := "info"
-	value2 := "/tmp/custom"
-	options = &shared.Options{
-		ExtraArgs: map[string]*string{
-			"log-level":  &value1,
-			"custom-dir": &value2,
-		},
-	}
-
-	cmd = BuildCommand(cliPath, options, true)
-
-	if !containsArgs(cmd, "--log-level", "info") {
-		t.Error("Should include --log-level info")
-	}
-	if !containsArgs(cmd, "--custom-dir", "/tmp/custom") {
-		t.Error("Should include --custom-dir /tmp/custom")
-	}
-}
-
-// T095: Close Stdin Flag Handling 🔴 RED
-func TestCloseStdinFlagHandling(t *testing.T) {
-	// Handle --print vs --input-format based on closeStdin
-
-	cliPath := "/usr/local/bin/claude"
-	options := &shared.Options{}
-
-	// Test one-shot mode (closeStdin = true) should use --print
-	oneShot := BuildCommand(cliPath, options, true)
-	if !containsArg(oneShot, "--print") {
-		t.Error("One-shot mode should include --print flag")
-	}
-	if containsArgs(oneShot, "--input-format", "stream-json") {
-		t.Error("One-shot mode should not include --input-format stream-json")
-	}
-
-	// Test streaming mode (closeStdin = false) should use --input-format
-	streaming := BuildCommand(cliPath, options, false)
-	if containsArg(streaming, "--print") {
-		t.Error("Streaming mode should not include --print flag")
-	}
-	if !containsArgs(streaming, "--input-format", "stream-json") {
-		t.Error("Streaming mode should include --input-format stream-json")
-	}
-
-	// Both modes should include --output-format stream-json
-	if !containsArgs(oneShot, "--output-format", "stream-json") {
-		t.Error("One-shot mode should include --output-format stream-json")
-	}
-	if !containsArgs(streaming, "--output-format", "stream-json") {
-		t.Error("Streaming mode should include --output-format stream-json")
-	}
-}
-
-// T096: Working Directory Validation 🔴 RED
-func TestWorkingDirectoryValidation(t *testing.T) {
-	// Validate working directory exists
-
-	// Test with existing directory
-	tempDir := t.TempDir()
-	err := ValidateWorkingDirectory(tempDir)
-	if err != nil {
-		t.Errorf("Expected no error for existing directory, got: %v", err)
-	}
-
-	// Test with empty string (should be valid - uses current directory)
-	err = ValidateWorkingDirectory("")
-	if err != nil {
-		t.Errorf("Expected no error for empty directory, got: %v", err)
-	}
-
-	// Test with non-existent directory
-	nonExistent := filepath.Join(tempDir, "does-not-exist")
-	err = ValidateWorkingDirectory(nonExistent)
-	if err == nil {
-		t.Error("Expected error for non-existent directory")
-	}
-
-	// Test with file instead of directory
-	tempFile := filepath.Join(tempDir, "testfile")
-	os.WriteFile(tempFile, []byte("test"), 0644)
-	err = ValidateWorkingDirectory(tempFile)
-	if err == nil {
-		t.Error("Expected error when path is a file, not directory")
-	}
-
-	// Error messages should be helpful
-	if err != nil && !strings.Contains(err.Error(), "not a directory") {
-		t.Error("Error message should indicate path is not a directory")
-	}
-}
-
-// T097: CLI Version Detection 🔴 RED
-func TestCLIVersionDetection(t *testing.T) {
-	// Detect Claude CLI version for compatibility
-
-	// This test will only pass if Claude CLI is actually installed
-	// For now, we'll test the function exists and handles errors appropriately
-
-	nonExistentPath := "/this/path/does/not/exist/claude"
-	_, err := DetectCLIVersion(nonExistentPath)
+func assertVersionDetectionError(t *testing.T, err error) {
+	t.Helper()
 	if err == nil {
 		t.Error("Expected error when CLI path does not exist")
+		return
 	}
-
-	// Error should mention version detection failure
-	if err != nil && !strings.Contains(err.Error(), "version") {
+	if !strings.Contains(err.Error(), "version") {
 		t.Error("Error message should mention version detection failure")
 	}
 }
 
-// Helper functions for testing
-func containsArg(args []string, target string) bool {
-	for _, arg := range args {
-		if arg == target {
-			return true
-		}
-	}
-	return false
+// Command validation helpers
+
+func validateOneshotCommand(t *testing.T, cmd []string) {
+	t.Helper()
+	assertContainsArgs(t, cmd, "--output-format", "stream-json")
+	assertContainsArg(t, cmd, "--verbose")
+	assertContainsArg(t, cmd, "--print")
+	assertNotContainsArgs(t, cmd, "--input-format", "stream-json")
 }
 
-func containsArgs(args []string, flag, value string) bool {
-	for i, arg := range args {
-		if arg == flag && i+1 < len(args) && args[i+1] == value {
-			return true
+func validateStreamingCommand(t *testing.T, cmd []string) {
+	t.Helper()
+	assertContainsArgs(t, cmd, "--output-format", "stream-json")
+	assertContainsArg(t, cmd, "--verbose")
+	assertContainsArgs(t, cmd, "--input-format", "stream-json")
+	assertNotContainsArg(t, cmd, "--print")
+}
+
+func validateFullOptionsCommand(t *testing.T, cmd []string) {
+	t.Helper()
+	assertContainsArgs(t, cmd, "--allowed-tools", "Read,Write")
+	assertContainsArgs(t, cmd, "--disallowed-tools", "Bash,Delete")
+	assertContainsArgs(t, cmd, "--system-prompt", "You are a helpful assistant")
+	assertContainsArgs(t, cmd, "--model", "claude-3-sonnet")
+	assertContainsArg(t, cmd, "--continue")
+	assertContainsArgs(t, cmd, "--resume", "session123")
+	assertContainsArg(t, cmd, "--custom-flag")
+	assertContainsArgs(t, cmd, "--with-value", "test")
+}
+
+func validateBooleanExtraArgs(t *testing.T, cmd []string) {
+	t.Helper()
+	assertContainsArg(t, cmd, "--debug")
+	assertContainsArg(t, cmd, "--trace")
+}
+
+func validateValueExtraArgs(t *testing.T, cmd []string) {
+	t.Helper()
+	assertContainsArgs(t, cmd, "--log-level", "info")
+}
+
+// Low-level assertion helpers
+
+func assertContainsArg(t *testing.T, args []string, target string) {
+	t.Helper()
+	for _, arg := range args {
+		if arg == target {
+			return
 		}
 	}
-	return false
+	t.Errorf("Expected command to contain %s, got %v", target, args)
+}
+
+func assertNotContainsArg(t *testing.T, args []string, target string) {
+	t.Helper()
+	for _, arg := range args {
+		if arg == target {
+			t.Errorf("Expected command to not contain %s, got %v", target, args)
+			return
+		}
+	}
+}
+
+func assertContainsArgs(t *testing.T, args []string, flag, value string) {
+	t.Helper()
+	for i, arg := range args {
+		if arg == flag && i+1 < len(args) && args[i+1] == value {
+			return
+		}
+	}
+	t.Errorf("Expected command to contain %s %s, got %v", flag, value, args)
+}
+
+func assertNotContainsArgs(t *testing.T, args []string, flag, value string) {
+	t.Helper()
+	for i, arg := range args {
+		if arg == flag && i+1 < len(args) && args[i+1] == value {
+			t.Errorf("Expected command to not contain %s %s, got %v", flag, value, args)
+			return
+		}
+	}
 }

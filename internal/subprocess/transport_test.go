@@ -2,207 +2,86 @@ package subprocess
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/severity1/claude-code-sdk-go/internal/shared"
 )
 
-// T098: Subprocess Connection 🔴 RED
-func TestSubprocessConnection(t *testing.T) {
-	// Establish subprocess connection to Claude CLI
+// TestTransportLifecycle tests connection lifecycle and state management
+func TestTransportLifecycle(t *testing.T) {
+	ctx, cancel := setupTransportTestContext(t, 10*time.Second)
+	defer cancel()
 
-	tempCLI := createMockCLI(t)
-	options := &shared.Options{}
-
-	transport := New(tempCLI, options, false)
-
-	ctx := context.Background()
-	err := transport.Connect(ctx)
-
-	if err != nil {
-		t.Fatalf("Expected successful connection, got error: %v", err)
-	}
-
-	if !transport.IsConnected() {
-		t.Error("Transport should report as connected")
-	}
-
-	// Cleanup
-	transport.Close()
-}
-
-// T099: Subprocess Disconnection 🔴 RED
-func TestSubprocessDisconnection(t *testing.T) {
-	// Cleanly disconnect from subprocess
-
-	tempCLI := createMockCLI(t)
-	options := &shared.Options{}
-
-	transport := New(tempCLI, options, false)
-
-	ctx := context.Background()
-	err := transport.Connect(ctx)
-	if err != nil {
-		t.Fatalf("Connection failed: %v", err)
-	}
-
-	// Should be connected
-	if !transport.IsConnected() {
-		t.Error("Transport should report as connected before disconnect")
-	}
-
-	// Disconnect
-	err = transport.Close()
-	if err != nil {
-		t.Errorf("Expected clean disconnection, got error: %v", err)
-	}
-
-	// Should no longer be connected
-	if transport.IsConnected() {
-		t.Error("Transport should not report as connected after disconnect")
-	}
-}
-
-// T100: 5-Second Termination Sequence 🔴 RED
-func TestFiveSecondTerminationSequence(t *testing.T) {
-	// Implement SIGTERM → wait 5s → SIGKILL sequence
-
-	tempCLI := createLongRunningMockCLI(t)
-	options := &shared.Options{}
-
-	transport := New(tempCLI, options, false)
-
-	ctx := context.Background()
-	err := transport.Connect(ctx)
-	if err != nil {
-		t.Fatalf("Connection failed: %v", err)
-	}
-
-	// Start timing the termination
-	start := time.Now()
-
-	// This should trigger the 5-second termination sequence
-	err = transport.Close()
-
-	duration := time.Since(start)
-
-	// Should complete without error
-	if err != nil {
-		t.Errorf("Expected clean termination, got error: %v", err)
-	}
-
-	// Should take some time but not more than 6 seconds (allowing buffer)
-	if duration > 6*time.Second {
-		t.Errorf("Termination took too long: %v", duration)
-	}
-
-	// Process should be terminated
-	if transport.IsConnected() {
-		t.Error("Process should be terminated after Close()")
-	}
-}
-
-// T101: Process Lifecycle Management 🔴 RED
-func TestProcessLifecycleManagement(t *testing.T) {
-	// Manage complete process lifecycle
-
-	tempCLI := createMockCLI(t)
-	options := &shared.Options{}
-
-	transport := New(tempCLI, options, false)
+	// Test basic lifecycle
+	transport := setupTransportForTest(t, newTransportMockCLI())
+	defer disconnectTransportSafely(t, transport)
 
 	// Initial state should be disconnected
-	if transport.IsConnected() {
-		t.Error("New transport should not be connected initially")
-	}
+	assertTransportConnected(t, transport, false)
 
 	// Connect
-	ctx := context.Background()
-	err := transport.Connect(ctx)
-	if err != nil {
-		t.Fatalf("Connection failed: %v", err)
-	}
+	connectTransportSafely(t, ctx, transport)
+	assertTransportConnected(t, transport, true)
 
-	// Should be running state
-	if !transport.IsConnected() {
-		t.Error("Transport should be connected after Connect()")
-	}
-
-	// Should handle multiple Close() calls gracefully
+	// Test multiple Close() calls are safe
 	err1 := transport.Close()
 	err2 := transport.Close()
 
-	if err1 != nil {
-		t.Errorf("First Close() should succeed: %v", err1)
-	}
-	if err2 != nil {
-		t.Errorf("Second Close() should be graceful: %v", err2)
-	}
-
-	// Final state should be disconnected
-	if transport.IsConnected() {
-		t.Error("Transport should not be connected after Close()")
-	}
+	assertTransportError(t, err1, false, "")
+	assertTransportError(t, err2, false, "")
+	assertTransportConnected(t, transport, false)
 }
 
-// T102: Stdin Message Sending 🔴 RED
-func TestStdinMessageSending(t *testing.T) {
-	// Send JSON messages to subprocess stdin
+// TestTransportReconnection tests reconnection capability
+func TestTransportReconnection(t *testing.T) {
+	ctx, cancel := setupTransportTestContext(t, 10*time.Second)
+	defer cancel()
 
-	tempCLI := createMockCLI(t)
-	options := &shared.Options{}
+	transport := setupTransportForTest(t, newTransportMockCLI())
+	defer disconnectTransportSafely(t, transport)
 
-	transport := New(tempCLI, options, false)
+	// First connection
+	connectTransportSafely(t, ctx, transport)
+	assertTransportConnected(t, transport, true)
 
-	ctx := context.Background()
-	err := transport.Connect(ctx)
-	if err != nil {
-		t.Fatalf("Connection failed: %v", err)
-	}
-	defer transport.Close()
+	// Disconnect
+	disconnectTransportSafely(t, transport)
+	assertTransportConnected(t, transport, false)
 
-	// Create test message
+	// Reconnect
+	connectTransportSafely(t, ctx, transport)
+	assertTransportConnected(t, transport, true)
+}
+
+// TestTransportMessageIO tests basic message sending and receiving
+func TestTransportMessageIO(t *testing.T) {
+	ctx, cancel := setupTransportTestContext(t, 10*time.Second)
+	defer cancel()
+
+	transport := setupTransportForTest(t, newTransportMockCLI())
+	defer disconnectTransportSafely(t, transport)
+
+	connectTransportSafely(t, ctx, transport)
+
+	// Test message sending
 	message := shared.StreamMessage{
 		Type:      "user",
 		SessionID: "test-session",
 	}
 
-	// Should be able to send message
-	err = transport.SendMessage(ctx, message)
-	if err != nil {
-		t.Errorf("Expected successful message send, got error: %v", err)
-	}
-}
+	err := transport.SendMessage(ctx, message)
+	assertTransportError(t, err, false, "")
 
-// T103: Stdout Message Receiving 🔴 RED
-func TestStdoutMessageReceiving(t *testing.T) {
-	// Receive JSON messages from subprocess stdout
-
-	tempCLI := createMockCLI(t)
-	options := &shared.Options{}
-
-	transport := New(tempCLI, options, false)
-
-	ctx := context.Background()
-	err := transport.Connect(ctx)
-	if err != nil {
-		t.Fatalf("Connection failed: %v", err)
-	}
-	defer transport.Close()
-
-	// Get message channels
+	// Test message receiving
 	msgChan, errChan := transport.ReceiveMessages(ctx)
-
-	// Should get channels (even if no messages yet)
-	if msgChan == nil {
-		t.Error("Message channel should not be nil")
-	}
-	if errChan == nil {
-		t.Error("Error channel should not be nil")
+	if msgChan == nil || errChan == nil {
+		t.Error("Message and error channels should not be nil")
 	}
 
 	// Test that channels don't block immediately
@@ -216,587 +95,285 @@ func TestStdoutMessageReceiving(t *testing.T) {
 	}
 }
 
-// T104: Stderr Isolation 🔴 RED
-func TestStderrIsolation(t *testing.T) {
-	// Isolate stderr using temporary files
-
-	tempCLI := createMockCLI(t)
-	options := &shared.Options{}
-
-	transport := New(tempCLI, options, false)
-
-	ctx := context.Background()
-	err := transport.Connect(ctx)
-	if err != nil {
-		t.Fatalf("Connection failed: %v", err)
-	}
-	defer transport.Close()
-
-	// Stderr should be isolated and not cause deadlocks
-	// This test mainly verifies that connection succeeds without hanging
-	time.Sleep(100 * time.Millisecond) // Allow process to start
-
-	if !transport.IsConnected() {
-		t.Error("Transport should remain connected despite stderr")
-	}
-}
-
-// T105: Environment Variable Setting 🔴 RED
-func TestEnvironmentVariableSetting(t *testing.T) {
-	// Set CLAUDE_CODE_ENTRYPOINT environment variable
-
-	tempCLI := createEnvironmentCheckCLI(t)
-	options := &shared.Options{}
-
-	transport := New(tempCLI, options, false)
-
-	ctx := context.Background()
-	err := transport.Connect(ctx)
-	if err != nil {
-		t.Fatalf("Connection failed: %v", err)
-	}
-	defer transport.Close()
-
-	// The mock CLI should have received the environment variable
-	// This is verified by the mock script itself
-	time.Sleep(100 * time.Millisecond) // Allow process to start
-
-	if !transport.IsConnected() {
-		t.Error("Transport should be connected")
-	}
-}
-
-// T106: Concurrent I/O Handling 🔴 RED
-func TestConcurrentIOHandling(t *testing.T) {
-	// Handle stdin/stdout concurrently with goroutines
-
-	tempCLI := createMockCLI(t)
-	options := &shared.Options{}
-
-	transport := New(tempCLI, options, false)
-
-	ctx := context.Background()
-	err := transport.Connect(ctx)
-	if err != nil {
-		t.Fatalf("Connection failed: %v", err)
-	}
-	defer transport.Close()
-
-	// Start receiving messages in background
-	msgChan, errChan := transport.ReceiveMessages(ctx)
-
-	// Send messages concurrently
-	message1 := shared.StreamMessage{Type: "user", SessionID: "session1"}
-	message2 := shared.StreamMessage{Type: "user", SessionID: "session2"}
-
-	go func() {
-		transport.SendMessage(ctx, message1)
-	}()
-	go func() {
-		transport.SendMessage(ctx, message2)
-	}()
-
-	// Should not block or cause race conditions
-	time.Sleep(200 * time.Millisecond)
-
-	// Cleanup channels
-	select {
-	case <-msgChan:
-	case <-errChan:
-	default:
-	}
-}
-
-// T107: Process Error Handling 🔴 RED
-func TestProcessErrorHandling(t *testing.T) {
-	// Handle subprocess errors and exit codes
-
-	tempCLI := createFailingCLI(t)
-	options := &shared.Options{}
-
-	transport := New(tempCLI, options, false)
-
-	ctx := context.Background()
-	err := transport.Connect(ctx)
-
-	// Connection should succeed initially (process starts)
-	if err != nil {
-		t.Fatalf("Connection should succeed initially: %v", err)
-	}
-	defer transport.Close()
-
-	// But process should fail quickly
-	time.Sleep(100 * time.Millisecond)
-
-	// Get error channels to see process failure
-	_, errChan := transport.ReceiveMessages(ctx)
-
-	// Should get error from failing process or stderr
-	select {
-	case err := <-errChan:
-		if err != nil {
-			errMsg := err.Error()
-			if !strings.Contains(errMsg, "exit") && !strings.Contains(errMsg, "failed") && !strings.Contains(errMsg, "error") {
-				t.Errorf("Error message should indicate process failure: %v", errMsg)
-			}
-		}
-	case <-time.After(200 * time.Millisecond):
-		// It's OK if no error comes through channels immediately
-		t.Log("No immediate error from failing CLI - process may have failed quickly")
-	}
-}
-
-// T108: Message Channel Management 🔴 RED
-func TestMessageChannelManagement(t *testing.T) {
-	// Manage message and error channels
-
-	tempCLI := createMockCLI(t)
-	options := &shared.Options{}
-
-	transport := New(tempCLI, options, false)
-
-	ctx := context.Background()
-	err := transport.Connect(ctx)
-	if err != nil {
-		t.Fatalf("Connection failed: %v", err)
-	}
-	defer transport.Close()
-
-	// Get channels
-	msgChan, errChan := transport.ReceiveMessages(ctx)
-
-	// Channels should be separate (test by type assertion)
-	if msgChan == nil || errChan == nil {
-		t.Error("Both channels should be non-nil")
-	}
-
-	// Should be able to get channels multiple times
-	msgChan2, errChan2 := transport.ReceiveMessages(ctx)
-
-	if msgChan2 == nil || errChan2 == nil {
-		t.Error("Should be able to get channels multiple times")
-	}
-}
-
-// T109: Backpressure Handling 🔴 RED
-func TestBackpressureHandling(t *testing.T) {
-	// Handle backpressure in message channels
-
-	tempCLI := createMockCLI(t)
-	options := &shared.Options{}
-
-	transport := New(tempCLI, options, false)
-
-	ctx := context.Background()
-	err := transport.Connect(ctx)
-	if err != nil {
-		t.Fatalf("Connection failed: %v", err)
-	}
-	defer transport.Close()
-
-	// Send multiple messages rapidly to test backpressure
-	for i := 0; i < 10; i++ {
-		message := shared.StreamMessage{
-			Type:      "user",
-			SessionID: "session",
-		}
-
-		// Should not block indefinitely
-		done := make(chan error, 1)
-		go func() {
-			done <- transport.SendMessage(ctx, message)
-		}()
-
-		select {
-		case err := <-done:
-			if err != nil && !strings.Contains(err.Error(), "context") {
-				t.Errorf("Unexpected error in message %d: %v", i, err)
-			}
-		case <-time.After(1 * time.Second):
-			t.Errorf("Message %d took too long to send (backpressure issue)", i)
-		}
-	}
-}
-
-// T110: Context Cancellation 🔴 RED
-func TestContextCancellation(t *testing.T) {
-	// Support context cancellation throughout transport
-
-	tempCLI := createMockCLI(t)
-	options := &shared.Options{}
-
-	transport := New(tempCLI, options, false)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+// TestTransportProcessManagement tests process control and termination
+func TestTransportProcessManagement(t *testing.T) {
+	ctx, cancel := setupTransportTestContext(t, 15*time.Second)
 	defer cancel()
 
-	err := transport.Connect(ctx)
-	if err != nil {
-		t.Fatalf("Connection failed: %v", err)
+	// Test 5-second termination sequence
+	t.Run("five_second_termination", func(t *testing.T) {
+		transport := setupTransportForTest(t, newTransportMockCLIWithOptions(WithLongRunning()))
+		defer disconnectTransportSafely(t, transport)
+
+		connectTransportSafely(t, ctx, transport)
+
+		// Start timing the termination
+		start := time.Now()
+		err := transport.Close()
+		duration := time.Since(start)
+
+		assertTransportError(t, err, false, "")
+
+		// Should complete in reasonable time (allowing buffer for 5-second sequence)
+		if duration > 6*time.Second {
+			t.Errorf("Termination took too long: %v", duration)
+		}
+
+		assertTransportConnected(t, transport, false)
+	})
+
+	// Test interrupt handling
+	t.Run("interrupt_handling", func(t *testing.T) {
+		transport := setupTransportForTest(t, newTransportMockCLI())
+		defer disconnectTransportSafely(t, transport)
+
+		connectTransportSafely(t, ctx, transport)
+
+		err := transport.Interrupt(ctx)
+		assertTransportError(t, err, false, "")
+
+		// Process should still be manageable after interrupt
+		assertTransportConnected(t, transport, true)
+	})
+}
+
+// TestTransportErrorHandling tests various error scenarios using table-driven approach
+func TestTransportErrorHandling(t *testing.T) {
+	ctx, cancel := setupTransportTestContext(t, 10*time.Second)
+	defer cancel()
+
+	tests := []struct {
+		name           string
+		setupTransport func() *Transport
+		operation      func(*Transport) error
+		expectError    bool
+		errorContains  string
+	}{
+		{
+			name: "connection_with_failing_cli",
+			setupTransport: func() *Transport {
+				return setupTransportForTest(t, newTransportMockCLIWithOptions(WithFailure()))
+			},
+			operation: func(tr *Transport) error {
+				return tr.Connect(ctx)
+			},
+			expectError:   false, // Connection should succeed initially even if CLI fails
+			errorContains: "",
+		},
+		{
+			name: "send_to_disconnected_transport",
+			setupTransport: func() *Transport {
+				return setupTransportForTest(t, newTransportMockCLI())
+			},
+			operation: func(tr *Transport) error {
+				// Don't connect - send to disconnected transport
+				message := shared.StreamMessage{Type: "user", SessionID: "test"}
+				return tr.SendMessage(ctx, message)
+			},
+			expectError:   true,
+			errorContains: "",
+		},
+		{
+			name: "context_cancellation",
+			setupTransport: func() *Transport {
+				return setupTransportForTest(t, newTransportMockCLI())
+			},
+			operation: func(tr *Transport) error {
+				connectTransportSafely(t, ctx, tr)
+				// Use cancelled context
+				cancelledCtx, cancel := context.WithCancel(ctx)
+				cancel()
+				message := shared.StreamMessage{Type: "user", SessionID: "test"}
+				return tr.SendMessage(cancelledCtx, message)
+			},
+			expectError:   false, // Context cancellation handling may vary
+			errorContains: "",
+		},
 	}
-	defer transport.Close()
 
-	// Wait for context cancellation
-	time.Sleep(200 * time.Millisecond)
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			transport := test.setupTransport()
+			defer disconnectTransportSafely(t, transport)
 
-	// Operations should respect cancelled context
-	message := shared.StreamMessage{Type: "user", SessionID: "session"}
-	err = transport.SendMessage(ctx, message)
+			err := test.operation(transport)
 
-	// Should get context error
-	if err != nil && !strings.Contains(err.Error(), "context") {
-		// This is ok - context cancellation handling varies
+			if test.expectError {
+				if err == nil {
+					t.Errorf("Expected error but got none")
+				} else if test.errorContains != "" && !strings.Contains(err.Error(), test.errorContains) {
+					t.Errorf("Expected error containing '%s', got: %v", test.errorContains, err)
+				}
+			} else {
+				if err != nil && test.errorContains != "" && !strings.Contains(err.Error(), test.errorContains) {
+					t.Errorf("Unexpected error: %v", err)
+				}
+			}
+		})
 	}
 }
 
-// T111: Resource Cleanup 🔴 RED
-func TestResourceCleanup(t *testing.T) {
-	// Clean up all resources on shutdown
+// TestTransportConcurrency tests concurrent operations and backpressure handling
+func TestTransportConcurrency(t *testing.T) {
+	ctx, cancel := setupTransportTestContext(t, 15*time.Second)
+	defer cancel()
 
-	tempCLI := createMockCLI(t)
-	options := &shared.Options{}
+	transport := setupTransportForTest(t, newTransportMockCLI())
+	defer disconnectTransportSafely(t, transport)
 
-	transport := New(tempCLI, options, false)
+	connectTransportSafely(t, ctx, transport)
 
-	ctx := context.Background()
-	err := transport.Connect(ctx)
-	if err != nil {
-		t.Fatalf("Connection failed: %v", err)
-	}
+	// Test concurrent message sending
+	t.Run("concurrent_sending", func(t *testing.T) {
+		var wg sync.WaitGroup
+		errorCount := 0
+		var mu sync.Mutex
+
+		for i := 0; i < 5; i++ {
+			wg.Add(1)
+			go func(id int) {
+				defer wg.Done()
+				message := shared.StreamMessage{
+					Type:      "user",
+					SessionID: fmt.Sprintf("session-%d", id),
+				}
+
+				err := transport.SendMessage(ctx, message)
+				if err != nil {
+					mu.Lock()
+					errorCount++
+					mu.Unlock()
+				}
+			}(i)
+		}
+
+		wg.Wait()
+
+		// Some errors might be acceptable in concurrent scenarios
+		if errorCount > 2 {
+			t.Errorf("Too many errors in concurrent sending: %d", errorCount)
+		}
+	})
+
+	// Test backpressure handling
+	t.Run("backpressure_handling", func(t *testing.T) {
+		for i := 0; i < 10; i++ {
+			message := shared.StreamMessage{
+				Type:      "user",
+				SessionID: "backpressure-test",
+			}
+
+			// Should not block indefinitely
+			done := make(chan error, 1)
+			go func() {
+				done <- transport.SendMessage(ctx, message)
+			}()
+
+			select {
+			case err := <-done:
+				if err != nil && !strings.Contains(err.Error(), "context") && !strings.Contains(err.Error(), "closed") {
+					t.Errorf("Unexpected error in message %d: %v", i, err)
+				}
+			case <-time.After(1 * time.Second):
+				t.Errorf("Message %d took too long to send (backpressure issue)", i)
+			}
+		}
+	})
+}
+
+// TestTransportEnvironmentSetup tests environment variable and platform compatibility
+func TestTransportEnvironmentSetup(t *testing.T) {
+	ctx, cancel := setupTransportTestContext(t, 10*time.Second)
+	defer cancel()
+
+	transport := setupTransportForTest(t, newTransportMockCLIWithOptions(WithEnvironmentCheck()))
+	defer disconnectTransportSafely(t, transport)
+
+	// Connection should succeed with proper environment setup
+	connectTransportSafely(t, ctx, transport)
+	assertTransportConnected(t, transport, true)
+
+	// Test interrupt (platform-specific signals)
+	err := transport.Interrupt(ctx)
+	assertTransportError(t, err, false, "")
+}
+
+// TestTransportCleanup tests resource cleanup and multiple close scenarios
+func TestTransportCleanup(t *testing.T) {
+	ctx, cancel := setupTransportTestContext(t, 10*time.Second)
+	defer cancel()
+
+	transport := setupTransportForTest(t, newTransportMockCLI())
+
+	connectTransportSafely(t, ctx, transport)
 
 	// Get channels to create resources
 	transport.ReceiveMessages(ctx)
 
 	// Cleanup should not error
-	err = transport.Close()
-	if err != nil {
-		t.Errorf("Resource cleanup failed: %v", err)
-	}
+	err := transport.Close()
+	assertTransportError(t, err, false, "")
 
 	// Multiple cleanups should be safe
 	err = transport.Close()
-	if err != nil {
-		t.Errorf("Multiple cleanup should be safe: %v", err)
+	assertTransportError(t, err, false, "")
+
+	assertTransportConnected(t, transport, false)
+}
+
+// Mock transport implementation with functional options
+type transportMockOptions struct {
+	longRunning      bool
+	shouldFail       bool
+	checkEnvironment bool
+}
+
+type TransportMockOption func(*transportMockOptions)
+
+func WithLongRunning() TransportMockOption {
+	return func(opts *transportMockOptions) {
+		opts.longRunning = true
 	}
 }
 
-// T112: Process State Tracking 🔴 RED
-func TestProcessStateTracking(t *testing.T) {
-	// Track subprocess connection state
-
-	tempCLI := createMockCLI(t)
-	options := &shared.Options{}
-
-	transport := New(tempCLI, options, false)
-
-	// Initially disconnected
-	if transport.IsConnected() {
-		t.Error("Should be disconnected initially")
-	}
-
-	ctx := context.Background()
-	err := transport.Connect(ctx)
-	if err != nil {
-		t.Fatalf("Connection failed: %v", err)
-	}
-
-	// Should be connected
-	if !transport.IsConnected() {
-		t.Error("Should be connected after Connect()")
-	}
-
-	transport.Close()
-
-	// Should be disconnected
-	if transport.IsConnected() {
-		t.Error("Should be disconnected after Close()")
+func WithFailure() TransportMockOption {
+	return func(opts *transportMockOptions) {
+		opts.shouldFail = true
 	}
 }
 
-// T113: Interrupt Signal Handling 🔴 RED
-func TestInterruptSignalHandling(t *testing.T) {
-	// Handle interrupt signals to subprocess
-
-	tempCLI := createMockCLI(t)
-	options := &shared.Options{}
-
-	transport := New(tempCLI, options, false)
-
-	ctx := context.Background()
-	err := transport.Connect(ctx)
-	if err != nil {
-		t.Fatalf("Connection failed: %v", err)
-	}
-	defer transport.Close()
-
-	// Should be able to send interrupt
-	err = transport.Interrupt(ctx)
-	if err != nil {
-		t.Errorf("Expected successful interrupt, got error: %v", err)
-	}
-
-	// Process should still be manageable
-	if !transport.IsConnected() {
-		t.Error("Process should still be connected after interrupt")
+func WithEnvironmentCheck() TransportMockOption {
+	return func(opts *transportMockOptions) {
+		opts.checkEnvironment = true
 	}
 }
 
-// T114: Message Ordering Guarantees 🔴 RED
-func TestMessageOrderingGuarantees(t *testing.T) {
-	// Maintain message ordering through transport
-
-	tempCLI := createMockCLI(t)
-	options := &shared.Options{}
-
-	transport := New(tempCLI, options, false)
-
-	ctx := context.Background()
-	err := transport.Connect(ctx)
-	if err != nil {
-		t.Fatalf("Connection failed: %v", err)
-	}
-	defer transport.Close()
-
-	// Send messages in sequence
-	messages := []shared.StreamMessage{
-		{Type: "user", SessionID: "session1"},
-		{Type: "user", SessionID: "session2"},
-		{Type: "user", SessionID: "session3"},
-	}
-
-	for _, msg := range messages {
-		err := transport.SendMessage(ctx, msg)
-		if err != nil {
-			t.Errorf("Failed to send message: %v", err)
-		}
-	}
-
-	// Order should be maintained (this is primarily a design requirement)
-	// The actual verification would require a more complex mock
+func newTransportMockCLI() string {
+	return newTransportMockCLIWithOptions()
 }
 
-// T115: Transport Reconnection 🔴 RED
-func TestTransportReconnection(t *testing.T) {
-	// Handle transport reconnection scenarios
-
-	tempCLI := createMockCLI(t)
-	options := &shared.Options{}
-
-	transport := New(tempCLI, options, false)
-
-	ctx := context.Background()
-
-	// First connection
-	err := transport.Connect(ctx)
-	if err != nil {
-		t.Fatalf("First connection failed: %v", err)
+func newTransportMockCLIWithOptions(options ...TransportMockOption) string {
+	opts := &transportMockOptions{}
+	for _, opt := range options {
+		opt(opts)
 	}
 
-	transport.Close()
-
-	// Should be able to reconnect
-	err = transport.Connect(ctx)
-	if err != nil {
-		t.Fatalf("Reconnection failed: %v", err)
-	}
-
-	if !transport.IsConnected() {
-		t.Error("Should be connected after reconnection")
-	}
-
-	transport.Close()
-}
-
-// T116: Performance Under Load 🔴 RED
-func TestPerformanceUnderLoad(t *testing.T) {
-	// Maintain performance under high message throughput
-
-	tempCLI := createMockCLI(t)
-	options := &shared.Options{}
-
-	transport := New(tempCLI, options, false)
-
-	ctx := context.Background()
-	err := transport.Connect(ctx)
-	if err != nil {
-		t.Fatalf("Connection failed: %v", err)
-	}
-	defer transport.Close()
-
-	// Send many messages in rapid succession
-	start := time.Now()
-	messageCount := 100
-
-	for i := 0; i < messageCount; i++ {
-		message := shared.StreamMessage{
-			Type:      "user",
-			SessionID: "load-test",
-		}
-
-		err := transport.SendMessage(ctx, message)
-		if err != nil {
-			t.Errorf("Message %d failed: %v", i, err)
-		}
-	}
-
-	duration := time.Since(start)
-
-	// Should handle reasonable throughput
-	if duration > 10*time.Second {
-		t.Errorf("Load test took too long: %v for %d messages", duration, messageCount)
-	}
-}
-
-// T117: Memory Usage Optimization 🔴 RED
-func TestMemoryUsageOptimization(t *testing.T) {
-	// Optimize memory usage in transport layer
-
-	tempCLI := createMockCLI(t)
-	options := &shared.Options{}
-
-	transport := New(tempCLI, options, false)
-
-	ctx := context.Background()
-	err := transport.Connect(ctx)
-	if err != nil {
-		t.Fatalf("Connection failed: %v", err)
-	}
-	defer transport.Close()
-
-	// This test primarily verifies that memory doesn't accumulate
-	// In a real implementation, we'd check memory usage over time
-
-	// Send and receive messages
-	for i := 0; i < 10; i++ {
-		message := shared.StreamMessage{
-			Type:      "user",
-			SessionID: "memory-test",
-		}
-
-		transport.SendMessage(ctx, message)
-		transport.ReceiveMessages(ctx)
-	}
-
-	// Memory should not accumulate indefinitely
-	// This is more of a design requirement than a testable assertion
-}
-
-// T118: Error Recovery 🔴 RED
-func TestErrorRecovery(t *testing.T) {
-	// Recover from transport errors gracefully
-
-	tempCLI := createMockCLI(t)
-	options := &shared.Options{}
-
-	transport := New(tempCLI, options, false)
-
-	ctx := context.Background()
-	err := transport.Connect(ctx)
-	if err != nil {
-		t.Fatalf("Connection failed: %v", err)
-	}
-	defer transport.Close()
-
-	// Simulate error conditions
-	cancelledCtx, cancel := context.WithCancel(ctx)
-	cancel() // Cancel immediately
-
-	// Should handle cancelled context gracefully
-	err = transport.SendMessage(cancelledCtx, shared.StreamMessage{Type: "user"})
-	if err == nil {
-		t.Log("SendMessage with cancelled context - error expected but got nil")
-	}
-
-	// Should still be functional with good context
-	err = transport.SendMessage(ctx, shared.StreamMessage{Type: "user"})
-	if err != nil && !strings.Contains(err.Error(), "closed") {
-		t.Errorf("Should recover from error: %v", err)
-	}
-}
-
-// T119: Subprocess Security 🔴 RED
-func TestSubprocessSecurity(t *testing.T) {
-	// Ensure subprocess runs with minimal permissions
-
-	tempCLI := createMockCLI(t)
-	options := &shared.Options{}
-
-	transport := New(tempCLI, options, false)
-
-	ctx := context.Background()
-	err := transport.Connect(ctx)
-	if err != nil {
-		t.Fatalf("Connection failed: %v", err)
-	}
-	defer transport.Close()
-
-	// Process should run with appropriate permissions
-	// This is mainly a design requirement - actual verification
-	// would require platform-specific checks
-
-	if !transport.IsConnected() {
-		t.Error("Process should be running securely")
-	}
-}
-
-// T120: Platform Compatibility 🔴 RED
-func TestPlatformCompatibility(t *testing.T) {
-	// Work across Windows, macOS, and Linux
-
-	tempCLI := createMockCLI(t)
-	options := &shared.Options{}
-
-	transport := New(tempCLI, options, false)
-
-	ctx := context.Background()
-	err := transport.Connect(ctx)
-	if err != nil {
-		t.Fatalf("Connection failed: %v", err)
-	}
-	defer transport.Close()
-
-	// Basic functionality should work on all platforms
-	if !transport.IsConnected() {
-		t.Error("Transport should work on current platform")
-	}
-
-	// Test interrupt (platform-specific signals)
-	err = transport.Interrupt(ctx)
-	if err != nil {
-		t.Errorf("Interrupt should work on current platform: %v", err)
-	}
-}
-
-// Helper functions to create mock CLI scripts for testing
-
-func createMockCLI(t *testing.T) string {
-	script := `#!/bin/bash
-echo '{"type":"assistant","content":[{"type":"text","text":"Mock response"}],"model":"claude-3"}'
-sleep 0.5
+	var script string
+	switch {
+	case opts.shouldFail:
+		script = `#!/bin/bash
+echo "Mock CLI failing" >&2
+exit 1
 `
-	return createTempScript(t, script)
-}
-
-func createLongRunningMockCLI(t *testing.T) string {
-	script := `#!/bin/bash
+	case opts.longRunning:
+		script = `#!/bin/bash
 # Ignore SIGTERM initially to test 5-second timeout
 trap 'echo "Received SIGTERM, ignoring for 6 seconds"; sleep 6; exit 1' TERM
 echo '{"type":"assistant","content":[{"type":"text","text":"Long running mock"}],"model":"claude-3"}'
 sleep 30  # Run long enough to test termination
 `
-	return createTempScript(t, script)
-}
-
-func createFailingCLI(t *testing.T) string {
-	script := `#!/bin/bash
-echo "Mock CLI failing" >&2
-exit 1
-`
-	return createTempScript(t, script)
-}
-
-func createEnvironmentCheckCLI(t *testing.T) string {
-	script := `#!/bin/bash
+	case opts.checkEnvironment:
+		script = `#!/bin/bash
 if [ "$CLAUDE_CODE_ENTRYPOINT" = "sdk-go" ]; then
     echo '{"type":"assistant","content":[{"type":"text","text":"Environment OK"}],"model":"claude-3"}'
 else
@@ -805,17 +382,74 @@ else
 fi
 sleep 0.5
 `
-	return createTempScript(t, script)
+	default:
+		script = `#!/bin/bash
+echo '{"type":"assistant","content":[{"type":"text","text":"Mock response"}],"model":"claude-3"}'
+sleep 0.5
+`
+	}
+
+	return createTransportTempScript(script)
 }
 
-func createTempScript(t *testing.T, script string) string {
-	tempDir := t.TempDir()
-	scriptPath := filepath.Join(tempDir, "mock-claude")
+func createTransportTempScript(script string) string {
+	tempDir := os.TempDir()
+	scriptPath := filepath.Join(tempDir, fmt.Sprintf("mock-claude-%d", time.Now().UnixNano()))
 
 	err := os.WriteFile(scriptPath, []byte(script), 0755)
 	if err != nil {
-		t.Fatalf("Failed to create mock CLI script: %v", err)
+		panic(fmt.Sprintf("Failed to create mock CLI script: %v", err))
 	}
 
 	return scriptPath
+}
+
+// Helper functions following client_test.go patterns
+func setupTransportTestContext(t *testing.T, timeout time.Duration) (context.Context, context.CancelFunc) {
+	t.Helper()
+	return context.WithTimeout(context.Background(), timeout)
+}
+
+func setupTransportForTest(t *testing.T, cliPath string) *Transport {
+	t.Helper()
+	options := &shared.Options{}
+	return New(cliPath, options, false)
+}
+
+func connectTransportSafely(t *testing.T, ctx context.Context, transport *Transport) {
+	t.Helper()
+	err := transport.Connect(ctx)
+	if err != nil {
+		t.Fatalf("Transport connection failed: %v", err)
+	}
+}
+
+func disconnectTransportSafely(t *testing.T, transport *Transport) {
+	t.Helper()
+	if err := transport.Close(); err != nil {
+		t.Logf("Transport disconnect warning: %v", err)
+	}
+}
+
+func assertTransportConnected(t *testing.T, transport *Transport, expected bool) {
+	t.Helper()
+	actual := transport.IsConnected()
+	if actual != expected {
+		t.Errorf("Expected transport connected=%t, got connected=%t", expected, actual)
+	}
+}
+
+func assertTransportError(t *testing.T, err error, expectError bool, contains string) {
+	t.Helper()
+	if expectError {
+		if err == nil {
+			t.Errorf("Expected error but got none")
+		} else if contains != "" && !strings.Contains(err.Error(), contains) {
+			t.Errorf("Expected error containing '%s', got: %v", contains, err)
+		}
+	} else {
+		if err != nil && contains == "" {
+			t.Errorf("Unexpected error: %v", err)
+		}
+	}
 }

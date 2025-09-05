@@ -5,176 +5,189 @@ import (
 	"testing"
 )
 
-// TestUserMessageCreation tests creating UserMessage with string content
-func TestUserMessageCreation(t *testing.T) {
-	content := "Hello, Claude!"
-	msg := &UserMessage{
-		Content: content,
+// TestMessageTypes tests all message types using table-driven approach
+func TestMessageTypes(t *testing.T) {
+	tests := []struct {
+		name         string
+		createMsg    func() Message
+		expectedType string
+		validateFunc func(*testing.T, Message)
+	}{
+		{
+			name: "user_message",
+			createMsg: func() Message {
+				return &UserMessage{Content: "Hello, Claude!"}
+			},
+			expectedType: MessageTypeUser,
+			validateFunc: validateUserMessage,
+		},
+		{
+			name: "assistant_message",
+			createMsg: func() Message {
+				return &AssistantMessage{
+					Content: []ContentBlock{&TextBlock{Text: "Hello! How can I help?"}},
+					Model:   "claude-3-sonnet",
+				}
+			},
+			expectedType: MessageTypeAssistant,
+			validateFunc: validateAssistantMessage,
+		},
+		{
+			name: "system_message",
+			createMsg: func() Message {
+				return &SystemMessage{
+					Subtype: "user_confirmation",
+					Data: map[string]any{
+						"type":     MessageTypeSystem,
+						"subtype":  "user_confirmation",
+						"question": "Do you want to proceed?",
+						"options":  []string{"yes", "no"},
+					},
+				}
+			},
+			expectedType: MessageTypeSystem,
+			validateFunc: validateSystemMessage,
+		},
+		{
+			name: "result_message",
+			createMsg: func() Message {
+				return &ResultMessage{
+					Subtype:   "completion",
+					SessionID: "test-session",
+				}
+			},
+			expectedType: MessageTypeResult,
+			validateFunc: validateResultMessage,
+		},
 	}
 
-	// Test that Type() returns correct value
-	if msg.Type() != MessageTypeUser {
-		t.Errorf("Expected Type() = %q, got %q", MessageTypeUser, msg.Type())
-	}
-
-	// Test JSON marshaling includes type
-	jsonData, err := json.Marshal(msg)
-	if err != nil {
-		t.Fatalf("Failed to marshal UserMessage: %v", err)
-	}
-
-	var result map[string]interface{}
-	if err := json.Unmarshal(jsonData, &result); err != nil {
-		t.Fatalf("Failed to unmarshal JSON: %v", err)
-	}
-
-	if result["type"] != MessageTypeUser {
-		t.Errorf("Expected JSON type = %q, got %v", MessageTypeUser, result["type"])
-	}
-
-	if result["content"] != content {
-		t.Errorf("Expected JSON content = %q, got %v", content, result["content"])
-	}
-}
-
-// TestAssistantMessageWithText tests AssistantMessage with TextBlock content and model field
-func TestAssistantMessageWithText(t *testing.T) {
-	model := "claude-3-sonnet"
-	textBlock := &TextBlock{
-		Text: "Hello! How can I help you?",
-	}
-
-	msg := &AssistantMessage{
-		Content: []ContentBlock{textBlock},
-		Model:   model,
-	}
-
-	// Test Type() method
-	if msg.Type() != MessageTypeAssistant {
-		t.Errorf("Expected Type() = %q, got %q", MessageTypeAssistant, msg.Type())
-	}
-
-	// Test JSON marshaling
-	jsonData, err := json.Marshal(msg)
-	if err != nil {
-		t.Fatalf("Failed to marshal AssistantMessage: %v", err)
-	}
-
-	var result map[string]interface{}
-	if err := json.Unmarshal(jsonData, &result); err != nil {
-		t.Fatalf("Failed to unmarshal JSON: %v", err)
-	}
-
-	if result["type"] != MessageTypeAssistant {
-		t.Errorf("Expected JSON type = %q, got %v", MessageTypeAssistant, result["type"])
-	}
-
-	if result["model"] != model {
-		t.Errorf("Expected JSON model = %q, got %v", model, result["model"])
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			msg := test.createMsg()
+			assertMessageType(t, msg, test.expectedType)
+			test.validateFunc(t, msg)
+		})
 	}
 }
 
-// TestTextBlock tests TextBlock content type
-func TestTextBlock(t *testing.T) {
-	text := "This is a text block"
-	block := &TextBlock{
-		Text: text,
+// TestContentBlockTypes tests all content block types using table-driven approach
+func TestContentBlockTypes(t *testing.T) {
+	tests := []struct {
+		name         string
+		createBlock  func() ContentBlock
+		expectedType string
+		validateFunc func(*testing.T, ContentBlock)
+	}{
+		{
+			name: "text_block",
+			createBlock: func() ContentBlock {
+				return &TextBlock{Text: "This is a text block"}
+			},
+			expectedType: ContentBlockTypeText,
+			validateFunc: validateTextBlock,
+		},
+		{
+			name: "thinking_block",
+			createBlock: func() ContentBlock {
+				return &ThinkingBlock{
+					Thinking:  "Let me think about this...",
+					Signature: "claude-3-sonnet-20240229",
+				}
+			},
+			expectedType: ContentBlockTypeThinking,
+			validateFunc: validateThinkingBlock,
+		},
+		{
+			name: "tool_use_block",
+			createBlock: func() ContentBlock {
+				return &ToolUseBlock{
+					ToolUseID: "tool_456",
+					Name:      "Read",
+					Input: map[string]any{
+						"file_path": "/home/user/document.txt",
+						"limit":     100,
+					},
+				}
+			},
+			expectedType: ContentBlockTypeToolUse,
+			validateFunc: validateToolUseBlock,
+		},
+		{
+			name: "tool_result_block",
+			createBlock: func() ContentBlock {
+				isError := false
+				return &ToolResultBlock{
+					ToolUseID: "tool_456",
+					Content:   "File content here...",
+					IsError:   &isError,
+				}
+			},
+			expectedType: ContentBlockTypeToolResult,
+			validateFunc: validateToolResultBlock,
+		},
 	}
 
-	// Test BlockType() method
-	if block.BlockType() != ContentBlockTypeText {
-		t.Errorf("Expected BlockType() = %q, got %q", ContentBlockTypeText, block.BlockType())
-	}
-
-	// Test that it implements ContentBlock interface
-	var cb ContentBlock = block
-	if cb.BlockType() != ContentBlockTypeText {
-		t.Errorf("Expected ContentBlock.BlockType() = %q, got %q", ContentBlockTypeText, cb.BlockType())
-	}
-
-	if block.Text != text {
-		t.Errorf("Expected Text = %q, got %q", text, block.Text)
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			block := test.createBlock()
+			assertContentBlockType(t, block, test.expectedType)
+			test.validateFunc(t, block)
+		})
 	}
 }
 
-// TestThinkingBlock tests ThinkingBlock content type
-func TestThinkingBlock(t *testing.T) {
-	thinking := "Let me think about this..."
-	signature := "claude-3-sonnet-20240229"
-	block := &ThinkingBlock{
-		Thinking:  thinking,
-		Signature: signature,
+// TestJSONMarshaling tests JSON marshaling for complex message types
+func TestJSONMarshaling(t *testing.T) {
+	// Test SystemMessage preserves all data fields
+	systemMsg := &SystemMessage{
+		Subtype: "user_confirmation",
+		Data: map[string]any{
+			"type":     MessageTypeSystem,
+			"subtype":  "user_confirmation",
+			"question": "Do you want to proceed?",
+			"options":  []string{"yes", "no"},
+		},
 	}
 
-	// Test BlockType() method
-	if block.BlockType() != ContentBlockTypeThinking {
-		t.Errorf("Expected BlockType() = %q, got %q", ContentBlockTypeThinking, block.BlockType())
-	}
-
-	// Test that it implements ContentBlock interface
-	var cb ContentBlock = block
-	if cb.BlockType() != ContentBlockTypeThinking {
-		t.Errorf("Expected ContentBlock.BlockType() = %q, got %q", ContentBlockTypeThinking, cb.BlockType())
-	}
-
-	if block.Thinking != thinking {
-		t.Errorf("Expected Thinking = %q, got %q", thinking, block.Thinking)
-	}
-
-	if block.Signature != signature {
-		t.Errorf("Expected Signature = %q, got %q", signature, block.Signature)
-	}
-}
-
-// TestSystemMessage tests SystemMessage with subtype and data preservation
-func TestSystemMessage(t *testing.T) {
-	subtype := "user_confirmation"
-	data := map[string]any{
-		"type":     MessageTypeSystem,
-		"subtype":  subtype,
-		"question": "Do you want to proceed?",
-		"options":  []string{"yes", "no"},
-	}
-
-	msg := &SystemMessage{
-		Subtype: subtype,
-		Data:    data,
-	}
-
-	// Test Type() method
-	if msg.Type() != MessageTypeSystem {
-		t.Errorf("Expected Type() = %q, got %q", MessageTypeSystem, msg.Type())
-	}
-
-	// Test JSON marshaling preserves all data
-	jsonData, err := json.Marshal(msg)
+	jsonData, err := json.Marshal(systemMsg)
 	if err != nil {
 		t.Fatalf("Failed to marshal SystemMessage: %v", err)
 	}
 
-	var result map[string]any
-	if err := json.Unmarshal(jsonData, &result); err != nil {
-		t.Fatalf("Failed to unmarshal JSON: %v", err)
+	assertJSONField(t, jsonData, "type", MessageTypeSystem)
+	assertJSONField(t, jsonData, "subtype", "user_confirmation")
+	assertJSONField(t, jsonData, "question", "Do you want to proceed?")
+
+	// Test AssistantMessage with model field
+	assistantMsg := &AssistantMessage{
+		Content: []ContentBlock{&TextBlock{Text: "Hello!"}},
+		Model:   "claude-3-sonnet",
 	}
 
-	if result["type"] != MessageTypeSystem {
-		t.Errorf("Expected JSON type = %q, got %v", MessageTypeSystem, result["type"])
+	jsonData, err = json.Marshal(assistantMsg)
+	if err != nil {
+		t.Fatalf("Failed to marshal AssistantMessage: %v", err)
 	}
 
-	if result["subtype"] != subtype {
-		t.Errorf("Expected JSON subtype = %q, got %v", subtype, result["subtype"])
+	assertJSONField(t, jsonData, "type", MessageTypeAssistant)
+	assertJSONField(t, jsonData, "model", "claude-3-sonnet")
+
+	// Test UserMessage with string content
+	userMsg := &UserMessage{Content: "Hello, Claude!"}
+
+	jsonData, err = json.Marshal(userMsg)
+	if err != nil {
+		t.Fatalf("Failed to marshal UserMessage: %v", err)
 	}
 
-	// Check that original data fields are preserved
-	if result["question"] != "Do you want to proceed?" {
-		t.Errorf("Expected question field to be preserved")
-	}
+	assertJSONField(t, jsonData, "type", MessageTypeUser)
+	assertJSONField(t, jsonData, "content", "Hello, Claude!")
 }
 
-// TestMessageInterface tests all message types implement Message interface
-func TestMessageInterface(t *testing.T) {
-	// Test all message types implement Message interface correctly
-	var messages []Message = []Message{
+// TestInterfaceCompliance tests interface implementation for all types
+func TestInterfaceCompliance(t *testing.T) {
+	// Test Message interface compliance
+	messages := []Message{
 		&UserMessage{Content: "test"},
 		&AssistantMessage{Content: []ContentBlock{}, Model: "test"},
 		&SystemMessage{Subtype: "test", Data: map[string]any{}},
@@ -189,23 +202,18 @@ func TestMessageInterface(t *testing.T) {
 	}
 
 	for i, msg := range messages {
-		if msg.Type() != expectedTypes[i] {
-			t.Errorf("Message %d: expected type %q, got %q", i, expectedTypes[i], msg.Type())
-		}
+		assertMessageType(t, msg, expectedTypes[i])
 	}
-}
 
-// TestContentBlockInterface tests all content blocks implement ContentBlock interface
-func TestContentBlockInterface(t *testing.T) {
-	// Test all content block types implement ContentBlock interface correctly
-	var blocks []ContentBlock = []ContentBlock{
+	// Test ContentBlock interface compliance
+	blocks := []ContentBlock{
 		&TextBlock{Text: "test"},
 		&ThinkingBlock{Thinking: "test", Signature: "test"},
 		&ToolUseBlock{ToolUseID: "test", Name: "test", Input: map[string]any{}},
 		&ToolResultBlock{ToolUseID: "test", Content: "test"},
 	}
 
-	expectedTypes := []string{
+	expectedBlockTypes := []string{
 		ContentBlockTypeText,
 		ContentBlockTypeThinking,
 		ContentBlockTypeToolUse,
@@ -213,109 +221,158 @@ func TestContentBlockInterface(t *testing.T) {
 	}
 
 	for i, block := range blocks {
-		if block.BlockType() != expectedTypes[i] {
-			t.Errorf("Block %d: expected type %q, got %q", i, expectedTypes[i], block.BlockType())
-		}
+		assertContentBlockType(t, block, expectedBlockTypes[i])
 	}
 }
 
-// TestMessageTypeConstants tests message type string constants
-func TestMessageTypeConstants(t *testing.T) {
-	// Test that all message type constants have expected values
-	expectedTypes := map[string]string{
-		MessageTypeUser:      "user",
-		MessageTypeAssistant: "assistant",
-		MessageTypeSystem:    "system",
-		MessageTypeResult:    "result",
-	}
+// Helper functions
 
-	for constant, expectedValue := range expectedTypes {
-		if constant != expectedValue {
-			t.Errorf("Expected message type constant %q to equal %q, got %q", constant, expectedValue, constant)
-		}
-	}
-
-	// Test content block type constants
-	expectedBlockTypes := map[string]string{
-		ContentBlockTypeText:       "text",
-		ContentBlockTypeThinking:   "thinking",
-		ContentBlockTypeToolUse:    "tool_use",
-		ContentBlockTypeToolResult: "tool_result",
-	}
-
-	for constant, expectedValue := range expectedBlockTypes {
-		if constant != expectedValue {
-			t.Errorf("Expected content block type constant %q to equal %q, got %q", constant, expectedValue, constant)
-		}
+// assertMessageType verifies message has expected type
+func assertMessageType(t *testing.T, msg Message, expectedType string) {
+	t.Helper()
+	if msg.Type() != expectedType {
+		t.Errorf("Expected message type %q, got %q", expectedType, msg.Type())
 	}
 }
 
-// TestToolUseBlockCreation tests ToolUseBlock with ID, name, and input parameters
-func TestToolUseBlockCreation(t *testing.T) {
-	toolUseID := "tool_456"
-	name := "Read"
-	input := map[string]any{
-		"file_path": "/home/user/document.txt",
-		"limit":     100,
-	}
-
-	block := &ToolUseBlock{
-		ToolUseID: toolUseID,
-		Name:      name,
-		Input:     input,
-	}
-
-	// Test BlockType() method
-	if block.BlockType() != ContentBlockTypeToolUse {
-		t.Errorf("Expected BlockType() = %q, got %q", ContentBlockTypeToolUse, block.BlockType())
-	}
-
-	// Test fields
-	if block.ToolUseID != toolUseID {
-		t.Errorf("Expected ToolUseID = %q, got %q", toolUseID, block.ToolUseID)
-	}
-	if block.Name != name {
-		t.Errorf("Expected Name = %q, got %q", name, block.Name)
-	}
-
-	// Test that it implements ContentBlock interface
-	var cb ContentBlock = block
-	if cb.BlockType() != ContentBlockTypeToolUse {
-		t.Errorf("Expected ContentBlock.BlockType() = %q, got %q", ContentBlockTypeToolUse, cb.BlockType())
+// assertContentBlockType verifies content block has expected type
+func assertContentBlockType(t *testing.T, block ContentBlock, expectedType string) {
+	t.Helper()
+	if block.BlockType() != expectedType {
+		t.Errorf("Expected block type %q, got %q", expectedType, block.BlockType())
 	}
 }
 
-// TestToolResultBlockCreation tests ToolResultBlock with content and error flag
-func TestToolResultBlockCreation(t *testing.T) {
-	toolUseID := "tool_456"
-	content := "File content here..."
-	isError := false
-
-	block := &ToolResultBlock{
-		ToolUseID: toolUseID,
-		Content:   content,
-		IsError:   &isError,
+// assertJSONField verifies JSON contains expected field with value
+func assertJSONField(t *testing.T, jsonData []byte, field string, expected any) {
+	t.Helper()
+	var result map[string]any
+	if err := json.Unmarshal(jsonData, &result); err != nil {
+		t.Fatalf("Failed to unmarshal JSON: %v", err)
 	}
 
-	// Test BlockType() method
-	if block.BlockType() != ContentBlockTypeToolResult {
-		t.Errorf("Expected BlockType() = %q, got %q", ContentBlockTypeToolResult, block.BlockType())
+	if result[field] != expected {
+		t.Errorf("Expected JSON field %q = %v, got %v", field, expected, result[field])
 	}
+}
 
-	// Test fields
-	if block.ToolUseID != toolUseID {
-		t.Errorf("Expected ToolUseID = %q, got %q", toolUseID, block.ToolUseID)
-	}
-	if block.Content != content {
-		t.Errorf("Expected Content = %q, got %v", content, block.Content)
-	}
-	if block.IsError == nil || *block.IsError != isError {
-		t.Errorf("Expected IsError = %v, got %v", isError, block.IsError)
-	}
+// Message-specific validation functions
 
-	// Test that it implements ContentBlock interface
-	var cb ContentBlock = block
-	if cb.BlockType() != ContentBlockTypeToolResult {
-		t.Errorf("Expected ContentBlock.BlockType() = %q, got %q", ContentBlockTypeToolResult, cb.BlockType())
+// validateUserMessage validates UserMessage specifics
+func validateUserMessage(t *testing.T, msg Message) {
+	t.Helper()
+	userMsg, ok := msg.(*UserMessage)
+	if !ok {
+		t.Fatalf("Expected *UserMessage, got %T", msg)
+	}
+	if userMsg.Content == nil {
+		t.Error("Expected non-nil Content field")
+	}
+}
+
+// validateAssistantMessage validates AssistantMessage specifics
+func validateAssistantMessage(t *testing.T, msg Message) {
+	t.Helper()
+	assistantMsg, ok := msg.(*AssistantMessage)
+	if !ok {
+		t.Fatalf("Expected *AssistantMessage, got %T", msg)
+	}
+	if assistantMsg.Content == nil {
+		t.Error("Expected non-nil Content field")
+	}
+	if assistantMsg.Model == "" {
+		t.Error("Expected non-empty Model field")
+	}
+}
+
+// validateSystemMessage validates SystemMessage specifics
+func validateSystemMessage(t *testing.T, msg Message) {
+	t.Helper()
+	systemMsg, ok := msg.(*SystemMessage)
+	if !ok {
+		t.Fatalf("Expected *SystemMessage, got %T", msg)
+	}
+	if systemMsg.Subtype == "" {
+		t.Error("Expected non-empty Subtype field")
+	}
+	if systemMsg.Data == nil {
+		t.Error("Expected non-nil Data field")
+	}
+}
+
+// validateResultMessage validates ResultMessage specifics
+func validateResultMessage(t *testing.T, msg Message) {
+	t.Helper()
+	resultMsg, ok := msg.(*ResultMessage)
+	if !ok {
+		t.Fatalf("Expected *ResultMessage, got %T", msg)
+	}
+	if resultMsg.Subtype == "" {
+		t.Error("Expected non-empty Subtype field")
+	}
+	if resultMsg.SessionID == "" {
+		t.Error("Expected non-empty SessionID field")
+	}
+}
+
+// Content block validation functions
+
+// validateTextBlock validates TextBlock specifics
+func validateTextBlock(t *testing.T, block ContentBlock) {
+	t.Helper()
+	textBlock, ok := block.(*TextBlock)
+	if !ok {
+		t.Fatalf("Expected *TextBlock, got %T", block)
+	}
+	if textBlock.Text == "" {
+		t.Error("Expected non-empty Text field")
+	}
+}
+
+// validateThinkingBlock validates ThinkingBlock specifics
+func validateThinkingBlock(t *testing.T, block ContentBlock) {
+	t.Helper()
+	thinkingBlock, ok := block.(*ThinkingBlock)
+	if !ok {
+		t.Fatalf("Expected *ThinkingBlock, got %T", block)
+	}
+	if thinkingBlock.Thinking == "" {
+		t.Error("Expected non-empty Thinking field")
+	}
+	if thinkingBlock.Signature == "" {
+		t.Error("Expected non-empty Signature field")
+	}
+}
+
+// validateToolUseBlock validates ToolUseBlock specifics
+func validateToolUseBlock(t *testing.T, block ContentBlock) {
+	t.Helper()
+	toolBlock, ok := block.(*ToolUseBlock)
+	if !ok {
+		t.Fatalf("Expected *ToolUseBlock, got %T", block)
+	}
+	if toolBlock.ToolUseID == "" {
+		t.Error("Expected non-empty ToolUseID field")
+	}
+	if toolBlock.Name == "" {
+		t.Error("Expected non-empty Name field")
+	}
+	if toolBlock.Input == nil {
+		t.Error("Expected non-nil Input field")
+	}
+}
+
+// validateToolResultBlock validates ToolResultBlock specifics
+func validateToolResultBlock(t *testing.T, block ContentBlock) {
+	t.Helper()
+	resultBlock, ok := block.(*ToolResultBlock)
+	if !ok {
+		t.Fatalf("Expected *ToolResultBlock, got %T", block)
+	}
+	if resultBlock.ToolUseID == "" {
+		t.Error("Expected non-empty ToolUseID field")
+	}
+	if resultBlock.Content == nil {
+		t.Error("Expected non-nil Content field")
 	}
 }

@@ -1,232 +1,77 @@
 package shared
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
 	"testing"
 )
 
-// TestBaseSDKError tests the base ClaudeSDKError interface and implementation.
-func TestBaseSDKError(t *testing.T) {
-	// Test that we can create a base SDK error
-	message := "Something went wrong"
-	var err error = &BaseError{message: message}
-
-	// Must implement error interface
-	if err.Error() != message {
-		t.Errorf("Expected error message %q, got %q", message, err.Error())
+// TestErrorTypes tests all error types using table-driven approach
+func TestErrorTypes(t *testing.T) {
+	tests := []struct {
+		name         string
+		createError  func() SDKError
+		expectedType string
+		validateFunc func(*testing.T, SDKError)
+	}{
+		{
+			name: "connection_error",
+			createError: func() SDKError {
+				return NewConnectionError("connection failed", errors.New("network error"))
+			},
+			expectedType: "connection_error",
+			validateFunc: validateConnectionError,
+		},
+		{
+			name: "cli_not_found_error",
+			createError: func() SDKError {
+				return NewCLINotFoundError("/usr/bin/claude", "CLI not found")
+			},
+			expectedType: "cli_not_found_error",
+			validateFunc: validateCLINotFoundError,
+		},
+		{
+			name: "process_error",
+			createError: func() SDKError {
+				return NewProcessError("process failed", 1, "permission denied")
+			},
+			expectedType: "process_error",
+			validateFunc: validateProcessError,
+		},
+		{
+			name: "json_decode_error",
+			createError: func() SDKError {
+				return NewJSONDecodeError(`{"invalid": json}`, 15, errors.New("syntax error"))
+			},
+			expectedType: "json_decode_error",
+			validateFunc: validateJSONDecodeError,
+		},
+		{
+			name: "message_parse_error",
+			createError: func() SDKError {
+				return NewMessageParseError("invalid structure", map[string]any{"type": "unknown"})
+			},
+			expectedType: "message_parse_error",
+			validateFunc: validateMessageParseError,
+		},
 	}
 
-	// Must implement SDKError interface
-	sdkErr, ok := err.(SDKError)
-	if !ok {
-		t.Fatal("BaseError must implement SDKError interface")
-	}
-
-	// Type method should return a type identifier
-	errType := sdkErr.Type()
-	if errType == "" {
-		t.Error("SDKError.Type() should return non-empty string")
-	}
-}
-
-// TestCLINotFoundError tests CLINotFoundError with helpful installation message.
-func TestCLINotFoundError(t *testing.T) {
-	// Test basic CLI not found error
-	message := "Claude Code not found"
-	err := NewCLINotFoundError("", message)
-
-	// Must implement SDKError interface
-	if _, ok := interface{}(err).(SDKError); !ok {
-		t.Fatal("CLINotFoundError must implement SDKError interface")
-	}
-
-	// Must contain expected message
-	if !strings.Contains(err.Error(), message) {
-		t.Errorf("Expected error to contain %q, got %q", message, err.Error())
-	}
-
-	// Check error type
-	if err.Type() != "cli_not_found_error" {
-		t.Errorf("Expected error type 'cli_not_found_error', got %q", err.Type())
-	}
-
-	// Test CLI not found error with path
-	path := "/usr/bin/claude"
-	fullMessage := "CLI not found"
-	errWithPath := NewCLINotFoundError(path, fullMessage)
-
-	// Should format message with path
-	expectedMessage := fmt.Sprintf("%s: %s", fullMessage, path)
-	if errWithPath.Error() != expectedMessage {
-		t.Errorf("Expected error message %q, got %q", expectedMessage, errWithPath.Error())
-	}
-
-	// Should store path
-	if errWithPath.Path != path {
-		t.Errorf("Expected path %q, got %q", path, errWithPath.Path)
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err := test.createError()
+			assertErrorType(t, err, test.expectedType)
+			assertErrorMessage(t, err, "")
+			test.validateFunc(t, err)
+		})
 	}
 }
 
-// TestConnectionError tests CLIConnectionError for connection failures.
-func TestConnectionError(t *testing.T) {
-	message := "Connection failed"
-	cause := errors.New("network unavailable")
-	err := NewConnectionError(message, cause)
-
-	// Must implement SDKError interface
-	if _, ok := interface{}(err).(SDKError); !ok {
-		t.Fatal("ConnectionError must implement SDKError interface")
-	}
-
-	// Check error type
-	if err.Type() != "connection_error" {
-		t.Errorf("Expected error type 'connection_error', got %q", err.Type())
-	}
-
-	// Check error message includes cause
-	errorMsg := err.Error()
-	if !strings.Contains(errorMsg, message) {
-		t.Errorf("Expected error message to contain %q, got %q", message, errorMsg)
-	}
-	if !strings.Contains(errorMsg, cause.Error()) {
-		t.Errorf("Expected error message to contain %q, got %q", cause.Error(), errorMsg)
-	}
-
-	// Check error unwrapping
-	if !errors.Is(err, cause) {
-		t.Error("Expected error to wrap the cause error")
-	}
-}
-
-// TestProcessErrorWithDetails tests ProcessError with exit_code and stderr.
-func TestProcessErrorWithDetails(t *testing.T) {
-	message := "Process failed"
-	exitCode := 1
-	stderr := "Permission denied"
-	err := NewProcessError(message, exitCode, stderr)
-
-	// Must implement SDKError interface
-	if _, ok := interface{}(err).(SDKError); !ok {
-		t.Fatal("ProcessError must implement SDKError interface")
-	}
-
-	// Check error type
-	if err.Type() != "process_error" {
-		t.Errorf("Expected error type 'process_error', got %q", err.Type())
-	}
-
-	// Check that exit code is included in error message
-	errorMsg := err.Error()
-	if !strings.Contains(errorMsg, fmt.Sprintf("exit code: %d", exitCode)) {
-		t.Errorf("Expected error message to contain exit code, got %q", errorMsg)
-	}
-
-	// Check that stderr is included
-	if !strings.Contains(errorMsg, stderr) {
-		t.Errorf("Expected error message to contain stderr, got %q", errorMsg)
-	}
-
-	// Check fields are set
-	if err.ExitCode != exitCode {
-		t.Errorf("Expected exit code %d, got %d", exitCode, err.ExitCode)
-	}
-	if err.Stderr != stderr {
-		t.Errorf("Expected stderr %q, got %q", stderr, err.Stderr)
-	}
-}
-
-// TestJSONDecodeError tests CLIJSONDecodeError with line and position info.
-func TestJSONDecodeError(t *testing.T) {
-	line := `{"invalid": json}`
-	position := 15
-	cause := errors.New("unexpected character")
-	err := NewJSONDecodeError(line, position, cause)
-
-	// Must implement SDKError interface
-	if _, ok := interface{}(err).(SDKError); !ok {
-		t.Fatal("JSONDecodeError must implement SDKError interface")
-	}
-
-	// Check error type
-	if err.Type() != "json_decode_error" {
-		t.Errorf("Expected error type 'json_decode_error', got %q", err.Type())
-	}
-
-	// Check that line is truncated and included in message
-	errorMsg := err.Error()
-	if !strings.Contains(errorMsg, "Failed to decode JSON") {
-		t.Errorf("Expected error message to contain 'Failed to decode JSON', got %q", errorMsg)
-	}
-
-	// Check that fields are set
-	if err.Line != line {
-		t.Errorf("Expected line %q, got %q", line, err.Line)
-	}
-	if err.Position != position {
-		t.Errorf("Expected position %d, got %d", position, err.Position)
-	}
-	if err.OriginalError != cause {
-		t.Errorf("Expected original error %v, got %v", cause, err.OriginalError)
-	}
-
-	// Check error unwrapping
-	if !errors.Is(err, cause) {
-		t.Error("Expected error to wrap the original error")
-	}
-
-	// Test with long line (should truncate)
-	longLine := strings.Repeat("x", 150)
-	longErr := NewJSONDecodeError(longLine, 0, nil)
-	if len(longErr.Error()) < len(longLine) {
-		// Error message should be shorter than original line due to truncation
-		t.Logf("Long line properly truncated in error message")
-	}
-}
-
-// TestMessageParseError tests MessageParseError with raw data context.
-func TestMessageParseError(t *testing.T) {
-	message := "Invalid message structure"
-	data := map[string]interface{}{
-		"type":    "unknown_type",
-		"content": "test",
-	}
-	err := NewMessageParseError(message, data)
-
-	// Must implement SDKError interface
-	if _, ok := interface{}(err).(SDKError); !ok {
-		t.Fatal("MessageParseError must implement SDKError interface")
-	}
-
-	// Check error type
-	if err.Type() != "message_parse_error" {
-		t.Errorf("Expected error type 'message_parse_error', got %q", err.Type())
-	}
-
-	// Check error message
-	if err.Error() != message {
-		t.Errorf("Expected error message %q, got %q", message, err.Error())
-	}
-
-	// Check that data is preserved (can't compare maps directly)
-	if err.Data == nil {
-		t.Error("Expected data to be preserved, got nil")
-	}
-	dataMap, ok := err.Data.(map[string]interface{})
-	if !ok {
-		t.Errorf("Expected data to be map[string]interface{}, got %T", err.Data)
-	}
-	if dataMap["type"] != "unknown_type" {
-		t.Errorf("Expected data type to be 'unknown_type', got %v", dataMap["type"])
-	}
-}
-
-// TestErrorHierarchy verifies all errors implement SDKError interface.
-func TestErrorHierarchy(t *testing.T) {
-	// Test all error types implement SDKError
-	var errors []SDKError = []SDKError{
-		&BaseError{message: "test"},
+// TestErrorInterfaceCompliance tests SDKError interface compliance
+func TestErrorInterfaceCompliance(t *testing.T) {
+	// Create all error types for interface testing
+	errorInstances := []SDKError{
 		NewConnectionError("test", nil),
 		NewCLINotFoundError("", "test"),
 		NewProcessError("test", 1, "stderr"),
@@ -234,47 +79,267 @@ func TestErrorHierarchy(t *testing.T) {
 		NewMessageParseError("test", nil),
 	}
 
-	expectedTypes := []string{
-		"base_error",
-		"connection_error",
-		"cli_not_found_error",
-		"process_error",
-		"json_decode_error",
-		"message_parse_error",
-	}
-
-	for i, err := range errors {
-		if err.Type() != expectedTypes[i] {
-			t.Errorf("Error %d: expected type %q, got %q", i, expectedTypes[i], err.Type())
-		}
-
-		// All must implement error interface
+	for i, err := range errorInstances {
+		// Must implement standard error interface
 		if err.Error() == "" {
 			t.Errorf("Error %d: Error() returned empty string", i)
+		}
+
+		// Must implement SDKError interface
+		assertSDKErrorInterface(t, err)
+
+		// Type method must return non-empty string
+		if err.Type() == "" {
+			t.Errorf("Error %d: Type() returned empty string", i)
 		}
 	}
 }
 
-// TestErrorContextPreservation tests error wrapping with fmt.Errorf %w verb.
-func TestErrorContextPreservation(t *testing.T) {
-	// Test BaseError wrapping
+// TestErrorWrappingBehavior tests error wrapping and unwrapping
+func TestErrorWrappingBehavior(t *testing.T) {
 	cause := errors.New("root cause")
-	baseErr := &BaseError{message: "wrapper", cause: cause}
 
-	// Should support errors.Is()
-	if !errors.Is(baseErr, cause) {
-		t.Error("Expected BaseError to wrap cause with errors.Is() support")
-	}
-
-	// Should support errors.As()
-	var rootErr *BaseError
-	if !errors.As(baseErr, &rootErr) {
-		t.Error("Expected BaseError to support errors.As()")
-	}
-
-	// Test ConnectionError inheriting wrapping
+	// Test ConnectionError wrapping
 	connErr := NewConnectionError("connection failed", cause)
-	if !errors.Is(connErr, cause) {
-		t.Error("Expected ConnectionError to wrap cause")
+	assertErrorWrapping(t, connErr, cause)
+
+	// Test JSONDecodeError wrapping
+	jsonErr := NewJSONDecodeError("invalid json", 0, cause)
+	assertErrorWrapping(t, jsonErr, cause)
+}
+
+// TestErrorFieldValidation tests error-specific field validation
+func TestErrorFieldValidation(t *testing.T) {
+	// Test CLINotFoundError path handling
+	path := "/usr/bin/claude"
+	message := "CLI not found"
+	errorWithPath := NewCLINotFoundError(path, message)
+
+	expectedMsg := fmt.Sprintf("%s: %s", message, path)
+	if errorWithPath.Error() != expectedMsg {
+		t.Errorf("Expected error message %q, got %q", expectedMsg, errorWithPath.Error())
 	}
+	if errorWithPath.Path != path {
+		t.Errorf("Expected path %q, got %q", path, errorWithPath.Path)
+	}
+
+	// Test ProcessError fields
+	exitCode := 1
+	stderr := "permission denied"
+	processErr := NewProcessError("process failed", exitCode, stderr)
+
+	if processErr.ExitCode != exitCode {
+		t.Errorf("Expected exit code %d, got %d", exitCode, processErr.ExitCode)
+	}
+	if processErr.Stderr != stderr {
+		t.Errorf("Expected stderr %q, got %q", stderr, processErr.Stderr)
+	}
+
+	// Test JSONDecodeError line truncation
+	longLine := strings.Repeat("x", 150)
+	longErr := NewJSONDecodeError(longLine, 0, nil)
+	if len(longErr.Error()) >= len(longLine) {
+		t.Error("Expected long line to be truncated in error message")
+	}
+}
+
+// TestBaseErrorDirect tests BaseError when used directly (not embedded)
+func TestBaseErrorDirect(t *testing.T) {
+	// Test basic BaseError functionality
+	baseErr := &BaseError{message: "direct base error"}
+
+	assertErrorType(t, baseErr, "base_error")
+	assertErrorMessage(t, baseErr, "direct base error")
+	assertSDKErrorInterface(t, baseErr)
+
+	// Test with cause
+	cause := errors.New("underlying cause")
+	baseErrWithCause := &BaseError{message: "wrapper error", cause: cause}
+
+	assertErrorWrapping(t, baseErrWithCause, cause)
+	if !strings.Contains(baseErrWithCause.Error(), "wrapper error") {
+		t.Error("Expected error message to contain wrapper message")
+	}
+	if !strings.Contains(baseErrWithCause.Error(), "underlying cause") {
+		t.Error("Expected error message to contain cause message")
+	}
+}
+
+// TestResultMessageMarshaling tests ResultMessage JSON marshaling
+func TestResultMessageMarshaling(t *testing.T) {
+	// Test basic ResultMessage marshaling
+	result := &ResultMessage{
+		Subtype:       "completion",
+		DurationMs:    1000,
+		DurationAPIMs: 800,
+		IsError:       false,
+		NumTurns:      1,
+		SessionID:     "test-session",
+		TotalCostUSD:  floatPtr(0.05),
+	}
+
+	data, err := result.MarshalJSON()
+	if err != nil {
+		t.Fatalf("MarshalJSON failed: %v", err)
+	}
+
+	// Verify JSON contains expected fields
+	jsonStr := string(data)
+	expectedFields := []string{
+		`"type":"result"`,
+		`"subtype":"completion"`,
+		`"duration_ms":1000`,
+		`"session_id":"test-session"`,
+	}
+
+	for _, field := range expectedFields {
+		if !strings.Contains(jsonStr, field) {
+			t.Errorf("Expected JSON to contain %s, got: %s", field, jsonStr)
+		}
+	}
+
+	// Test that JSON is valid by unmarshaling back
+	var unmarshaled map[string]any
+	if err := json.Unmarshal(data, &unmarshaled); err != nil {
+		t.Errorf("Generated JSON is not valid: %v", err)
+	}
+
+	// Verify type field is correctly set
+	if typeField, ok := unmarshaled["type"]; !ok || typeField != "result" {
+		t.Errorf("Expected type field to be 'result', got: %v", typeField)
+	}
+}
+
+// Helper functions
+
+// assertErrorType verifies error has expected type
+func assertErrorType(t *testing.T, err SDKError, expectedType string) {
+	t.Helper()
+	if err.Type() != expectedType {
+		t.Errorf("Expected error type %q, got %q", expectedType, err.Type())
+	}
+}
+
+// assertErrorMessage verifies error message is non-empty or contains substring
+func assertErrorMessage(t *testing.T, err error, expectedSubstring string) {
+	t.Helper()
+	msg := err.Error()
+	if msg == "" {
+		t.Error("Expected non-empty error message")
+		return
+	}
+	if expectedSubstring != "" && !strings.Contains(msg, expectedSubstring) {
+		t.Errorf("Expected error message to contain %q, got %q", expectedSubstring, msg)
+	}
+}
+
+// assertSDKErrorInterface verifies SDKError interface compliance
+func assertSDKErrorInterface(t *testing.T, err SDKError) {
+	t.Helper()
+	var sdkErr SDKError = err
+	if sdkErr.Error() == "" {
+		t.Error("Expected error message from SDKError interface")
+	}
+	if sdkErr.Type() == "" {
+		t.Error("Expected error type from SDKError interface")
+	}
+}
+
+// assertErrorWrapping verifies error wrapping behavior
+func assertErrorWrapping(t *testing.T, wrapper error, cause error) {
+	t.Helper()
+	if !errors.Is(wrapper, cause) {
+		t.Error("Expected error to wrap cause with errors.Is() support")
+	}
+}
+
+// Error-specific validation functions
+
+// validateConnectionError validates ConnectionError specifics
+func validateConnectionError(t *testing.T, err SDKError) {
+	t.Helper()
+	connErr, ok := err.(*ConnectionError)
+	if !ok {
+		t.Fatalf("Expected *ConnectionError, got %T", err)
+	}
+	if connErr.message == "" {
+		t.Error("Expected non-empty message field")
+	}
+}
+
+// validateCLINotFoundError validates CLINotFoundError specifics
+func validateCLINotFoundError(t *testing.T, err SDKError) {
+	t.Helper()
+	cliErr, ok := err.(*CLINotFoundError)
+	if !ok {
+		t.Fatalf("Expected *CLINotFoundError, got %T", err)
+	}
+	if !strings.Contains(err.Error(), "CLI not found") {
+		t.Error("Expected error message to contain 'CLI not found'")
+	}
+	if cliErr.Path != "/usr/bin/claude" {
+		t.Errorf("Expected path '/usr/bin/claude', got %q", cliErr.Path)
+	}
+}
+
+// validateProcessError validates ProcessError specifics
+func validateProcessError(t *testing.T, err SDKError) {
+	t.Helper()
+	procErr, ok := err.(*ProcessError)
+	if !ok {
+		t.Fatalf("Expected *ProcessError, got %T", err)
+	}
+	if procErr.ExitCode != 1 {
+		t.Errorf("Expected exit code 1, got %d", procErr.ExitCode)
+	}
+	if procErr.Stderr != "permission denied" {
+		t.Errorf("Expected stderr 'permission denied', got %q", procErr.Stderr)
+	}
+	if !strings.Contains(err.Error(), "exit code: 1") {
+		t.Error("Expected error message to contain exit code")
+	}
+}
+
+// validateJSONDecodeError validates JSONDecodeError specifics
+func validateJSONDecodeError(t *testing.T, err SDKError) {
+	t.Helper()
+	jsonErr, ok := err.(*JSONDecodeError)
+	if !ok {
+		t.Fatalf("Expected *JSONDecodeError, got %T", err)
+	}
+	if jsonErr.Line == "" {
+		t.Error("Expected non-empty line field")
+	}
+	if jsonErr.Position != 15 {
+		t.Errorf("Expected position 15, got %d", jsonErr.Position)
+	}
+	if !strings.Contains(err.Error(), "Failed to decode JSON") {
+		t.Error("Expected error message to contain 'Failed to decode JSON'")
+	}
+}
+
+// validateMessageParseError validates MessageParseError specifics
+func validateMessageParseError(t *testing.T, err SDKError) {
+	t.Helper()
+	msgErr, ok := err.(*MessageParseError)
+	if !ok {
+		t.Fatalf("Expected *MessageParseError, got %T", err)
+	}
+	if msgErr.Data == nil {
+		t.Error("Expected data to be preserved")
+		return
+	}
+	dataMap, ok := msgErr.Data.(map[string]any)
+	if !ok {
+		t.Errorf("Expected data to be map[string]any, got %T", msgErr.Data)
+		return
+	}
+	if dataMap["type"] != "unknown" {
+		t.Errorf("Expected data type 'unknown', got %v", dataMap["type"])
+	}
+}
+
+// floatPtr creates a float64 pointer for testing
+func floatPtr(f float64) *float64 {
+	return &f
 }
