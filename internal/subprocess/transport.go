@@ -26,6 +26,8 @@ type Transport struct {
 	cliPath    string
 	options    *shared.Options
 	closeStdin bool
+	promptArg  *string // For one-shot queries, prompt passed as CLI argument
+	entrypoint string  // CLAUDE_CODE_ENTRYPOINT value (sdk-go or sdk-go-client)
 
 	// Connection state
 	connected bool
@@ -50,12 +52,25 @@ type Transport struct {
 }
 
 // New creates a new subprocess transport.
-func New(cliPath string, options *shared.Options, closeStdin bool) *Transport {
+func New(cliPath string, options *shared.Options, closeStdin bool, entrypoint string) *Transport {
 	return &Transport{
 		cliPath:    cliPath,
 		options:    options,
 		closeStdin: closeStdin,
+		entrypoint: entrypoint,
 		parser:     parser.New(),
+	}
+}
+
+// NewWithPrompt creates a new subprocess transport for one-shot queries with prompt as CLI argument.
+func NewWithPrompt(cliPath string, options *shared.Options, prompt string) *Transport {
+	return &Transport{
+		cliPath:    cliPath,
+		options:    options,
+		closeStdin: true,
+		entrypoint: "sdk-go", // Query mode uses sdk-go
+		parser:     parser.New(),
+		promptArg:  &prompt,
 	}
 }
 
@@ -76,11 +91,18 @@ func (t *Transport) Connect(ctx context.Context) error {
 	}
 
 	// Build command with all options
-	args := cli.BuildCommand(t.cliPath, t.options, t.closeStdin)
+	var args []string
+	if t.promptArg != nil {
+		// One-shot query with prompt as CLI argument
+		args = cli.BuildCommandWithPrompt(t.cliPath, t.options, *t.promptArg)
+	} else {
+		// Streaming mode or regular one-shot
+		args = cli.BuildCommand(t.cliPath, t.options, t.closeStdin)
+	}
 	t.cmd = exec.CommandContext(ctx, args[0], args[1:]...)
 
 	// Set up environment
-	t.cmd.Env = append(os.Environ(), "CLAUDE_CODE_ENTRYPOINT=sdk-go")
+	t.cmd.Env = append(os.Environ(), "CLAUDE_CODE_ENTRYPOINT="+t.entrypoint)
 
 	// Set working directory if specified
 	if t.options != nil && t.options.Cwd != nil {
@@ -92,9 +114,12 @@ func (t *Transport) Connect(ctx context.Context) error {
 
 	// Set up I/O pipes
 	var err error
-	t.stdin, err = t.cmd.StdinPipe()
-	if err != nil {
-		return fmt.Errorf("failed to create stdin pipe: %w", err)
+	if t.promptArg == nil {
+		// Only create stdin pipe if we need to send messages via stdin
+		t.stdin, err = t.cmd.StdinPipe()
+		if err != nil {
+			return fmt.Errorf("failed to create stdin pipe: %w", err)
+		}
 	}
 
 	t.stdout, err = t.cmd.StdoutPipe()
@@ -130,11 +155,9 @@ func (t *Transport) Connect(ctx context.Context) error {
 	t.wg.Add(1)
 	go t.handleStdout()
 
-	// Close stdin for one-shot mode
-	if t.closeStdin {
-		t.stdin.Close()
-		t.stdin = nil
-	}
+	// Note: Do NOT close stdin here for one-shot mode
+	// The CLI still needs stdin to receive the message, even with --print flag
+	// stdin will be closed after sending the message in SendMessage()
 
 	t.connected = true
 	return nil
@@ -144,6 +167,12 @@ func (t *Transport) Connect(ctx context.Context) error {
 func (t *Transport) SendMessage(ctx context.Context, message shared.StreamMessage) error {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
+
+	// For one-shot queries with promptArg, the prompt is already passed as CLI argument
+	// so we don't need to send any messages via stdin
+	if t.promptArg != nil {
+		return nil // No-op for one-shot queries
+	}
 
 	if !t.connected || t.stdin == nil {
 		return fmt.Errorf("transport not connected or stdin closed")
@@ -166,6 +195,12 @@ func (t *Transport) SendMessage(ctx context.Context, message shared.StreamMessag
 	_, err = t.stdin.Write(append(data, '\n'))
 	if err != nil {
 		return fmt.Errorf("failed to write message: %w", err)
+	}
+
+	// For one-shot mode, close stdin after sending the message
+	if t.closeStdin {
+		t.stdin.Close()
+		t.stdin = nil
 	}
 
 	return nil

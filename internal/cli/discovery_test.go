@@ -13,9 +13,9 @@ import (
 // TestCLIDiscovery tests CLI binary discovery functionality
 func TestCLIDiscovery(t *testing.T) {
 	tests := []struct {
-		name        string
-		setupEnv    func(t *testing.T) (cleanup func())
-		expectError bool
+		name          string
+		setupEnv      func(t *testing.T) (cleanup func())
+		expectError   bool
 		errorContains string
 	}{
 		{
@@ -23,7 +23,7 @@ func TestCLIDiscovery(t *testing.T) {
 			setupEnv: func(t *testing.T) func() {
 				return setupIsolatedEnvironment(t)
 			},
-			expectError: true,
+			expectError:   true,
 			errorContains: "install",
 		},
 	}
@@ -144,9 +144,9 @@ func TestExtraArgsSupport(t *testing.T) {
 // TestWorkingDirectoryValidation tests working directory validation
 func TestWorkingDirectoryValidation(t *testing.T) {
 	tests := []struct {
-		name        string
-		setup       func(t *testing.T) string
-		expectError bool
+		name          string
+		setup         func(t *testing.T) string
+		expectError   bool
 		errorContains string
 	}{
 		{
@@ -173,7 +173,7 @@ func TestWorkingDirectoryValidation(t *testing.T) {
 				os.WriteFile(tempFile, []byte("test"), 0644)
 				return tempFile
 			},
-			expectError: true,
+			expectError:   true,
 			errorContains: "not a directory",
 		},
 	}

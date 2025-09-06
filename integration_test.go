@@ -74,7 +74,7 @@ func TestIntegrationCoreQueries(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			transport, opts := test.setupTest(t)
-			
+
 			ctx, cancel := setupIntegrationContext(t, opts.timeout)
 			defer cancel()
 
@@ -226,7 +226,7 @@ func TestIntegrationReliability(t *testing.T) {
 			name: "large_response_integration",
 			setupTest: func(t *testing.T) (*integrationMockTransport, *integrationTestOptions) {
 				transport := newIntegrationMockTransport(
-					WithIntegrationLargeResponse(1024*1024), // 1MB response
+					WithIntegrationLargeResponse(1024 * 1024), // 1MB response
 				)
 				opts := &integrationTestOptions{timeout: 8 * time.Second}
 				return transport, opts
@@ -267,7 +267,7 @@ func TestIntegrationReliability(t *testing.T) {
 			validateFn: validateSpecificResourceCleanup,
 		},
 		{
-			name: "strict_transport_state_test", 
+			name: "strict_transport_state_test",
 			setupTest: func(t *testing.T) (*integrationMockTransport, *integrationTestOptions) {
 				transport := newIntegrationMockTransport()
 				opts := &integrationTestOptions{timeout: 3 * time.Second}
@@ -283,7 +283,7 @@ func TestIntegrationReliability(t *testing.T) {
 
 			ctx, cancel := setupIntegrationContext(t, opts.timeout)
 			defer cancel()
-			
+
 			// Verify resource cleanup after validation function's defers complete
 			defer verifyIntegrationResourceCleanup(t, transport)
 
@@ -307,10 +307,10 @@ func TestIntegrationPerformance(t *testing.T) {
 					WithIntegrationPerformanceScenario(1000), // 1000 messages
 				)
 				opts := &integrationTestOptions{
-					timeout:       60 * time.Second,
-					messageCount:  1000,
-					maxLatencyMs:  100,
-					maxMemoryMB:   50,
+					timeout:      60 * time.Second,
+					messageCount: 1000,
+					maxLatencyMs: 100,
+					maxMemoryMB:  50,
 				}
 				return transport, opts
 			},
@@ -341,7 +341,7 @@ func TestIntegrationPerformance(t *testing.T) {
 
 			ctx, cancel := setupIntegrationContext(t, opts.timeout)
 			defer cancel()
-			
+
 			// Verify resource cleanup after validation function's defers complete
 			defer verifyIntegrationResourceCleanup(t, transport)
 
@@ -433,13 +433,13 @@ func TestIntegrationProduction(t *testing.T) {
 
 // integrationTestOptions holds configuration for integration tests
 type integrationTestOptions struct {
-	timeout       time.Duration
-	streaming     bool
-	concurrent    int
-	messageCount  int
-	maxLatencyMs  int
-	maxMemoryMB   int
-	fullFeature   bool
+	timeout      time.Duration
+	streaming    bool
+	concurrent   int
+	messageCount int
+	maxLatencyMs int
+	maxMemoryMB  int
+	fullFeature  bool
 }
 
 // integrationMockTransport implements Transport interface for integration testing
@@ -451,12 +451,12 @@ type integrationMockTransport struct {
 	sentMessages []claudecode.StreamMessage
 
 	// Integration-specific test data
-	testMessages     []claudecode.Message
-	testScenarios    map[string]*integrationScenario
-	resourceTracker  *integrationResourceTracker
+	testMessages    []claudecode.Message
+	testScenarios   map[string]*integrationScenario
+	resourceTracker *integrationResourceTracker
 	msgChan         chan claudecode.Message
 	errChan         chan error
-	messageIndex     int // Track which messages have been sent
+	messageIndex    int // Track which messages have been sent
 
 	// Error injection for testing
 	connectError   error
@@ -505,7 +505,7 @@ func (i *integrationMockTransport) SendMessage(ctx context.Context, message clau
 		return fmt.Errorf("not connected")
 	}
 	i.sentMessages = append(i.sentMessages, message)
-	
+
 	return nil
 }
 
@@ -543,11 +543,11 @@ func (i *integrationMockTransport) ReceiveMessages(ctx context.Context) (<-chan 
 					ch := i.msgChan
 					closed := i.closed
 					i.mu.Unlock()
-					
+
 					if closed || ch == nil {
 						return
 					}
-					
+
 					// Use recover to gracefully handle send on closed channel
 					func() {
 						defer func() {
@@ -598,7 +598,7 @@ func (i *integrationMockTransport) Interrupt(ctx context.Context) error {
 func (i *integrationMockTransport) Close() error {
 	i.mu.Lock()
 	defer i.mu.Unlock()
-	
+
 	if i.closeError != nil {
 		return i.closeError
 	}
@@ -633,9 +633,9 @@ func (i *integrationMockTransport) Close() error {
 	if i.resourceTracker != nil {
 		i.resourceTracker.mu.Lock()
 		// Clean up all tracked resources as expected
-		i.resourceTracker.goroutines = 0     // All goroutines should be cleaned up
-		i.resourceTracker.openFiles = 0      // All files closed
-		i.resourceTracker.connections = 0    // All connections closed
+		i.resourceTracker.goroutines = 0        // All goroutines should be cleaned up
+		i.resourceTracker.openFiles = 0         // All files closed
+		i.resourceTracker.connections = 0       // All connections closed
 		i.resourceTracker.allocatedMemoryMB = 0 // Memory released
 		i.resourceTracker.mu.Unlock()
 	}

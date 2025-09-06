@@ -36,7 +36,7 @@ func TestOptionsDefaults(t *testing.T) {
 
 	// Test nil pointer fields
 	nilTests := []struct {
-		name string
+		name  string
 		check func() bool
 	}{
 		{"SystemPrompt", func() bool { return options.SystemPrompt == nil }},

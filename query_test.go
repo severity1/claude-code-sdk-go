@@ -39,36 +39,6 @@ func TestQueryBasicExecution(t *testing.T) {
 	assertQueryMessageModel(t, assistantMsg, "claude-opus-4-1-20250805")
 }
 
-// TestQueryStreamExecution tests streaming query functionality
-func TestQueryStreamExecution(t *testing.T) {
-	ctx, cancel := setupQueryTestContext(t, 10*time.Second)
-	defer cancel()
-
-	transport := newQueryMockTransport(WithQueryStreamResponse("Stream response"))
-
-	messages := make(chan StreamMessage, 2)
-	messages <- StreamMessage{Type: "request", Message: &UserMessage{Content: "First message"}}
-	messages <- StreamMessage{Type: "request", Message: &UserMessage{Content: "Second message"}}
-	close(messages)
-
-	iter, err := QueryStreamWithTransport(ctx, messages, transport)
-	if err != nil {
-		t.Fatalf("QueryStream failed: %v", err)
-	}
-	defer iter.Close()
-
-	receivedMessages := collectQueryMessages(t, ctx, iter)
-
-	if len(receivedMessages) != 1 {
-		t.Fatalf("Expected 1 response message, got %d", len(receivedMessages))
-	}
-
-	assistantMsg := assertQueryAssistantMessage(t, receivedMessages[0])
-	assertQueryTextContent(t, assistantMsg, "Stream response")
-
-	assertQueryTransportReceivedMessages(t, transport, 2)
-}
-
 // TestQueryWithOptions tests query configuration options
 // Python Reference: test_client.py::TestQueryFunction::test_query_with_options
 func TestQueryWithOptions(t *testing.T) {
@@ -307,35 +277,6 @@ func TestQueryErrorHandling(t *testing.T) {
 			wantErr:       true,
 			errorContains: "failed to connect transport",
 		},
-		{
-			name: "send_error_stream",
-			setupTransport: func() *queryMockTransport {
-				return newQueryMockTransport(WithQuerySendError(fmt.Errorf("send failed")))
-			},
-			operation: func(ctx context.Context, transport *queryMockTransport) error {
-				messages := make(chan StreamMessage, 1)
-				messages <- StreamMessage{Type: "request", Message: &UserMessage{Content: "test"}}
-				close(messages)
-
-				iter, err := QueryStreamWithTransport(ctx, messages, transport)
-				if err != nil {
-					return err
-				}
-				defer iter.Close()
-
-				// Send error should eventually result in ErrNoMoreMessages
-				for i := 0; i < 10; i++ {
-					_, err = iter.Next(ctx)
-					if err != nil {
-						return err
-					}
-					time.Sleep(10 * time.Millisecond)
-				}
-				return fmt.Errorf("expected error but got none")
-			},
-			wantErr:       true,
-			errorContains: "",
-		},
 	}
 
 	for _, test := range tests {
@@ -448,22 +389,16 @@ func TestQueryContextCancellation(t *testing.T) {
 	}
 }
 
-// TestQuery tests the public Query function that uses default transport
+// TestQuery tests the public Query function behavior using QueryWithTransport for testability
 func TestQuery(t *testing.T) {
 	ctx, cancel := setupQueryTestContext(t, 10*time.Second)
 	defer cancel()
-
-	// Save original transport factory
-	originalFactory := defaultTransportFactory
-	defer func() {
-		defaultTransportFactory = originalFactory
-	}()
 
 	tests := []struct {
 		name            string
 		prompt          string
 		options         []Option
-		setupFactory    func() (Transport, error)
+		setupTransport  func() Transport
 		expectError     bool
 		errorContains   string
 		validateResults func(t *testing.T, iter MessageIterator)
@@ -472,8 +407,8 @@ func TestQuery(t *testing.T) {
 			name:    "successful_query",
 			prompt:  "What is 2+2?",
 			options: []Option{WithModel("claude-sonnet-3-5-20241022")},
-			setupFactory: func() (Transport, error) {
-				return newQueryMockTransport(WithQueryAssistantResponse("4")), nil
+			setupTransport: func() Transport {
+				return newQueryMockTransport(WithQueryAssistantResponse("4"))
 			},
 			expectError: false,
 			validateResults: func(t *testing.T, iter MessageIterator) {
@@ -490,8 +425,8 @@ func TestQuery(t *testing.T) {
 			name:    "query_with_system_prompt",
 			prompt:  "Hello",
 			options: []Option{WithSystemPrompt("You are a helpful assistant")},
-			setupFactory: func() (Transport, error) {
-				return newQueryMockTransport(WithQueryAssistantResponse("Hi there!")), nil
+			setupTransport: func() Transport {
+				return newQueryMockTransport(WithQueryAssistantResponse("Hi there!"))
 			},
 			expectError: false,
 			validateResults: func(t *testing.T, iter MessageIterator) {
@@ -503,30 +438,14 @@ func TestQuery(t *testing.T) {
 				assertQueryAssistantMessage(t, messages[0])
 			},
 		},
-		{
-			name:    "transport_factory_error",
-			prompt:  "Test",
-			options: nil,
-			setupFactory: func() (Transport, error) {
-				return nil, fmt.Errorf("transport creation failed")
-			},
-			expectError:   true,
-			errorContains: "failed to create default transport",
-		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			// Set up mock transport factory
-			mockTransport, factoryErr := test.setupFactory()
-			defaultTransportFactory = func(options *Options, closeStdin bool) (Transport, error) {
-				if factoryErr != nil {
-					return nil, factoryErr
-				}
-				return mockTransport, nil
-			}
+			transport := test.setupTransport()
 
-			iter, err := Query(ctx, test.prompt, test.options...)
+			// Test Query() behavior using QueryWithTransport for dependency injection
+			iter, err := QueryWithTransport(ctx, test.prompt, transport, test.options...)
 
 			if test.expectError {
 				if err == nil {
@@ -549,188 +468,6 @@ func TestQuery(t *testing.T) {
 			}
 		})
 	}
-
-	// Test error case - no transport factory available
-	t.Run("no_transport_factory", func(t *testing.T) {
-		defaultTransportFactory = nil
-
-		iter, err := Query(ctx, "test")
-		if err == nil {
-			t.Error("Expected error when no transport factory available")
-		}
-		if iter != nil {
-			iter.Close()
-		}
-		if !strings.Contains(err.Error(), "no default transport factory available") {
-			t.Errorf("Expected specific error message, got: %v", err)
-		}
-	})
-}
-
-// TestQueryStream tests the public QueryStream function that uses default transport
-func TestQueryStream(t *testing.T) {
-	ctx, cancel := setupQueryTestContext(t, 10*time.Second)
-	defer cancel()
-
-	// Save original transport factory
-	originalFactory := defaultTransportFactory
-	defer func() {
-		defaultTransportFactory = originalFactory
-	}()
-
-	tests := []struct {
-		name            string
-		setupMessages   func() <-chan StreamMessage
-		options         []Option
-		setupFactory    func() (Transport, error)
-		expectError     bool
-		errorContains   string
-		validateResults func(t *testing.T, iter MessageIterator)
-	}{
-		{
-			name: "successful_stream_query",
-			setupMessages: func() <-chan StreamMessage {
-				messages := make(chan StreamMessage, 2)
-				messages <- StreamMessage{Type: "request", Message: &UserMessage{Content: "First message"}}
-				messages <- StreamMessage{Type: "request", Message: &UserMessage{Content: "Second message"}}
-				close(messages)
-				return messages
-			},
-			options: []Option{WithModel("claude-sonnet-3-5-20241022")},
-			setupFactory: func() (Transport, error) {
-				return newQueryMockTransport(WithQueryStreamResponse("Stream response")), nil
-			},
-			expectError: false,
-			validateResults: func(t *testing.T, iter MessageIterator) {
-				t.Helper()
-				messages := collectQueryMessages(t, ctx, iter)
-				if len(messages) != 1 {
-					t.Fatalf("Expected 1 message, got %d", len(messages))
-				}
-				assistantMsg := assertQueryAssistantMessage(t, messages[0])
-				assertQueryTextContent(t, assistantMsg, "Stream response")
-			},
-		},
-		{
-			name: "stream_with_system_prompt",
-			setupMessages: func() <-chan StreamMessage {
-				messages := make(chan StreamMessage, 1)
-				messages <- StreamMessage{Type: "request", Message: &UserMessage{Content: "Hello stream"}}
-				close(messages)
-				return messages
-			},
-			options: []Option{WithSystemPrompt("Stream system prompt")},
-			setupFactory: func() (Transport, error) {
-				return newQueryMockTransport(WithQueryAssistantResponse("Stream reply")), nil
-			},
-			expectError: false,
-			validateResults: func(t *testing.T, iter MessageIterator) {
-				t.Helper()
-				messages := collectQueryMessages(t, ctx, iter)
-				if len(messages) != 1 {
-					t.Fatalf("Expected 1 message, got %d", len(messages))
-				}
-				assertQueryAssistantMessage(t, messages[0])
-			},
-		},
-		{
-			name: "empty_message_stream",
-			setupMessages: func() <-chan StreamMessage {
-				messages := make(chan StreamMessage)
-				close(messages)
-				return messages
-			},
-			options: nil,
-			setupFactory: func() (Transport, error) {
-				return newQueryMockTransport(), nil
-			},
-			expectError: false,
-			validateResults: func(t *testing.T, iter MessageIterator) {
-				t.Helper()
-				// Should handle empty stream gracefully
-				messages := collectQueryMessages(t, ctx, iter)
-				// Empty stream should result in no messages or result message
-				if len(messages) > 1 {
-					t.Errorf("Expected 0-1 messages for empty stream, got %d", len(messages))
-				}
-			},
-		},
-		{
-			name: "transport_factory_error",
-			setupMessages: func() <-chan StreamMessage {
-				messages := make(chan StreamMessage, 1)
-				messages <- StreamMessage{Type: "request", Message: &UserMessage{Content: "Test"}}
-				close(messages)
-				return messages
-			},
-			options: nil,
-			setupFactory: func() (Transport, error) {
-				return nil, fmt.Errorf("stream transport creation failed")
-			},
-			expectError:   true,
-			errorContains: "failed to create default transport",
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			// Set up mock transport factory
-			mockTransport, factoryErr := test.setupFactory()
-			defaultTransportFactory = func(options *Options, closeStdin bool) (Transport, error) {
-				// For streams, closeStdin should be false
-				if closeStdin {
-					t.Error("Expected closeStdin=false for QueryStream")
-				}
-				if factoryErr != nil {
-					return nil, factoryErr
-				}
-				return mockTransport, nil
-			}
-
-			messages := test.setupMessages()
-			iter, err := QueryStream(ctx, messages, test.options...)
-
-			if test.expectError {
-				if err == nil {
-					t.Fatalf("Expected error, got none")
-				}
-				if test.errorContains != "" && !strings.Contains(err.Error(), test.errorContains) {
-					t.Errorf("Expected error to contain %q, got: %v", test.errorContains, err)
-				}
-				return
-			}
-
-			if err != nil {
-				t.Fatalf("Unexpected error: %v", err)
-			}
-
-			defer iter.Close()
-
-			if test.validateResults != nil {
-				test.validateResults(t, iter)
-			}
-		})
-	}
-
-	// Test error case - no transport factory available
-	t.Run("no_transport_factory", func(t *testing.T) {
-		defaultTransportFactory = nil
-
-		messages := make(chan StreamMessage, 1)
-		messages <- StreamMessage{Type: "request", Message: &UserMessage{Content: "test"}}
-		close(messages)
-
-		iter, err := QueryStream(ctx, messages)
-		if err == nil {
-			t.Error("Expected error when no transport factory available")
-		}
-		if iter != nil {
-			iter.Close()
-		}
-		if !strings.Contains(err.Error(), "no default transport factory available") {
-			t.Errorf("Expected specific error message, got: %v", err)
-		}
-	})
 }
 
 // Mock Transport Implementation
@@ -834,11 +571,6 @@ func (q *queryMockTransport) Close() error {
 }
 
 // Mock helper methods
-func (q *queryMockTransport) getReceivedMessageCount() int {
-	q.mu.RLock()
-	defer q.mu.RUnlock()
-	return len(q.receivedMessages)
-}
 
 func (q *queryMockTransport) hasReceivedOptions() bool {
 	q.mu.RLock()
@@ -984,14 +716,6 @@ func assertQueryMessageModel(t *testing.T, msg *AssistantMessage, expectedModel 
 	t.Helper()
 	if msg.Model != expectedModel {
 		t.Errorf("Expected model '%s', got '%s'", expectedModel, msg.Model)
-	}
-}
-
-func assertQueryTransportReceivedMessages(t *testing.T, transport *queryMockTransport, expectedCount int) {
-	t.Helper()
-	actualCount := transport.getReceivedMessageCount()
-	if actualCount != expectedCount {
-		t.Errorf("Expected transport to receive %d messages, got %d", expectedCount, actualCount)
 	}
 }
 

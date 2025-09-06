@@ -5,6 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+
+	"github.com/severity1/claude-code-sdk-go/internal/cli"
+	"github.com/severity1/claude-code-sdk-go/internal/shared"
+	"github.com/severity1/claude-code-sdk-go/internal/subprocess"
 )
 
 // ErrNoMoreMessages indicates the message iterator has no more messages.
@@ -15,32 +19,14 @@ var ErrNoMoreMessages = errors.New("no more messages")
 func Query(ctx context.Context, prompt string, opts ...Option) (MessageIterator, error) {
 	options := NewOptions(opts...)
 
-	// Create default transport
-	if defaultTransportFactory == nil {
-		return nil, fmt.Errorf("no default transport factory available - please install transport package")
-	}
-	transport, err := defaultTransportFactory(options, true) // true = close stdin for one-shot query
+	// For one-shot queries, create a transport that passes prompt as CLI argument
+	// This matches the Python SDK behavior where prompt is passed via --print flag
+	transport, err := createQueryTransport(prompt, options)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create default transport: %w", err)
+		return nil, fmt.Errorf("failed to create query transport: %w", err)
 	}
 
 	return queryWithTransportAndOptions(ctx, prompt, transport, options)
-}
-
-// QueryStream executes a query with a stream of messages.
-func QueryStream(ctx context.Context, messages <-chan StreamMessage, opts ...Option) (MessageIterator, error) {
-	options := NewOptions(opts...)
-
-	// Create default transport
-	if defaultTransportFactory == nil {
-		return nil, fmt.Errorf("no default transport factory available - please install transport package")
-	}
-	transport, err := defaultTransportFactory(options, false) // false = streaming mode, keep stdin open
-	if err != nil {
-		return nil, fmt.Errorf("failed to create default transport: %w", err)
-	}
-
-	return queryStreamWithTransportAndOptions(ctx, messages, transport, options)
 }
 
 // QueryWithTransport executes a query with a custom transport.
@@ -54,17 +40,6 @@ func QueryWithTransport(ctx context.Context, prompt string, transport Transport,
 	return queryWithTransportAndOptions(ctx, prompt, transport, options)
 }
 
-// QueryStreamWithTransport executes a stream query with a custom transport.
-// The transport parameter is required and must not be nil.
-func QueryStreamWithTransport(ctx context.Context, messages <-chan StreamMessage, transport Transport, opts ...Option) (MessageIterator, error) {
-	if transport == nil {
-		return nil, fmt.Errorf("transport is required")
-	}
-
-	options := NewOptions(opts...)
-	return queryStreamWithTransportAndOptions(ctx, messages, transport, options)
-}
-
 // Internal helper functions
 func queryWithTransportAndOptions(ctx context.Context, prompt string, transport Transport, options *Options) (MessageIterator, error) {
 	if transport == nil {
@@ -75,20 +50,6 @@ func queryWithTransportAndOptions(ctx context.Context, prompt string, transport 
 	return &queryIterator{
 		transport: transport,
 		prompt:    prompt,
-		ctx:       ctx,
-		options:   options,
-	}, nil
-}
-
-func queryStreamWithTransportAndOptions(ctx context.Context, messages <-chan StreamMessage, transport Transport, options *Options) (MessageIterator, error) {
-	if transport == nil {
-		return nil, fmt.Errorf("transport is required")
-	}
-
-	// Create iterator that manages the transport lifecycle
-	return &streamIterator{
-		transport: transport,
-		messages:  messages,
 		ctx:       ctx,
 		options:   options,
 	}, nil
@@ -186,113 +147,15 @@ func (qi *queryIterator) start() error {
 	return nil
 }
 
-// streamIterator implements MessageIterator for streaming queries
-type streamIterator struct {
-	transport Transport
-	messages  <-chan StreamMessage
-	ctx       context.Context
-	options   *Options
-	started   bool
-	msgChan   <-chan Message
-	errChan   <-chan error
-	sendErr   error
-	mu        sync.Mutex
-	closed    bool
-	closeOnce sync.Once
-}
-
-func (si *streamIterator) Next(ctx context.Context) (Message, error) {
-	si.mu.Lock()
-	if si.closed {
-		si.mu.Unlock()
-		return nil, ErrNoMoreMessages
-	}
-
-	// Check for send errors
-	if si.sendErr != nil {
-		err := si.sendErr
-		si.closed = true
-		si.mu.Unlock()
-		return nil, fmt.Errorf("send error: %w", err)
-	}
-
-	// Initialize on first call
-	if !si.started {
-		if err := si.start(); err != nil {
-			si.mu.Unlock()
-			return nil, err
-		}
-		si.started = true
-	}
-	si.mu.Unlock()
-
-	// Read from message channels (transport-driven completion)
-	select {
-	case msg, ok := <-si.msgChan:
-		if !ok {
-			si.mu.Lock()
-			si.closed = true
-			si.mu.Unlock()
-			return nil, ErrNoMoreMessages
-		}
-		return msg, nil
-	case err := <-si.errChan:
-		si.mu.Lock()
-		si.closed = true
-		si.mu.Unlock()
+// createQueryTransport creates a transport for one-shot queries with prompt as CLI argument.
+func createQueryTransport(prompt string, options *Options) (Transport, error) {
+	// Import here to avoid issues - actual imports are at the top of the file
+	// Find Claude CLI binary
+	cliPath, err := cli.FindCLI()
+	if err != nil {
 		return nil, err
-	case <-si.ctx.Done():
-		si.mu.Lock()
-		si.closed = true
-		si.mu.Unlock()
-		return nil, si.ctx.Err()
-	}
-}
-
-func (si *streamIterator) Close() error {
-	var err error
-	si.closeOnce.Do(func() {
-		si.mu.Lock()
-		si.closed = true
-		si.mu.Unlock()
-		if si.transport != nil {
-			err = si.transport.Close()
-		}
-	})
-	return err
-}
-
-func (si *streamIterator) start() error {
-	// Connect to transport
-	if err := si.transport.Connect(si.ctx); err != nil {
-		return fmt.Errorf("failed to connect transport: %w", err)
 	}
 
-	// Get message channels
-	msgChan, errChan := si.transport.ReceiveMessages(si.ctx)
-	si.msgChan = msgChan
-	si.errChan = errChan
-
-	// Start goroutine to send messages from the stream
-	go func() {
-		for {
-			select {
-			case msg, ok := <-si.messages:
-				if !ok {
-					return // Channel closed - sender completed normally
-				}
-				if err := si.transport.SendMessage(si.ctx, msg); err != nil {
-					// Store send error in iterator state
-					si.mu.Lock()
-					si.sendErr = err
-					si.mu.Unlock()
-					return
-				}
-			case <-si.ctx.Done():
-				return
-			}
-		}
-	}()
-
-	return nil
+	// Create subprocess transport with prompt as CLI argument
+	return subprocess.NewWithPrompt(cliPath, (*shared.Options)(options), prompt), nil
 }

@@ -141,12 +141,4 @@ func setupErrorTestContext(t *testing.T, timeout time.Duration) (context.Context
 
 // ❌ Avoid - shared helpers create hidden dependencies
 // Shared setupTestContext used across multiple test files
-```
-
-## Project Documentation
-
-**Technical Specifications**: See [SPECIFICATIONS.md](SPECIFICATIONS.md) for complete API specifications, type definitions, and behavioral requirements.
-
-**Implementation Analysis**: The [analysis/](analysis/) directory contains detailed analysis of the reference Claude Code SDK for Python, implementation guides, transport layer specs, usage patterns, and architectural decisions.
-
-**Task Tracking**: See [TDD_IMPLEMENTATION_TASKS.md](TDD_IMPLEMENTATION_TASKS.md) for current development progress, test requirements, and completion status following Test-Driven Development methodology.
+```~~~~

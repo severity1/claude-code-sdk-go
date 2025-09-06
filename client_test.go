@@ -108,17 +108,20 @@ func TestClientQueryExecution(t *testing.T) {
 	if !ok {
 		t.Fatal("Failed to get sent message")
 	}
-	if sentMsg.Type != "request" {
-		t.Errorf("Expected message type 'request', got '%s'", sentMsg.Type)
+	if sentMsg.Type != "user" {
+		t.Errorf("Expected message type 'user', got '%s'", sentMsg.Type)
 	}
 
-	userMsg, ok := sentMsg.Message.(*UserMessage)
+	messageMap, ok := sentMsg.Message.(map[string]interface{})
 	if !ok {
-		t.Fatalf("Expected UserMessage, got %T", sentMsg.Message)
+		t.Fatalf("Expected map[string]interface{}, got %T", sentMsg.Message)
 	}
 
-	if content, ok := userMsg.Content.(string); !ok || content != "What is 2+2?" {
-		t.Errorf("Expected content 'What is 2+2?', got '%v'", userMsg.Content)
+	if role, ok := messageMap["role"]; !ok || role != "user" {
+		t.Errorf("Expected message role 'user', got '%v'", role)
+	}
+	if content, ok := messageMap["content"]; !ok || content != "What is 2+2?" {
+		t.Errorf("Expected content 'What is 2+2?', got '%v'", content)
 	}
 }
 
@@ -884,8 +887,8 @@ func TestClientGracefulShutdown(t *testing.T) {
 	if !ok {
 		t.Fatal("Failed to get sent message")
 	}
-	if sentMsg.Type != "request" {
-		t.Errorf("Expected message type 'request', got '%s'", sentMsg.Type)
+	if sentMsg.Type != "user" {
+		t.Errorf("Expected message type 'user', got '%s'", sentMsg.Type)
 	}
 
 	// Test memory management (T153) - multiple operations should not leak
@@ -901,20 +904,9 @@ func TestClientGracefulShutdown(t *testing.T) {
 
 // TestNewClient tests the NewClient constructor function
 func TestNewClient(t *testing.T) {
-	ctx, cancel := setupClientTestContext(t, 10*time.Second)
-	defer cancel()
-
-	// Save original transport factory
-	originalFactory := defaultTransportFactory
-	defer func() {
-		defaultTransportFactory = originalFactory
-	}()
-
-	// Test with mock default transport factory
-	mockTransport := newClientMockTransport()
-	defaultTransportFactory = func(options *Options, closeStdin bool) (Transport, error) {
-		return mockTransport, nil
-	}
+	// Note: With direct transport creation, we test the constructor logic
+	// without mocking the factory. Connect() will be tested separately with
+	// proper transport mocking at the subprocess level.
 
 	tests := []struct {
 		name    string
@@ -929,9 +921,8 @@ func TestNewClient(t *testing.T) {
 				if client == nil {
 					t.Fatal("Expected client to be created")
 				}
-				// Test that client can connect using default transport
-				err := client.Connect(ctx)
-				assertClientError(t, err, false, "")
+				// Test constructor creates client without errors
+				// (Connection testing done separately with transport mocks)
 			},
 		},
 		{
@@ -942,8 +933,7 @@ func TestNewClient(t *testing.T) {
 				if client == nil {
 					t.Fatal("Expected client to be created with system prompt")
 				}
-				err := client.Connect(ctx)
-				assertClientError(t, err, false, "")
+				// Test constructor accepts system prompt option
 			},
 		},
 		{
@@ -958,8 +948,7 @@ func TestNewClient(t *testing.T) {
 				if client == nil {
 					t.Fatal("Expected client to be created with multiple options")
 				}
-				err := client.Connect(ctx)
-				assertClientError(t, err, false, "")
+				// Test constructor accepts multiple options
 			},
 		},
 	}
@@ -973,14 +962,8 @@ func TestNewClient(t *testing.T) {
 		})
 	}
 
-	// Test error case - no transport factory available
-	defaultTransportFactory = nil
-	client := NewClient()
-	err := client.Connect(ctx)
-	if err == nil {
-		t.Error("Expected error when no transport factory available")
-	}
-	defer disconnectClientSafely(t, client)
+	// Note: Error cases for Connect() are tested in TestClientErrorHandling
+	// with proper transport mocking
 }
 
 // TestClientIteratorClose tests the clientIterator Close method
@@ -1389,8 +1372,8 @@ func verifyComplexConfig(t *testing.T, client Client, transport *clientMockTrans
 		if !ok {
 			t.Fatalf("Expected sent message %d", i)
 		}
-		if sentMsg.Type != "request" {
-			t.Errorf("Expected message type 'request', got %q", sentMsg.Type)
+		if sentMsg.Type != "user" {
+			t.Errorf("Expected message type 'user', got %q", sentMsg.Type)
 		}
 	}
 }
@@ -1544,4 +1527,130 @@ func verifyIteratorCloseAfterConsumption(t *testing.T, client Client, transport 
 	if msg != nil {
 		t.Error("Expected nil message after close, got message")
 	}
+}
+
+// TestClientPythonSDKCompatibility tests Client with Python SDK compatible message format and streaming
+func TestClientPythonSDKCompatibility(t *testing.T) {
+	ctx, cancel := setupClientTestContext(t, 10*time.Second)
+	defer cancel()
+
+	// Create mock messages similar to what Python SDK would receive
+	costValue := 0.001234
+	testMessages := []Message{
+		&AssistantMessage{
+			Content: []ContentBlock{
+				&TextBlock{
+					Text: "Hello! I understand you want to test the streaming functionality.",
+				},
+			},
+		},
+		&ResultMessage{
+			TotalCostUSD: &costValue,
+		},
+	}
+
+	transport := newClientMockTransportWithOptions(
+		WithClientResponseMessages(testMessages),
+	)
+	client := setupClientForTest(t, transport)
+	defer disconnectClientSafely(t, client)
+
+	// Test complete workflow: Connect → Query → ReceiveMessages
+	connectClientSafely(t, ctx, client)
+	assertClientConnected(t, transport)
+
+	// Send query using new Python SDK compatible format
+	err := client.Query(ctx, "Test streaming with Python SDK format", "test-session")
+	assertClientError(t, err, false, "")
+
+	// Verify message was sent in correct Python SDK format
+	assertClientMessageCount(t, transport, 1)
+	sentMsg, ok := transport.getSentMessage(0)
+	if !ok {
+		t.Fatal("Failed to get sent message")
+	}
+
+	// Verify Python SDK compatible message structure
+	if sentMsg.Type != "user" {
+		t.Errorf("Expected message type 'user', got '%s'", sentMsg.Type)
+	}
+	if sentMsg.SessionID != "test-session" {
+		t.Errorf("Expected session ID 'test-session', got '%s'", sentMsg.SessionID)
+	}
+	if sentMsg.ParentToolUseID != nil {
+		t.Errorf("Expected nil ParentToolUseID, got '%v'", sentMsg.ParentToolUseID)
+	}
+
+	// Verify nested message structure matches Python format
+	messageMap, ok := sentMsg.Message.(map[string]interface{})
+	if !ok {
+		t.Fatalf("Expected Message to be map[string]interface{}, got %T", sentMsg.Message)
+	}
+	if role, ok := messageMap["role"]; !ok || role != "user" {
+		t.Errorf("Expected message role 'user', got '%v'", role)
+	}
+	if content, ok := messageMap["content"]; !ok || content != "Test streaming with Python SDK format" {
+		t.Errorf("Expected content to match prompt, got '%v'", content)
+	}
+
+	// Test message receiving functionality
+	msgChan := client.ReceiveMessages(ctx)
+	if msgChan == nil {
+		t.Fatal("ReceiveMessages returned nil channel")
+	}
+
+	// Receive first message (AssistantMessage)
+	select {
+	case msg := <-msgChan:
+		if msg == nil {
+			t.Fatal("Received nil message")
+		}
+		assistantMsg, ok := msg.(*AssistantMessage)
+		if !ok {
+			t.Fatalf("Expected AssistantMessage, got %T", msg)
+		}
+		if len(assistantMsg.Content) != 1 {
+			t.Fatalf("Expected 1 content block, got %d", len(assistantMsg.Content))
+		}
+		textBlock, ok := assistantMsg.Content[0].(*TextBlock)
+		if !ok {
+			t.Fatalf("Expected TextBlock, got %T", assistantMsg.Content[0])
+		}
+		if !strings.Contains(textBlock.Text, "streaming functionality") {
+			t.Errorf("Expected text to mention streaming functionality, got: %s", textBlock.Text)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Timeout waiting for first message")
+	}
+
+	// Receive second message (ResultMessage)
+	select {
+	case msg := <-msgChan:
+		if msg == nil {
+			t.Fatal("Received nil message")
+		}
+		resultMsg, ok := msg.(*ResultMessage)
+		if !ok {
+			t.Fatalf("Expected ResultMessage, got %T", msg)
+		}
+		if resultMsg.TotalCostUSD == nil || *resultMsg.TotalCostUSD != 0.001234 {
+			var cost float64
+			if resultMsg.TotalCostUSD != nil {
+				cost = *resultMsg.TotalCostUSD
+			}
+			t.Errorf("Expected cost 0.001234, got %f", cost)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Timeout waiting for second message")
+	}
+
+	// Test iterator pattern with ReceiveResponse (basic functionality)
+	iter := client.ReceiveResponse(ctx)
+	if iter == nil {
+		t.Fatal("ReceiveResponse returned nil iterator")
+	}
+
+	// Test that iterator can be closed immediately (following existing test patterns)
+	err = iter.Close()
+	assertClientError(t, err, false, "")
 }

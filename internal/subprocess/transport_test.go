@@ -413,7 +413,7 @@ func setupTransportTestContext(t *testing.T, timeout time.Duration) (context.Con
 func setupTransportForTest(t *testing.T, cliPath string) *Transport {
 	t.Helper()
 	options := &shared.Options{}
-	return New(cliPath, options, false)
+	return New(cliPath, options, false, "sdk-go")
 }
 
 func connectTransportSafely(t *testing.T, ctx context.Context, transport *Transport) {

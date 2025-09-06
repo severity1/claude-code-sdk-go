@@ -1,0 +1,15 @@
+Sample Data File
+================
+
+User records:
+- John Doe, Admin, Active
+- Jane Smith, User, Active  
+- Bob Johnson, User, Inactive
+
+System metrics:
+- CPU Usage: 45%
+- Memory: 2.1GB/8GB
+- Disk: 120GB/500GB
+- Uptime: 72 hours
+
+Last updated: 2024-01-15

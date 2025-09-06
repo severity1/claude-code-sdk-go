@@ -12,10 +12,10 @@ import (
 // TestParseValidMessages tests parsing of valid message types
 func TestParseValidMessages(t *testing.T) {
 	tests := []struct {
-		name        string
-		data        map[string]any
+		name         string
+		data         map[string]any
 		expectedType string
-		validate    func(*testing.T, shared.Message)
+		validate     func(*testing.T, shared.Message)
 	}{
 		{
 			name: "user_message_with_text",
@@ -191,11 +191,11 @@ func TestParseValidMessages(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			parser := setupParserTest(t)
-			
+
 			message, err := parser.ParseMessage(test.data)
 			assertParseSuccess(t, err, message)
 			assertMessageType(t, message, test.expectedType)
-			
+
 			test.validate(t, message)
 		})
 	}
@@ -204,7 +204,7 @@ func TestParseValidMessages(t *testing.T) {
 // TestContentBlockDiscrimination tests parsing of different content block types
 func TestContentBlockDiscrimination(t *testing.T) {
 	parser := setupParserTest(t)
-	
+
 	tests := []struct {
 		name      string
 		blockData map[string]any
@@ -278,12 +278,12 @@ func TestContentBlockDiscrimination(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			block, err := parser.parseContentBlock(test.blockData)
 			assertParseSuccess(t, err, block)
-			
+
 			actualType := getContentBlockType(block)
 			if actualType != test.blockType {
 				t.Errorf("Expected block type %s, got %s", test.blockType, actualType)
 			}
-			
+
 			test.validate(t, block)
 		})
 	}
@@ -324,7 +324,7 @@ func TestParseErrors(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			parser := setupParserTest(t)
-			
+
 			_, err := parser.ParseMessage(test.data)
 			assertParseError(t, err, test.expectError)
 		})
@@ -352,7 +352,7 @@ func TestSpeculativeJSONParsing(t *testing.T) {
 	if !ok {
 		t.Fatalf("Expected UserMessage, got %T", msg2)
 	}
-	
+
 	blocks := userMsg.Content.([]shared.ContentBlock)
 	assertContentBlockCount(t, blocks, 1)
 	assertTextBlockContent(t, blocks[0], "Hello")
@@ -362,10 +362,10 @@ func TestSpeculativeJSONParsing(t *testing.T) {
 func TestBufferManagement(t *testing.T) {
 	t.Run("buffer_overflow_protection", func(t *testing.T) {
 		parser := setupParserTest(t)
-		
+
 		// Create a string larger than MaxBufferSize (1MB)
 		largeString := strings.Repeat("x", MaxBufferSize+1000)
-		
+
 		_, err := parser.processJSONLine(largeString)
 		assertBufferOverflowError(t, err)
 		assertBufferEmpty(t, parser)
@@ -373,10 +373,10 @@ func TestBufferManagement(t *testing.T) {
 
 	t.Run("buffer_reset_on_success", func(t *testing.T) {
 		parser := setupParserTest(t)
-		
+
 		validJSON := `{"type": "system", "subtype": "status"}`
 		msg, err := parser.processJSONLine(validJSON)
-		
+
 		assertNoParseError(t, err)
 		assertMessageExists(t, msg)
 		assertBufferEmpty(t, parser)
@@ -384,7 +384,7 @@ func TestBufferManagement(t *testing.T) {
 
 	t.Run("partial_message_accumulation", func(t *testing.T) {
 		parser := setupParserTest(t)
-		
+
 		parts := []string{
 			`{"type": "user",`,
 			` "message": {"content":`,
@@ -396,7 +396,7 @@ func TestBufferManagement(t *testing.T) {
 		for i, part := range parts {
 			msg, err := parser.processJSONLine(part)
 			assertNoParseError(t, err)
-			
+
 			if i < len(parts)-1 {
 				assertNoMessage(t, msg)
 				assertBufferNotEmpty(t, parser)
@@ -415,17 +415,17 @@ func TestBufferManagement(t *testing.T) {
 
 	t.Run("explicit_buffer_reset", func(t *testing.T) {
 		parser := setupParserTest(t)
-		
+
 		// Add content to buffer via partial JSON
 		msg1, err1 := parser.processJSONLine(`{"type": "user", "message":`)
 		assertNoParseError(t, err1)
 		assertNoMessage(t, msg1)
 		assertBufferNotEmpty(t, parser)
-		
+
 		// Explicit reset should clear buffer
 		parser.Reset()
 		assertBufferEmpty(t, parser)
-		
+
 		// Parser should work normally after reset
 		validJSON := `{"type": "system", "subtype": "status"}`
 		msg2, err2 := parser.processJSONLine(validJSON)
@@ -512,7 +512,7 @@ func TestConcurrentAccess(t *testing.T) {
 
 			for j := 0; j < messagesPerGoroutine; j++ {
 				testJSON := fmt.Sprintf(`{"type": "system", "subtype": "goroutine_%d_msg_%d"}`, goroutineID, j)
-				
+
 				msg, err := parser.processJSONLine(testJSON)
 				if err != nil {
 					errors <- fmt.Errorf("goroutine %d, message %d: %v", goroutineID, j, err)
@@ -565,11 +565,11 @@ func TestLargeMessageHandling(t *testing.T) {
 	userMsg := msg.(*shared.UserMessage)
 	blocks := userMsg.Content.([]shared.ContentBlock)
 	textBlock := blocks[0].(*shared.TextBlock)
-	
+
 	if len(textBlock.Text) != len(largeContent) {
 		t.Errorf("Expected text length %d, got %d", len(largeContent), len(textBlock.Text))
 	}
-	
+
 	assertBufferEmpty(t, parser)
 }
 
@@ -578,7 +578,7 @@ func TestEmptyAndWhitespaceHandling(t *testing.T) {
 	parser := setupParserTest(t)
 
 	emptyInputs := []string{"", "   ", "\t", "\n", " \t \n ", "\r\n"}
-	
+
 	for i, input := range emptyInputs {
 		t.Run(fmt.Sprintf("empty_input_%d", i), func(t *testing.T) {
 			messages, err := parser.ProcessLine(input)

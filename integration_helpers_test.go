@@ -45,12 +45,12 @@ func disconnectIntegrationClientSafely(t *testing.T, client claudecode.Client) {
 // verifyIntegrationResourceCleanup verifies resources are properly cleaned up
 func verifyIntegrationResourceCleanup(t *testing.T, transport *integrationMockTransport) {
 	t.Helper()
-	
+
 	// Ensure transport is closed before verification - following client_test.go patterns
 	if transport != nil {
 		transport.Close()
 	}
-	
+
 	transport.mu.Lock()
 	connected := transport.connected
 	closed := transport.closed
@@ -64,7 +64,7 @@ func verifyIntegrationResourceCleanup(t *testing.T, transport *integrationMockTr
 		t.Error("Expected transport to be closed after test")
 	}
 
-	// Verify resource tracker if available  
+	// Verify resource tracker if available
 	if transport.resourceTracker != nil {
 		transport.resourceTracker.mu.Lock()
 		goroutines := transport.resourceTracker.goroutines
@@ -83,10 +83,10 @@ func verifyIntegrationResourceCleanup(t *testing.T, transport *integrationMockTr
 // collectIntegrationMessages collects messages from an iterator
 func collectIntegrationMessages(t *testing.T, ctx context.Context, iter claudecode.MessageIterator) []claudecode.Message {
 	t.Helper()
-	
+
 	var messages []claudecode.Message
 	start := time.Now()
-	
+
 	for {
 		msg, err := iter.Next(ctx)
 		if err != nil {
@@ -96,7 +96,7 @@ func collectIntegrationMessages(t *testing.T, ctx context.Context, iter claudeco
 			}
 			// Fail fast on context timeout/cancellation instead of continuing
 			if err == context.DeadlineExceeded || err == context.Canceled {
-				t.Fatalf("Iterator failed with timeout/cancellation after %v (collected %d messages): %v", 
+				t.Fatalf("Iterator failed with timeout/cancellation after %v (collected %d messages): %v",
 					time.Since(start), len(messages), err)
 			}
 			t.Logf("Iterator error (continuing) after %v: %v", time.Since(start), err)
@@ -107,7 +107,7 @@ func collectIntegrationMessages(t *testing.T, ctx context.Context, iter claudeco
 			t.Logf("Collected message %d: %T", len(messages), msg)
 		}
 	}
-	
+
 	return messages
 }
 
@@ -117,7 +117,7 @@ func assertIntegrationMessageCount(t *testing.T, transport *integrationMockTrans
 	transport.mu.Lock()
 	actual := len(transport.sentMessages)
 	transport.mu.Unlock()
-	
+
 	if actual != expected {
 		t.Errorf("Expected %d sent messages, got %d", expected, actual)
 	}
@@ -138,7 +138,7 @@ func assertIntegrationError(t *testing.T, err error, wantErr bool, msgContains s
 // loadIntegrationFixture loads a test fixture from embedded files
 func loadIntegrationFixture(t *testing.T, name string) []claudecode.Message {
 	t.Helper()
-	
+
 	data, err := integrationFixtures.ReadFile("testdata/cli_responses/" + name + ".json")
 	if err != nil {
 		// Return a simple mock message if fixture loading fails
@@ -150,7 +150,7 @@ func loadIntegrationFixture(t *testing.T, name string) []claudecode.Message {
 			},
 		}
 	}
-	
+
 	var rawMessages []json.RawMessage
 	if err := json.Unmarshal(data, &rawMessages); err != nil {
 		t.Logf("Failed to unmarshal fixture %s, using mock: %v", name, err)
@@ -161,7 +161,7 @@ func loadIntegrationFixture(t *testing.T, name string) []claudecode.Message {
 			},
 		}
 	}
-	
+
 	messages := make([]claudecode.Message, 0, len(rawMessages))
 	for _, raw := range rawMessages {
 		// Parse each message using the same parser logic as the SDK
@@ -172,7 +172,7 @@ func loadIntegrationFixture(t *testing.T, name string) []claudecode.Message {
 			t.Logf("Skipping malformed message in fixture %s: %v", name, err)
 			continue
 		}
-		
+
 		var msg claudecode.Message
 		switch msgType.Type {
 		case "user":
@@ -187,15 +187,15 @@ func loadIntegrationFixture(t *testing.T, name string) []claudecode.Message {
 			t.Logf("Skipping unknown message type in fixture %s: %s", name, msgType.Type)
 			continue
 		}
-		
+
 		if err := json.Unmarshal(raw, msg); err != nil {
 			t.Logf("Failed to parse message in fixture %s: %v", name, err)
 			continue
 		}
-		
+
 		messages = append(messages, msg)
 	}
-	
+
 	if len(messages) == 0 {
 		// Fallback to simple mock message
 		messages = append(messages, &claudecode.AssistantMessage{
@@ -203,7 +203,7 @@ func loadIntegrationFixture(t *testing.T, name string) []claudecode.Message {
 			Model:   "claude-3-5-sonnet-20241022",
 		})
 	}
-	
+
 	return messages
 }
 
@@ -216,13 +216,13 @@ func newIntegrationMockTransport(options ...IntegrationMockTransportOption) *int
 		testScenarios:   make(map[string]*integrationScenario),
 		resourceTracker: &integrationResourceTracker{},
 		// Initialize empty test messages slice if not set by options
-		testMessages:    []claudecode.Message{},
+		testMessages: []claudecode.Message{},
 	}
-	
+
 	for _, option := range options {
 		option(transport)
 	}
-	
+
 	// If no messages were set by options, provide a default message for basic functionality
 	if len(transport.testMessages) == 0 {
 		transport.testMessages = []claudecode.Message{
@@ -232,7 +232,7 @@ func newIntegrationMockTransport(options ...IntegrationMockTransportOption) *int
 			},
 		}
 	}
-	
+
 	return transport
 }
 
@@ -281,12 +281,12 @@ func WithIntegrationToolUsage() IntegrationMockTransportOption {
 				Model: "claude-3-5-sonnet-20241022",
 			},
 			&claudecode.ResultMessage{
-				SessionID:      "test-session-tool-456",
-				IsError:        false,
-				DurationMs:     2340,
-				DurationAPIMs:  1560,
-				NumTurns:       2,
-				TotalCostUSD:   floatPtr(0.0034),
+				SessionID:     "test-session-tool-456",
+				IsError:       false,
+				DurationMs:    2340,
+				DurationAPIMs: 1560,
+				NumTurns:      2,
+				TotalCostUSD:  floatPtr(0.0034),
 			},
 		}
 	}
@@ -417,8 +417,8 @@ func WithIntegrationResourceTracking() IntegrationMockTransportOption {
 		t.resourceTracker = &integrationResourceTracker{
 			goroutines:        0,  // Start clean for proper tracking
 			allocatedMemoryMB: 10, // Mock starting memory
-			openFiles:        5,   // Mock starting files
-			connections:       1,   // Mock starting connections
+			openFiles:         5,  // Mock starting files
+			connections:       1,  // Mock starting connections
 		}
 	}
 }
@@ -446,7 +446,7 @@ func WithIntegrationStressScenario(messageCount, concurrency int) IntegrationMoc
 			}
 		}
 		t.testMessages = messages
-		
+
 		// Initialize resource tracking for stress test
 		t.resourceTracker = &integrationResourceTracker{
 			goroutines: concurrency,
@@ -490,7 +490,6 @@ func WithIntegrationNetworkIsolation() IntegrationMockTransportOption {
 	}
 }
 
-
 // Resource tracking helper methods
 func (r *integrationResourceTracker) trackGoroutine() {
 	r.mu.Lock()
@@ -523,7 +522,7 @@ func (r *integrationResourceTracker) releaseConnection() {
 // Resource cleanup verification helpers following client_test.go patterns
 func setupResourceCleanupTest(t *testing.T) (*integrationMockTransport, int) {
 	t.Helper()
-	
+
 	initialGoroutines := runtime.NumGoroutine()
 	transport := newIntegrationMockTransport(WithIntegrationResourceTracking())
 	return transport, initialGoroutines
@@ -531,25 +530,25 @@ func setupResourceCleanupTest(t *testing.T) (*integrationMockTransport, int) {
 
 func assertResourcesReleased(t *testing.T, transport *integrationMockTransport, initialGoroutines, expectedGoroutines int) {
 	t.Helper()
-	
+
 	// Give minimal time for cleanup - reduce artificial delays
 	runtime.GC()
 	time.Sleep(10 * time.Millisecond)
-	
+
 	finalGoroutines := runtime.NumGoroutine()
-	
+
 	// Check actual goroutine count
 	if finalGoroutines > initialGoroutines+expectedGoroutines {
-		t.Errorf("Goroutine leak detected: initial=%d, final=%d, expected_max=%d", 
+		t.Errorf("Goroutine leak detected: initial=%d, final=%d, expected_max=%d",
 			initialGoroutines, finalGoroutines, initialGoroutines+expectedGoroutines)
 	}
-	
+
 	// Verify mock transport state
 	if transport.resourceTracker != nil {
 		transport.resourceTracker.mu.Lock()
 		goroutines := transport.resourceTracker.goroutines
 		transport.resourceTracker.mu.Unlock()
-		
+
 		if goroutines > expectedGoroutines {
 			t.Errorf("Mock transport goroutine leak: expected max %d, got %d", expectedGoroutines, goroutines)
 		}
@@ -563,21 +562,20 @@ func setupTransportStateTest(t *testing.T) *integrationMockTransport {
 
 func assertTransportStateTransition(t *testing.T, transport *integrationMockTransport, expectedConnected, expectedClosed bool) {
 	t.Helper()
-	
+
 	transport.mu.Lock()
 	connected := transport.connected
 	closed := transport.closed
 	transport.mu.Unlock()
-	
+
 	if connected != expectedConnected {
 		t.Errorf("Expected transport connected=%v, got connected=%v", expectedConnected, connected)
 	}
-	
+
 	if closed != expectedClosed {
 		t.Errorf("Expected transport closed=%v, got closed=%v", expectedClosed, closed)
 	}
 }
-
 
 // Helper function to create bool pointers
 func boolPtr(b bool) *bool {

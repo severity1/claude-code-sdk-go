@@ -77,19 +77,19 @@ func (m *mockIterator) Close() error {
 // assertStreamMessageJSON verifies JSON marshaling behavior
 func assertStreamMessageJSON(t *testing.T, msg *StreamMessage, expected map[string]any) {
 	t.Helper()
-	
+
 	// Test marshaling
 	jsonData, err := json.Marshal(msg)
 	if err != nil {
 		t.Fatalf("Failed to marshal StreamMessage: %v", err)
 	}
-	
+
 	// Parse and verify structure
 	var parsed map[string]any
 	if err := json.Unmarshal(jsonData, &parsed); err != nil {
 		t.Fatalf("Failed to parse JSON: %v", err)
 	}
-	
+
 	// Verify expected fields are present and correct
 	for key, expectedValue := range expected {
 		actualValue, exists := parsed[key]
@@ -101,7 +101,7 @@ func assertStreamMessageJSON(t *testing.T, msg *StreamMessage, expected map[stri
 			t.Errorf("JSON key %q: expected %v, got %v", key, expectedValue, actualValue)
 		}
 	}
-	
+
 	// Verify omitempty behavior - no unexpected fields for minimal message
 	if len(expected) == 1 && expected["type"] != nil {
 		if len(parsed) != 1 {
@@ -113,7 +113,7 @@ func assertStreamMessageJSON(t *testing.T, msg *StreamMessage, expected map[stri
 // assertMessageIteratorInterface verifies interface compliance
 func assertMessageIteratorInterface(t *testing.T, iter MessageIterator) {
 	t.Helper()
-	
+
 	// Verify Next method works
 	ctx := context.Background()
 	msg, err := iter.Next(ctx)
@@ -123,7 +123,7 @@ func assertMessageIteratorInterface(t *testing.T, iter MessageIterator) {
 	if msg == nil {
 		t.Error("Next() returned nil message")
 	}
-	
+
 	// Verify Close method works
 	if err := iter.Close(); err != nil {
 		t.Errorf("Close() failed: %v", err)

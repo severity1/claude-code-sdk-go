@@ -110,6 +110,24 @@ func BuildCommand(cliPath string, options *shared.Options, closeStdin bool) []st
 	return cmd
 }
 
+// BuildCommandWithPrompt constructs the CLI command for one-shot queries with prompt as argument.
+func BuildCommandWithPrompt(cliPath string, options *shared.Options, prompt string) []string {
+	cmd := []string{cliPath}
+
+	// Base arguments - always include these
+	cmd = append(cmd, "--output-format", "stream-json", "--verbose")
+
+	// One-shot mode with prompt as command argument
+	cmd = append(cmd, "--print", prompt)
+
+	// Add all configuration options as CLI flags
+	if options != nil {
+		cmd = addOptionsToCommand(cmd, options)
+	}
+
+	return cmd
+}
+
 // addOptionsToCommand adds all Options fields as CLI flags
 func addOptionsToCommand(cmd []string, options *shared.Options) []string {
 	// Tool Control
@@ -130,9 +148,10 @@ func addOptionsToCommand(cmd []string, options *shared.Options) []string {
 	if options.Model != nil {
 		cmd = append(cmd, "--model", *options.Model)
 	}
-	if options.MaxThinkingTokens > 0 {
-		cmd = append(cmd, "--max-thinking-tokens", fmt.Sprintf("%d", options.MaxThinkingTokens))
-	}
+	// NOTE: --max-thinking-tokens not supported by current CLI version
+	// if options.MaxThinkingTokens > 0 {
+	//	cmd = append(cmd, "--max-thinking-tokens", fmt.Sprintf("%d", options.MaxThinkingTokens))
+	// }
 
 	// Permission & Safety System
 	if options.PermissionMode != nil {

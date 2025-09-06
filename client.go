@@ -5,14 +5,11 @@ import (
 	"fmt"
 	"os"
 	"sync"
+
+	"github.com/severity1/claude-code-sdk-go/internal/cli"
+	"github.com/severity1/claude-code-sdk-go/internal/shared"
+	"github.com/severity1/claude-code-sdk-go/internal/subprocess"
 )
-
-// TransportFactory is a function type that creates a default transport.
-type TransportFactory func(options *Options, closeStdin bool) (Transport, error)
-
-// defaultTransportFactory is the default factory function for creating transports.
-// This can be set by the init() function in a separate file to avoid import cycles.
-var defaultTransportFactory TransportFactory
 
 // Client provides bidirectional streaming communication with Claude Code CLI.
 type Client interface {
@@ -112,16 +109,14 @@ func (c *ClientImpl) Connect(ctx context.Context, prompt ...StreamMessage) error
 	if c.customTransport != nil {
 		c.transport = c.customTransport
 	} else {
-		// Create default transport using the factory
-		if defaultTransportFactory == nil {
-			return fmt.Errorf("no default transport factory available - please install github.com/severity1/claude-code-sdk-go/transport package or use NewClientWithTransport")
+		// Create default subprocess transport directly (like Python SDK)
+		cliPath, err := cli.FindCLI()
+		if err != nil {
+			return fmt.Errorf("claude CLI not found: %w", err)
 		}
 
-		transport, err := defaultTransportFactory(c.options, false) // false = streaming mode
-		if err != nil {
-			return fmt.Errorf("failed to create default transport: %w", err)
-		}
-		c.transport = transport
+		// Create subprocess transport for streaming mode (closeStdin=false)
+		c.transport = subprocess.New(cliPath, (*shared.Options)(c.options), false, "sdk-go-client")
 	}
 
 	// Connect the transport
@@ -181,12 +176,15 @@ func (c *ClientImpl) Query(ctx context.Context, prompt string, sessionID ...stri
 		sid = sessionID[0]
 	}
 
-	// Create user message
-	userMsg := &UserMessage{Content: prompt}
+	// Create user message in Python SDK compatible format
 	streamMsg := StreamMessage{
-		Type:      "request",
-		Message:   userMsg,
-		SessionID: sid,
+		Type: "user",
+		Message: map[string]interface{}{
+			"role":    "user",
+			"content": prompt,
+		},
+		ParentToolUseID: nil,
+		SessionID:       sid,
 	}
 
 	// Send message via transport (without holding mutex to avoid blocking other operations)
