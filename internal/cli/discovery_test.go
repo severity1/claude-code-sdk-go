@@ -141,6 +141,158 @@ func TestExtraArgsSupport(t *testing.T) {
 	}
 }
 
+// TestBuildCommandWithPrompt tests CLI command construction with prompt argument
+func TestBuildCommandWithPrompt(t *testing.T) {
+	tests := []struct {
+		name     string
+		cliPath  string
+		options  *shared.Options
+		prompt   string
+		validate func(*testing.T, []string, string)
+	}{
+		{
+			name:     "basic_prompt_command",
+			cliPath:  "/usr/local/bin/claude",
+			options:  &shared.Options{},
+			prompt:   "What is 2+2?",
+			validate: validateBasicPromptCommand,
+		},
+		{
+			name:    "prompt_with_system_prompt",
+			cliPath: "/usr/local/bin/claude",
+			options: &shared.Options{
+				SystemPrompt: stringPtr("You are a helpful assistant"),
+			},
+			prompt:   "Hello there",
+			validate: validatePromptWithSystemPrompt,
+		},
+		{
+			name:     "prompt_with_full_options",
+			cliPath:  "/usr/local/bin/claude",
+			options:  createFullOptionsSet(),
+			prompt:   "Complex query with all options",
+			validate: validatePromptWithFullOptions,
+		},
+		{
+			name:     "empty_prompt",
+			cliPath:  "/usr/local/bin/claude",
+			options:  &shared.Options{},
+			prompt:   "",
+			validate: validateEmptyPromptCommand,
+		},
+		{
+			name:     "multiline_prompt",
+			cliPath:  "/usr/local/bin/claude",
+			options:  &shared.Options{},
+			prompt:   "Line 1\nLine 2\nLine 3",
+			validate: validateMultilinePromptCommand,
+		},
+		{
+			name:     "special_characters_prompt",
+			cliPath:  "/usr/local/bin/claude",
+			options:  &shared.Options{},
+			prompt:   "Test with \"quotes\" and 'apostrophes' and $variables",
+			validate: validateSpecialCharactersPromptCommand,
+		},
+		{
+			name:     "nil_options",
+			cliPath:  "/usr/local/bin/claude",
+			options:  nil,
+			prompt:   "Test with nil options",
+			validate: validateNilOptionsPromptCommand,
+		},
+		{
+			name:    "prompt_with_tools_and_model",
+			cliPath: "/usr/local/bin/claude",
+			options: &shared.Options{
+				AllowedTools:    []string{"Read", "Write"},
+				DisallowedTools: []string{"Bash"},
+				Model:           stringPtr("claude-sonnet-3-5-20241022"),
+			},
+			prompt:   "Use tools to help me",
+			validate: validatePromptWithToolsAndModel,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			cmd := BuildCommandWithPrompt(test.cliPath, test.options, test.prompt)
+			test.validate(t, cmd, test.prompt)
+		})
+	}
+}
+
+// TestBuildCommandWithPromptVsBuildCommand tests differences between prompt and regular command building
+func TestBuildCommandWithPromptVsBuildCommand(t *testing.T) {
+	cliPath := "/usr/local/bin/claude"
+	options := &shared.Options{
+		SystemPrompt: stringPtr("Test prompt"),
+		Model:        stringPtr("claude-sonnet-3-5-20241022"),
+	}
+	prompt := "Test query"
+
+	// Build both types of commands
+	regularCommand := BuildCommand(cliPath, options, true) // closeStdin=true for one-shot
+	promptCommand := BuildCommandWithPrompt(cliPath, options, prompt)
+
+	tests := []struct {
+		name  string
+		check func(t *testing.T)
+	}{
+		{
+			name: "both_have_print_flag",
+			check: func(t *testing.T) {
+				assertContainsArg(t, regularCommand, "--print")
+				assertContainsArg(t, promptCommand, "--print")
+			},
+		},
+		{
+			name: "prompt_command_includes_prompt_as_argument",
+			check: func(t *testing.T) {
+				// promptCommand should have the prompt as an argument after --print
+				found := false
+				for i, arg := range promptCommand {
+					if arg == "--print" && i+1 < len(promptCommand) && promptCommand[i+1] == prompt {
+						found = true
+						break
+					}
+				}
+				if !found {
+					t.Errorf("Expected prompt command to have prompt %q as argument after --print, got %v", prompt, promptCommand)
+				}
+			},
+		},
+		{
+			name: "regular_command_no_prompt_argument",
+			check: func(t *testing.T) {
+				// Regular command should not have prompt as argument
+				for i, arg := range regularCommand {
+					if arg == "--print" && i+1 < len(regularCommand) && regularCommand[i+1] == prompt {
+						t.Errorf("Expected regular command to not have prompt as argument, got %v", regularCommand)
+						break
+					}
+				}
+			},
+		},
+		{
+			name: "both_contain_same_options",
+			check: func(t *testing.T) {
+				// Both should contain the same options flags
+				assertContainsArgs(t, regularCommand, "--system-prompt", "Test prompt")
+				assertContainsArgs(t, promptCommand, "--system-prompt", "Test prompt")
+				assertContainsArgs(t, regularCommand, "--model", "claude-sonnet-3-5-20241022")
+				assertContainsArgs(t, promptCommand, "--model", "claude-sonnet-3-5-20241022")
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			test.check(t)
+		})
+	}
+}
+
 // TestWorkingDirectoryValidation tests working directory validation
 func TestWorkingDirectoryValidation(t *testing.T) {
 	tests := []struct {
@@ -412,4 +564,93 @@ func assertNotContainsArgs(t *testing.T, args []string, flag, value string) {
 			return
 		}
 	}
+}
+
+// Validation functions for BuildCommandWithPrompt tests
+
+func validateBasicPromptCommand(t *testing.T, cmd []string, prompt string) {
+	t.Helper()
+	assertContainsArgs(t, cmd, "--output-format", "stream-json")
+	assertContainsArg(t, cmd, "--verbose")
+	assertContainsArgs(t, cmd, "--print", prompt)
+}
+
+func validatePromptWithSystemPrompt(t *testing.T, cmd []string, prompt string) {
+	t.Helper()
+	validateBasicPromptCommand(t, cmd, prompt)
+	assertContainsArgs(t, cmd, "--system-prompt", "You are a helpful assistant")
+}
+
+func validatePromptWithFullOptions(t *testing.T, cmd []string, prompt string) {
+	t.Helper()
+	validateBasicPromptCommand(t, cmd, prompt)
+	assertContainsArgs(t, cmd, "--allowed-tools", "Read,Write")
+	assertContainsArgs(t, cmd, "--disallowed-tools", "Bash,Delete")
+	assertContainsArgs(t, cmd, "--system-prompt", "You are a helpful assistant")
+	assertContainsArgs(t, cmd, "--model", "claude-3-sonnet")
+	assertContainsArg(t, cmd, "--continue")
+	assertContainsArgs(t, cmd, "--resume", "session123")
+}
+
+func validateEmptyPromptCommand(t *testing.T, cmd []string, prompt string) {
+	t.Helper()
+	assertContainsArgs(t, cmd, "--output-format", "stream-json")
+	assertContainsArg(t, cmd, "--verbose")
+	assertContainsArgs(t, cmd, "--print", "") // Empty prompt should still be there
+}
+
+func validateMultilinePromptCommand(t *testing.T, cmd []string, prompt string) {
+	t.Helper()
+	validateBasicPromptCommand(t, cmd, prompt)
+	// Verify multiline prompt is preserved as single argument
+	found := false
+	for i, arg := range cmd {
+		if arg == "--print" && i+1 < len(cmd) && cmd[i+1] == prompt {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("Expected multiline prompt %q to be preserved as single argument", prompt)
+	}
+}
+
+func validateSpecialCharactersPromptCommand(t *testing.T, cmd []string, prompt string) {
+	t.Helper()
+	validateBasicPromptCommand(t, cmd, prompt)
+	// Verify special characters are preserved
+	found := false
+	for i, arg := range cmd {
+		if arg == "--print" && i+1 < len(cmd) && cmd[i+1] == prompt {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("Expected special characters prompt %q to be preserved", prompt)
+	}
+}
+
+func validateNilOptionsPromptCommand(t *testing.T, cmd []string, prompt string) {
+	t.Helper()
+	// With nil options, should still have basic prompt command structure
+	assertContainsArgs(t, cmd, "--output-format", "stream-json")
+	assertContainsArg(t, cmd, "--verbose")
+	assertContainsArgs(t, cmd, "--print", prompt)
+	// Should not contain any option-specific flags
+	assertNotContainsArg(t, cmd, "--system-prompt")
+	assertNotContainsArg(t, cmd, "--model")
+}
+
+func validatePromptWithToolsAndModel(t *testing.T, cmd []string, prompt string) {
+	t.Helper()
+	validateBasicPromptCommand(t, cmd, prompt)
+	assertContainsArgs(t, cmd, "--allowed-tools", "Read,Write")
+	assertContainsArgs(t, cmd, "--disallowed-tools", "Bash")
+	assertContainsArgs(t, cmd, "--model", "claude-sonnet-3-5-20241022")
+}
+
+// Helper function for string pointers
+func stringPtr(s string) *string {
+	return &s
 }

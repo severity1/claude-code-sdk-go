@@ -3,6 +3,8 @@ package claudecode
 import (
 	"context"
 	"fmt"
+	"os"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -137,7 +139,7 @@ func TestQueryMultipleMessageTypes(t *testing.T) {
 	// Test transport that sends different message types
 	transport := newQueryMockTransport(
 		WithQueryAssistantResponse("Assistant response"),
-		WithQuerySystemMessage("tool_use", map[string]interface{}{"tool": "Read", "file": "test.txt"}),
+		WithQuerySystemMessage("tool_use", map[string]any{"tool": "Read", "file": "test.txt"}),
 		WithQueryResultMessage(false, 2500, 3),
 	)
 
@@ -389,6 +391,204 @@ func TestQueryContextCancellation(t *testing.T) {
 	}
 }
 
+// TestQueryPublicAPI tests the actual Query() function that users call
+// This uses QueryWithTransport to test the Query logic without CLI dependency
+func TestQueryPublicAPI(t *testing.T) {
+	ctx, cancel := setupQueryTestContext(t, 10*time.Second)
+	defer cancel()
+
+	tests := []struct {
+		name            string
+		prompt          string
+		options         []Option
+		setupTransport  func() Transport
+		expectError     bool
+		errorContains   string
+		validateResults func(t *testing.T, iter MessageIterator)
+	}{
+		{
+			name:    "basic_query_success",
+			prompt:  "What is 2+2?",
+			options: []Option{},
+			setupTransport: func() Transport {
+				return newQueryMockTransport(WithQueryAssistantResponse("4"))
+			},
+			expectError: false,
+			validateResults: func(t *testing.T, iter MessageIterator) {
+				t.Helper()
+				messages := collectQueryMessages(t, ctx, iter)
+				if len(messages) != 1 {
+					t.Fatalf("Expected 1 message, got %d", len(messages))
+				}
+				assistantMsg := assertQueryAssistantMessage(t, messages[0])
+				assertQueryTextContent(t, assistantMsg, "4")
+			},
+		},
+		{
+			name:   "query_with_system_prompt",
+			prompt: "Hello",
+			options: []Option{
+				WithSystemPrompt("You are helpful"),
+				WithModel("claude-sonnet-3-5-20241022"),
+			},
+			setupTransport: func() Transport {
+				return newQueryMockTransport(WithQueryAssistantResponse("Hi there!"))
+			},
+			expectError: false,
+			validateResults: func(t *testing.T, iter MessageIterator) {
+				t.Helper()
+				messages := collectQueryMessages(t, ctx, iter)
+				if len(messages) != 1 {
+					t.Fatalf("Expected 1 message, got %d", len(messages))
+				}
+				assertQueryAssistantMessage(t, messages[0])
+			},
+		},
+		{
+			name:    "query_with_empty_prompt",
+			prompt:  "",
+			options: []Option{},
+			setupTransport: func() Transport {
+				return newQueryMockTransport(WithQueryAssistantResponse("Empty prompt handled"))
+			},
+			expectError: false,
+			validateResults: func(t *testing.T, iter MessageIterator) {
+				t.Helper()
+				messages := collectQueryMessages(t, ctx, iter)
+				if len(messages) != 1 {
+					t.Fatalf("Expected 1 message, got %d", len(messages))
+				}
+				assertQueryAssistantMessage(t, messages[0])
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			transport := test.setupTransport()
+
+			// Test Query behavior using QueryWithTransport for testability
+			// This exercises the Query API logic without CLI dependency
+			iter, err := QueryWithTransport(ctx, test.prompt, transport, test.options...)
+
+			if test.expectError {
+				if err == nil {
+					t.Fatal("Expected error, got none")
+				}
+				if test.errorContains != "" && !strings.Contains(err.Error(), test.errorContains) {
+					t.Errorf("Expected error to contain %q, got: %v", test.errorContains, err)
+				}
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("Unexpected error: %v", err)
+			}
+
+			defer iter.Close()
+
+			if test.validateResults != nil {
+				test.validateResults(t, iter)
+			}
+		})
+	}
+}
+
+// TestCreateQueryTransport tests the transport creation function
+func TestCreateQueryTransport(t *testing.T) {
+	tests := []struct {
+		name        string
+		prompt      string
+		options     *Options
+		setupMock   func(t *testing.T) (cleanup func())
+		expectError bool
+		errorMsg    string
+	}{
+		{
+			name:    "cli_not_found_error",
+			prompt:  "test prompt",
+			options: NewOptions(),
+			setupMock: func(t *testing.T) func() {
+				// Isolate PATH to ensure CLI is not found
+				return setupIsolatedEnvironment(t)
+			},
+			expectError: true,
+			errorMsg:    "Claude Code requires Node.js", // Should get Node.js not found error
+		},
+		{
+			name:   "cli_not_found_with_options",
+			prompt: "test with options",
+			options: NewOptions(
+				WithSystemPrompt("Test system prompt"),
+				WithModel("claude-sonnet-3-5-20241022"),
+			),
+			setupMock: func(t *testing.T) func() {
+				return setupIsolatedEnvironment(t)
+			},
+			expectError: true,
+			errorMsg:    "Claude Code requires Node.js",
+		},
+		{
+			name:    "empty_prompt_cli_not_found",
+			prompt:  "",
+			options: NewOptions(),
+			setupMock: func(t *testing.T) func() {
+				return setupIsolatedEnvironment(t)
+			},
+			expectError: true,
+			errorMsg:    "Claude Code requires Node.js",
+		},
+		{
+			name:    "nil_options_cli_not_found",
+			prompt:  "test prompt",
+			options: nil,
+			setupMock: func(t *testing.T) func() {
+				return setupIsolatedEnvironment(t)
+			},
+			expectError: true,
+			errorMsg:    "Claude Code requires Node.js",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			cleanup := test.setupMock(t)
+			defer cleanup()
+
+			// Call createQueryTransport directly - this will exercise the real function
+			transport, err := createQueryTransport(test.prompt, test.options)
+
+			if test.expectError {
+				if err == nil {
+					t.Fatal("Expected error, got none")
+				}
+				if !strings.Contains(err.Error(), test.errorMsg) {
+					t.Errorf("Expected error to contain %q, got: %v", test.errorMsg, err)
+				}
+				// Transport should be nil on error
+				if transport != nil {
+					t.Error("Expected nil transport on error, got non-nil")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("Unexpected error: %v", err)
+			}
+
+			// Verify transport is not nil on success
+			if transport == nil {
+				t.Fatal("Expected transport to be created, got nil")
+			}
+
+			// Clean up transport if created
+			if transport != nil {
+				transport.Close()
+			}
+		})
+	}
+}
+
 // TestQuery tests the public Query function behavior using QueryWithTransport for testability
 func TestQuery(t *testing.T) {
 	ctx, cancel := setupQueryTestContext(t, 10*time.Second)
@@ -607,7 +807,7 @@ func WithQueryMultipleMessages(messages []*AssistantMessage) QueryMockOption {
 	}
 }
 
-func WithQuerySystemMessage(subtype string, data map[string]interface{}) QueryMockOption {
+func WithQuerySystemMessage(subtype string, data map[string]any) QueryMockOption {
 	return func(q *queryMockTransport) {
 		systemMsg := &SystemMessage{
 			Subtype: subtype,
@@ -750,4 +950,126 @@ func isQueryContextError(err error, target error) bool {
 		return strings.Contains(err.Error(), target.Error())
 	}
 	return false
+}
+
+// setupIsolatedEnvironment creates an isolated environment for testing CLI discovery
+func setupIsolatedEnvironment(t *testing.T) func() {
+	t.Helper()
+	tempHome := t.TempDir()
+	originalHome := os.Getenv("HOME")
+	originalPath := os.Getenv("PATH")
+
+	if runtime.GOOS == "windows" {
+		originalHome = os.Getenv("USERPROFILE")
+		os.Setenv("USERPROFILE", tempHome)
+	} else {
+		os.Setenv("HOME", tempHome)
+	}
+	os.Setenv("PATH", "/nonexistent/path")
+
+	return func() {
+		if runtime.GOOS == "windows" {
+			os.Setenv("USERPROFILE", originalHome)
+		} else {
+			os.Setenv("HOME", originalHome)
+		}
+		os.Setenv("PATH", originalPath)
+	}
+}
+
+// TestQueryFunction tests the actual Query() function with CLI discovery
+func TestQueryFunction(t *testing.T) {
+	tests := []struct {
+		name        string
+		prompt      string
+		options     []Option
+		setupMock   func(t *testing.T) (cleanup func())
+		expectError bool
+		errorMsg    string
+	}{
+		{
+			name:    "query_cli_not_found",
+			prompt:  "What is 2+2?",
+			options: []Option{},
+			setupMock: func(t *testing.T) func() {
+				return setupIsolatedEnvironment(t)
+			},
+			expectError: true,
+			errorMsg:    "failed to create query transport",
+		},
+		{
+			name:   "query_with_options_cli_not_found",
+			prompt: "Hello world",
+			options: []Option{
+				WithSystemPrompt("You are helpful"),
+				WithModel("claude-sonnet-3-5-20241022"),
+			},
+			setupMock: func(t *testing.T) func() {
+				return setupIsolatedEnvironment(t)
+			},
+			expectError: true,
+			errorMsg:    "failed to create query transport",
+		},
+		{
+			name:    "query_empty_prompt_cli_not_found",
+			prompt:  "",
+			options: []Option{},
+			setupMock: func(t *testing.T) func() {
+				return setupIsolatedEnvironment(t)
+			},
+			expectError: true,
+			errorMsg:    "failed to create query transport",
+		},
+		{
+			name:   "query_multiple_options_cli_not_found",
+			prompt: "Complex query",
+			options: []Option{
+				WithSystemPrompt("Test system"),
+				WithAllowedTools("Read", "Write"),
+				WithMaxTurns(3),
+				WithPermissionMode(PermissionModeAcceptEdits),
+			},
+			setupMock: func(t *testing.T) func() {
+				return setupIsolatedEnvironment(t)
+			},
+			expectError: true,
+			errorMsg:    "failed to create query transport",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			cleanup := test.setupMock(t)
+			defer cleanup()
+
+			ctx, cancel := setupQueryTestContext(t, 5*time.Second)
+			defer cancel()
+
+			// Call the actual Query() function - this exercises the real function
+			iter, err := Query(ctx, test.prompt, test.options...)
+
+			if test.expectError {
+				if err == nil {
+					t.Fatal("Expected error, got none")
+				}
+				if !strings.Contains(err.Error(), test.errorMsg) {
+					t.Errorf("Expected error to contain %q, got: %v", test.errorMsg, err)
+				}
+				// Iterator should be nil on error
+				if iter != nil {
+					t.Error("Expected nil iterator on error, got non-nil")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("Unexpected error: %v", err)
+			}
+
+			// Clean up iterator if created
+			if iter != nil {
+				iter.Close()
+			}
+		})
+	}
 }

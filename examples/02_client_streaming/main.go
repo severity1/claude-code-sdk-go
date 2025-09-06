@@ -1,10 +1,4 @@
-// Package main demonstrates basic streaming usage of the Claude Code SDK Client API.
-//
-// This example shows how to:
-// - Create and connect a Claude Code streaming client
-// - Send a query and process streaming responses in real-time
-// - Handle different message types and content blocks
-// - Properly manage client connection lifecycle
+// Package main demonstrates streaming usage of the Claude Code SDK Client API.
 package main
 
 import (
@@ -21,21 +15,17 @@ func main() {
 	fmt.Println("Claude Code SDK for Go - Client Streaming Example")
 	fmt.Println("================================================")
 
-	// Create context with reasonable timeout for streaming
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	// Create a new streaming client
 	fmt.Println("🔗 Creating streaming client...")
 	client := claudecode.NewClient()
 
-	// Connect to Claude Code CLI
 	fmt.Println("📡 Connecting to Claude Code...")
 	if err := client.Connect(ctx); err != nil {
 		log.Fatalf("Failed to connect client: %v", err)
 	}
 	
-	// Always ensure proper cleanup
 	defer func() {
 		fmt.Println("\n🧹 Cleaning up connection...")
 		if err := client.Disconnect(); err != nil {
@@ -46,7 +36,6 @@ func main() {
 
 	fmt.Println("✅ Connected successfully!")
 
-	// Send a query to demonstrate streaming
 	question := "Explain what Go goroutines are and show a simple example"
 	fmt.Printf("\n🤖 Asking Claude: %s\n", question)
 	
@@ -57,7 +46,6 @@ func main() {
 	fmt.Println("\n📥 Streaming response:")
 	fmt.Println(strings.Repeat("-", 50))
 
-	// Process streaming messages as they arrive
 	responseReceived := false
 	msgChan := client.ReceiveMessages(ctx)
 	for {
@@ -68,28 +56,32 @@ func main() {
 				goto streamDone
 			}
 
-			// Handle different message types
 			switch msg := message.(type) {
 			case *claudecode.AssistantMessage:
 				responseReceived = true
-				// Process content blocks in real-time
 				for _, block := range msg.Content {
 					switch b := block.(type) {
 					case *claudecode.TextBlock:
-						// Stream text content as it arrives
 						fmt.Print(b.Text)
 					case *claudecode.ThinkingBlock:
-						// Show Claude's thinking process
 						fmt.Printf("\n💭 [Thinking: %s]\n", b.Thinking)
 					}
 				}
+			case *claudecode.UserMessage:
+				if blocks, ok := msg.Content.([]claudecode.ContentBlock); ok {
+					for _, block := range blocks {
+						if textBlock, ok := block.(*claudecode.TextBlock); ok {
+							fmt.Printf("📤 User: %s\n", textBlock.Text)
+						}
+					}
+				} else if contentStr, ok := msg.Content.(string); ok {
+					fmt.Printf("📤 User: %s\n", contentStr)
+				}
 			case *claudecode.SystemMessage:
-				// System message (usually initialization)
 				fmt.Println("⚙️  System initialized")
 			case *claudecode.ResultMessage:
-				// Final result message
 				if msg.IsError {
-					fmt.Printf("\n❌ Error: %s\n", msg.Result)
+					fmt.Printf("\n❌ Issue: %s\n", msg.Result)
 				} else {
 					fmt.Printf("\n✅ Stream completed successfully\n")
 				}
@@ -109,10 +101,5 @@ streamDone:
 	} else {
 		fmt.Println(strings.Repeat("-", 50))
 		fmt.Println("\n🎉 Streaming example completed!")
-		fmt.Println("\n💡 Key features demonstrated:")
-		fmt.Println("   • Real-time streaming responses")
-		fmt.Println("   • Proper connection management")
-		fmt.Println("   • Message type handling")
-		fmt.Println("   • Resource cleanup")
 	}
 }

@@ -1,10 +1,4 @@
 // Package main demonstrates using Claude Code SDK Client API with Read/Write tools.
-//
-// This example shows how to:
-// - Configure Client API to use specific tools across multiple interactions
-// - Execute multi-turn conversations that build context with file operations
-// - Handle streaming responses that include both text and tool results
-// - Demonstrate interactive file manipulation workflows
 package main
 
 import (
@@ -23,18 +17,15 @@ func main() {
 	fmt.Println("Claude Code SDK for Go - Client API with Read/Write Tools Example")
 	fmt.Println("================================================================")
 
-	// Create context with extended timeout for interactive session
-	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
-	// Setup working directory and sample files
 	workDir := "./client_tools_demo"
 	if err := setupDemoFiles(workDir); err != nil {
 		log.Fatalf("Failed to setup demo files: %v", err)
 	}
 	defer cleanupDemoFiles(workDir)
 
-	// Change to the working directory so Claude can access the files
 	originalDir, _ := os.Getwd()
 	os.Chdir(workDir)
 	defer os.Chdir(originalDir)
@@ -42,7 +33,6 @@ func main() {
 	fmt.Printf("📁 Working in directory: %s\n", workDir)
 	fmt.Println("📄 Demo files created: package.json, src/main.go, docs/")
 
-	// Create client with tool configuration
 	fmt.Println("\n🔗 Creating client with Read/Write/Edit tools enabled...")
 	client := claudecode.NewClient(
 		claudecode.WithAllowedTools("Read", "Write", "Edit"),
@@ -63,7 +53,6 @@ func main() {
 
 	fmt.Println("✅ Connected! Starting interactive file manipulation session...")
 
-	// Interactive conversation flow demonstrating tool usage with context
 	conversation := []struct {
 		turn        int
 		description string
@@ -72,31 +61,15 @@ func main() {
 		{
 			turn:        1,
 			description: "Project Analysis - Read and understand the codebase",
-			query:       "Please read all the files in this project (package.json, src/main.go, and any docs) and give me an overview of what this project is about. What's its purpose and current state?",
+			query:       "Please read all the files in this project (package.json, src/main.go, and any docs) and give me an overview of what this project is about.",
 		},
 		{
 			turn:        2,
-			description: "Code Improvement - Enhance the main.go file based on analysis",
-			query:       "Based on what you learned about this project, please improve the src/main.go file. Add better error handling, more features, and improve the code structure. Keep it consistent with the package.json dependencies.",
-		},
-		{
-			turn:        3,
-			description: "Documentation Creation - Generate comprehensive docs",
-			query:       "Now create comprehensive documentation for this improved project. Write a detailed README.md file and add code comments. Update or create any other documentation files that would be helpful.",
-		},
-		{
-			turn:        4,
-			description: "Configuration Updates - Enhance project configuration",
-			query:       "Review the package.json and suggest improvements. Add any missing scripts, dependencies, or configuration that would make this a more robust project. Update the file with your improvements.",
-		},
-		{
-			turn:        5,
-			description: "Final Review - Validate all changes",
-			query:       "Please read all the files again and give me a summary of all the changes you made. Create a CHANGELOG.md file documenting the improvements.",
+			description: "Code Improvement - Enhance the main.go file and create README",
+			query:       "Based on what you learned, please improve the src/main.go file with better error handling and create a simple README.md file documenting the project.",
 		},
 	}
 
-	// Execute the interactive conversation
 	for _, turn := range conversation {
 		fmt.Printf("\n%s\n", strings.Repeat("=", 70))
 		fmt.Printf("🗣️  Turn %d: %s\n", turn.turn, turn.description)
@@ -108,14 +81,12 @@ func main() {
 			continue
 		}
 
-		// Brief pause between turns for readability
 		if turn.turn < len(conversation) {
 			fmt.Printf("\n⏳ Preparing for next interaction...\n")
 			time.Sleep(1 * time.Second)
 		}
 	}
 
-	// Show final results
 	fmt.Printf("\n%s\n", strings.Repeat("=", 70))
 	fmt.Println("🎉 Interactive Client with Tools Session Completed!")
 	fmt.Println("\n✨ What was demonstrated:")
@@ -127,22 +98,13 @@ func main() {
 
 	fmt.Println("\n📂 Final project structure:")
 	listProjectFiles(workDir)
-
-	fmt.Println("\n💡 Key advantages of Client API for tool usage:")
-	fmt.Println("   • Context maintained across multiple tool operations")
-	fmt.Println("   • Can build complex workflows step by step")
-	fmt.Println("   • Perfect for interactive development sessions")
-	fmt.Println("   • Tool results inform subsequent interactions")
 }
 
-// executeInteractiveTurn handles a single turn in the conversation
 func executeInteractiveTurn(ctx context.Context, client claudecode.Client, turnNum int, query string) error {
-	// Send the query
 	if err := client.Query(ctx, query); err != nil {
 		return fmt.Errorf("failed to send query: %w", err)
 	}
 
-	// Process streaming response
 	fmt.Println("🤖 Claude's Response:")
 	responseReceived := false
 	msgChan := client.ReceiveMessages(ctx)
@@ -165,8 +127,33 @@ func executeInteractiveTurn(ctx context.Context, client claudecode.Client, turnN
 						fmt.Printf("\n💭 [Claude is analyzing: %s]\n", b.Thinking)
 					}
 				}
+			case *claudecode.UserMessage:
+				if blocks, ok := msg.Content.([]claudecode.ContentBlock); ok {
+					for _, block := range blocks {
+						switch b := block.(type) {
+						case *claudecode.TextBlock:
+							fmt.Printf("📤 Tool: %s\n", b.Text)
+						case *claudecode.ToolResultBlock:
+							if contentStr, ok := b.Content.(string); ok {
+								displayContent := contentStr
+								if strings.Contains(contentStr, "<tool_use_error>") {
+									displayContent = strings.ReplaceAll(contentStr, "<tool_use_error>", "⚠️ ")
+									displayContent = strings.ReplaceAll(displayContent, "</tool_use_error>", "")
+									fmt.Printf("🔧 Tool Issue (id: %s): %s\n", b.ToolUseID[:8]+"...", strings.TrimSpace(displayContent))
+								} else if len(displayContent) > 150 {
+									fmt.Printf("🔧 Tool Result (id: %s): %s...\n", b.ToolUseID[:8]+"...", displayContent[:150])
+								} else {
+									fmt.Printf("🔧 Tool Result (id: %s): %s\n", b.ToolUseID[:8]+"...", displayContent)
+								}
+							} else {
+								fmt.Printf("🔧 Tool Result (id: %s): <structured data>\n", b.ToolUseID[:8]+"...")
+							}
+						}
+					}
+				} else if contentStr, ok := msg.Content.(string); ok {
+					fmt.Printf("📤 User: %s\n", contentStr)
+				}
 			case *claudecode.SystemMessage:
-				// System messages (can be safely ignored)
 			case *claudecode.ResultMessage:
 				if msg.IsError {
 					return fmt.Errorf("claude returned error: %s", msg.Result)
@@ -190,25 +177,21 @@ turnComplete:
 	return nil
 }
 
-// setupDemoFiles creates a sample project for the demonstration
 func setupDemoFiles(workDir string) error {
 	if err := os.MkdirAll(workDir, 0755); err != nil {
 		return err
 	}
 
-	// Create src directory
 	srcDir := filepath.Join(workDir, "src")
 	if err := os.MkdirAll(srcDir, 0755); err != nil {
 		return err
 	}
 
-	// Create docs directory
 	docsDir := filepath.Join(workDir, "docs")
 	if err := os.MkdirAll(docsDir, 0755); err != nil {
 		return err
 	}
 
-	// Create package.json
 	packageJSON := `{
   "name": "demo-web-app",
   "version": "1.0.0",
@@ -229,7 +212,6 @@ func setupDemoFiles(workDir string) error {
 		return err
 	}
 
-	// Create basic main.go
 	mainGo := `package main
 
 import (
@@ -251,7 +233,6 @@ func main() {
 		return err
 	}
 
-	// Create initial docs
 	initialDocs := `# Project Documentation
 
 This directory contains documentation for the demo web application.
@@ -266,25 +247,21 @@ Initial version - documentation to be expanded.
 	return nil
 }
 
-// cleanupDemoFiles removes the demo directory
 func cleanupDemoFiles(workDir string) {
 	os.RemoveAll(workDir)
 }
 
-// listProjectFiles shows the final project structure
 func listProjectFiles(dir string) {
 	filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return nil
 		}
 
-		// Get relative path from workDir
 		relPath, _ := filepath.Rel(dir, path)
 		if relPath == "." {
 			return nil
 		}
 
-		// Calculate indentation based on depth
 		depth := strings.Count(relPath, string(os.PathSeparator))
 		indent := strings.Repeat("  ", depth)
 

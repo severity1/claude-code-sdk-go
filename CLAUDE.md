@@ -141,4 +141,4 @@ func setupErrorTestContext(t *testing.T, timeout time.Duration) (context.Context
 
 // ❌ Avoid - shared helpers create hidden dependencies
 // Shared setupTestContext used across multiple test files
-```~~~~
+```

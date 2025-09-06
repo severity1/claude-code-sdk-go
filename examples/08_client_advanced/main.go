@@ -1,11 +1,4 @@
 // Package main demonstrates advanced features of the Claude Code SDK Client API.
-//
-// This example shows how to:
-// - Use client options (system prompts, model selection, etc.)
-// - Handle various error conditions gracefully
-// - Implement robust connection management with retries
-// - Use context for timeout and cancellation
-// - Demonstrate best practices for production usage
 package main
 
 import (
@@ -23,22 +16,17 @@ func main() {
 	fmt.Println("Claude Code SDK for Go - Advanced Client Features Example")
 	fmt.Println("=========================================================")
 
-	// Demonstrate advanced client configuration
 	fmt.Println("🔧 Creating client with advanced options...")
 	
 	client := claudecode.NewClient(
 		claudecode.WithSystemPrompt("You are a senior Go developer and technical mentor. Provide detailed, practical advice with code examples when appropriate. Keep responses focused and actionable."),
-		// claudecode.WithModel("claude-opus-4"), // Uncomment if you have access to specific models
-		// claudecode.WithAllowedTools("read_file", "write_file"), // Uncomment to restrict tools
 	)
 
-	// Demonstrate robust connection handling with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
 	fmt.Println("📡 Connecting with error handling and retries...")
 	
-	// Implement connection with retry logic
 	maxRetries := 3
 	var connectionErr error
 	
@@ -51,7 +39,6 @@ func main() {
 			break
 		}
 		
-		// Handle specific error types
 		var cliError *claudecode.CLINotFoundError
 		if errors.As(connectionErr, &cliError) {
 			fmt.Printf("❌ Claude CLI not found: %v\n", cliError)
@@ -69,7 +56,6 @@ func main() {
 			}
 		}
 		
-		// Unknown error - don't retry
 		fmt.Printf("❌ Unknown connection error: %v\n", connectionErr)
 		return
 	}
@@ -78,7 +64,6 @@ func main() {
 		log.Fatalf("Failed to connect after %d attempts: %v", maxRetries, connectionErr)
 	}
 
-	// Ensure proper cleanup with error handling
 	defer func() {
 		fmt.Println("\n🧹 Cleaning up connection...")
 		if err := client.Disconnect(); err != nil {
@@ -88,12 +73,10 @@ func main() {
 		}
 	}()
 
-	// Demonstrate advanced interaction patterns
 	fmt.Println("\n" + strings.Repeat("=", 60))
 	fmt.Println("🚀 Advanced Usage Patterns")
 	fmt.Println(strings.Repeat("=", 60))
 
-	// Pattern 1: Technical question with context
 	technicalQuestion := `I'm building a concurrent web crawler in Go. I'm concerned about managing goroutines and avoiding race conditions. What patterns should I follow for:
 1. Limiting concurrent requests
 2. Sharing state safely between goroutines
@@ -103,10 +86,8 @@ func main() {
 		log.Printf("Query 1 failed: %v", err)
 	}
 
-	// Brief pause between queries
 	time.Sleep(2 * time.Second)
 
-	// Pattern 2: Code review request
 	codeReview := `Can you review this Go code for potential issues?
 
 func processItems(items []Item) error {
@@ -140,17 +121,8 @@ func processItems(items []Item) error {
 
 	fmt.Println("\n" + strings.Repeat("=", 60))
 	fmt.Println("🎉 Advanced features demonstration completed!")
-	fmt.Println("\n✨ Features demonstrated:")
-	fmt.Println("   • Client configuration with system prompts")
-	fmt.Println("   • Robust error handling with specific error types")
-	fmt.Println("   • Connection retry logic")
-	fmt.Println("   • Context-based timeout management")
-	fmt.Println("   • Production-ready patterns")
-	fmt.Println("   • Complex multi-part queries")
-	fmt.Println("   • Graceful resource cleanup")
 }
 
-// runAdvancedQuery demonstrates a reusable pattern for handling queries with full error handling
 func runAdvancedQuery(ctx context.Context, client claudecode.Client, title, question string) error {
 	fmt.Printf("\n📋 %s\n", title)
 	fmt.Printf("❓ %s\n", strings.TrimSpace(question))
@@ -168,7 +140,7 @@ func runAdvancedQuery(ctx context.Context, client claudecode.Client, title, ques
 		select {
 		case message := <-msgChan:
 			if message == nil {
-				goto queryComplete // Stream ended
+				goto queryComplete
 			}
 
 			switch msg := message.(type) {
@@ -182,8 +154,17 @@ func runAdvancedQuery(ctx context.Context, client claudecode.Client, title, ques
 						fmt.Printf("\n💭 [Analysis: %s]\n", b.Thinking)
 					}
 				}
+			case *claudecode.UserMessage:
+				if blocks, ok := msg.Content.([]claudecode.ContentBlock); ok {
+					for _, block := range blocks {
+						if textBlock, ok := block.(*claudecode.TextBlock); ok {
+							fmt.Printf("📤 User: %s\n", textBlock.Text)
+						}
+					}
+				} else if contentStr, ok := msg.Content.(string); ok {
+					fmt.Printf("📤 User: %s\n", contentStr)
+				}
 			case *claudecode.SystemMessage:
-				// System messages (can be safely ignored in most cases)
 			case *claudecode.ResultMessage:
 				if msg.IsError {
 					return fmt.Errorf("claude returned error: %s", msg.Result)

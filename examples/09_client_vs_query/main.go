@@ -1,10 +1,4 @@
 // Package main demonstrates the differences between Query API and Client API.
-//
-// This example shows:
-// - When to use Query API vs Client API
-// - Performance and resource implications
-// - Use case scenarios for each approach
-// - Side-by-side comparison of the same task using both APIs
 package main
 
 import (
@@ -24,13 +18,11 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 
-	// Demonstrate the same task using both APIs
 	question := "What are the key differences between channels and mutexes in Go concurrency?"
 
 	fmt.Println("📊 Comparing Query API vs Client API for the same task:")
 	fmt.Printf("❓ Question: %s\n\n", question)
 
-	// Part 1: Using Query API (one-shot)
 	fmt.Println(strings.Repeat("=", 60))
 	fmt.Println("🎯 QUERY API - One-shot approach")
 	fmt.Println(strings.Repeat("=", 60))
@@ -43,11 +35,9 @@ func main() {
 
 	fmt.Printf("\n⏱️  Query API completed in: %v\n", queryDuration)
 	
-	// Brief pause between demonstrations
 	fmt.Println("\n⏳ Switching to Client API...")
 	time.Sleep(2 * time.Second)
 
-	// Part 2: Using Client API (streaming)
 	fmt.Println("\n" + strings.Repeat("=", 60))
 	fmt.Println("🔄 CLIENT API - Streaming approach")
 	fmt.Println(strings.Repeat("=", 60))
@@ -60,7 +50,6 @@ func main() {
 
 	fmt.Printf("\n⏱️  Client API completed in: %v\n", clientDuration)
 
-	// Comprehensive comparison
 	fmt.Println("\n" + strings.Repeat("=", 60))
 	fmt.Println("📈 COMPREHENSIVE COMPARISON")
 	fmt.Println(strings.Repeat("=", 60))
@@ -100,7 +89,6 @@ func main() {
 	fmt.Println("   Query API: Stateless, functional approach")
 	fmt.Println("   Client API: Stateful, object-oriented approach")
 
-	// Demonstrate multi-turn scenario where Client API shines
 	fmt.Println("\n" + strings.Repeat("=", 60))
 	fmt.Println("🌟 CLIENT API ADVANTAGE - Multi-turn scenario")
 	fmt.Println(strings.Repeat("=", 60))
@@ -228,7 +216,6 @@ func demonstrateClientAdvantage(ctx context.Context) error {
 	}
 	defer client.Disconnect()
 
-	// Multi-turn conversation that builds context
 	turns := []string{
 		"What is dependency injection in software development?",
 		"Show me how to implement it in Go using interfaces",
@@ -243,10 +230,9 @@ func demonstrateClientAdvantage(ctx context.Context) error {
 			return err
 		}
 
-		// Brief response processing (truncated for demo)
 		responseLines := 0
 		msgChan := client.ReceiveMessages(ctx)
-		for responseLines < 5 { // Just show first few lines
+		for responseLines < 5 {
 			select {
 			case message := <-msgChan:
 				if message == nil {
@@ -274,7 +260,6 @@ func demonstrateClientAdvantage(ctx context.Context) error {
 		}
 		
 	turnDone:
-		// Drain remaining messages
 		for {
 			select {
 			case message := <-msgChan:

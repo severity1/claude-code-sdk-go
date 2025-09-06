@@ -1,14 +1,4 @@
 // Package main demonstrates using Claude Code SDK Query API with MCP tools (AWS API).
-//
-// This example shows how to:
-// - Configure Query API to use AWS MCP tools
-// - Execute a simple query to list S3 buckets
-// - Handle AWS API responses through Claude
-//
-// Prerequisites:
-// - AWS API MCP server installed: `claude mcp add aws-api`
-// - AWS credentials configured (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY)
-// - Or AWS credentials in ~/.aws/credentials
 package main
 
 import (
@@ -16,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/severity1/claude-code-sdk-go"
@@ -25,7 +16,6 @@ func main() {
 	fmt.Println("Claude Code SDK for Go - Query API with AWS MCP Tools Example")
 	fmt.Println("=============================================================")
 
-	// Check if AWS credentials are available
 	if !checkAWSCredentials() {
 		fmt.Println("⚠️  AWS credentials not found.")
 		fmt.Println("Please configure AWS credentials using one of these methods:")
@@ -35,23 +25,22 @@ func main() {
 		fmt.Println("\n📚 This example will show how the code works with mock explanations.")
 	}
 
-	// Create context with timeout for AWS operations
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
 	defer cancel()
 
-	// Simple S3 bucket listing with Query API
 	fmt.Println("\n🪣 Listing S3 Buckets")
 	fmt.Println("====================")
 
 	query := `Please list all my S3 buckets and show me their names, creation dates, and regions.`
 
-	fmt.Printf("🔧 Allowed tools: [mcp__aws-api-mcp__*]\n")
+	fmt.Printf("🔧 Allowed tools: [mcp__aws-api-mcp__call_aws, mcp__aws-api-mcp__suggest_aws_commands]\n")
 	fmt.Printf("❓ Query: %s\n", query)
 	fmt.Println("--------------------------------------------------")
 
-	// Create query with AWS MCP tools
 	iterator, err := claudecode.Query(ctx, query,
-		claudecode.WithAllowedTools("mcp__aws-api-mcp__*"),
+		claudecode.WithAllowedTools(
+			"mcp__aws-api-mcp__call_aws", 
+			"mcp__aws-api-mcp__suggest_aws_commands"),
 		claudecode.WithSystemPrompt("You are an AWS expert. Help list and analyze S3 buckets using AWS MCP tools."),
 	)
 	if err != nil {
@@ -67,7 +56,9 @@ func main() {
 			if err.Error() == "no more messages" {
 				break
 			}
-			log.Fatalf("Failed to get next message: %v", err)
+			fmt.Printf("\n⚠️  Error getting next message: %v\n", err)
+			fmt.Println("This may be due to MCP tool permission timeout or other issues.")
+			break
 		}
 
 		if message == nil {
@@ -81,15 +72,40 @@ func main() {
 				case *claudecode.TextBlock:
 					fmt.Print(b.Text)
 				case *claudecode.ThinkingBlock:
-					// Show Claude's thinking process for AWS operations
 					fmt.Printf("\n💭 [AWS Analysis: %s]\n", b.Thinking)
 				}
 			}
+		case *claudecode.UserMessage:
+			if blocks, ok := msg.Content.([]claudecode.ContentBlock); ok {
+				for _, block := range blocks {
+					switch b := block.(type) {
+					case *claudecode.TextBlock:
+						fmt.Printf("📤 AWS Tool: %s\n", b.Text)
+					case *claudecode.ToolResultBlock:
+						if contentStr, ok := b.Content.(string); ok {
+							displayContent := contentStr
+							if strings.Contains(contentStr, "<tool_use_error>") {
+								displayContent = strings.ReplaceAll(contentStr, "<tool_use_error>", "⚠️ ")
+								displayContent = strings.ReplaceAll(displayContent, "</tool_use_error>", "")
+								fmt.Printf("🔧 AWS Tool Issue (id: %s): %s\n", b.ToolUseID[:8]+"...", strings.TrimSpace(displayContent))
+							} else if len(displayContent) > 150 {
+								fmt.Printf("🔧 AWS Tool Result (id: %s): %s...\n", b.ToolUseID[:8]+"...", displayContent[:150])
+							} else {
+								fmt.Printf("🔧 AWS Tool Result (id: %s): %s\n", b.ToolUseID[:8]+"...", displayContent)
+							}
+						} else {
+							fmt.Printf("🔧 AWS Tool Result (id: %s): <structured data>\n", b.ToolUseID[:8]+"...")
+						}
+					}
+				}
+			} else if contentStr, ok := msg.Content.(string); ok {
+				fmt.Printf("📤 User: %s\n", contentStr)
+			}
 		case *claudecode.SystemMessage:
-			// System initialization - can be ignored
 		case *claudecode.ResultMessage:
 			if msg.IsError {
-				log.Fatalf("Claude returned error: %s", msg.Result)
+				fmt.Printf("\n❌ Claude returned error: %s\n", msg.Result)
+				fmt.Println("This may be related to MCP tool permissions or AWS access.")
 			}
 		default:
 			fmt.Printf("\n📦 Unexpected message type: %T\n", message)
@@ -99,14 +115,11 @@ func main() {
 	fmt.Println("\n✅ S3 bucket listing completed!")
 }
 
-// checkAWSCredentials checks if AWS credentials are available
 func checkAWSCredentials() bool {
-	// Check environment variables
 	if os.Getenv("AWS_ACCESS_KEY_ID") != "" && os.Getenv("AWS_SECRET_ACCESS_KEY") != "" {
 		return true
 	}
 
-	// Check AWS credentials file
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return false

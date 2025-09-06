@@ -181,21 +181,20 @@ claudecode.Query(ctx, "Analyze user patterns from database",
 
 Comprehensive examples covering every use case:
 
-**Basic Usage:**
-- [`examples/quickstart/`](examples/quickstart/) - Query API fundamentals
-- [`examples/client_streaming/`](examples/client_streaming/) - Client API basics  
-- [`examples/client_multi_turn/`](examples/client_multi_turn/) - Multi-turn conversations
+**Learning Path (Easiest → Hardest):**
+- [`examples/01_quickstart/`](examples/01_quickstart/) - Query API fundamentals
+- [`examples/02_client_streaming/`](examples/02_client_streaming/) - Client API basics  
+- [`examples/03_client_multi_turn/`](examples/03_client_multi_turn/) - Multi-turn conversations
 
 **Tool Integration:**
-- [`examples/query_with_tools/`](examples/query_with_tools/) - File operations with Query API
-- [`examples/client_with_tools/`](examples/client_with_tools/) - Interactive file workflows  
-- [`examples/query_with_mcp/`](examples/query_with_mcp/) - AWS automation with Query API
-- [`examples/client_with_mcp/`](examples/client_with_mcp/) - AWS management with Client API
+- [`examples/04_query_with_tools/`](examples/04_query_with_tools/) - File operations with Query API
+- [`examples/05_client_with_tools/`](examples/05_client_with_tools/) - Interactive file workflows  
+- [`examples/06_query_with_mcp/`](examples/06_query_with_mcp/) - AWS automation with Query API
+- [`examples/07_client_with_mcp/`](examples/07_client_with_mcp/) - AWS management with Client API
 
-**Advanced Usage:**
-- [`examples/client_advanced/`](examples/client_advanced/) - Error handling, retries, production patterns
-- [`examples/client_vs_query/`](examples/client_vs_query/) - API comparison and guidance
-- [`examples/tools_comparison/`](examples/tools_comparison/) - Tool-heavy workflow comparison
+**Advanced Patterns:**
+- [`examples/08_client_advanced/`](examples/08_client_advanced/) - Error handling, retries, production patterns
+- [`examples/09_client_vs_query/`](examples/09_client_vs_query/) - API comparison and guidance
 
 **📖 [Full Documentation](examples/README.md)** with usage patterns, security best practices, and troubleshooting.
 

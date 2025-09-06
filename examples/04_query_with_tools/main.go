@@ -1,10 +1,4 @@
 // Package main demonstrates using Claude Code SDK Query API with Read/Write tools.
-//
-// This example shows how to:
-// - Configure Query API to use specific tools (Read, Write, Edit)
-// - Execute queries that automatically invoke file operations
-// - Handle responses that include both text analysis and tool results
-// - Demonstrate practical file manipulation workflows
 package main
 
 import (
@@ -23,18 +17,15 @@ func main() {
 	fmt.Println("Claude Code SDK for Go - Query API with Read/Write Tools Example")
 	fmt.Println("================================================================")
 
-	// Create context with timeout for file operations
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	// Setup working directory and sample files
 	workDir := "./query_tools_demo"
 	if err := setupDemoFiles(workDir); err != nil {
 		log.Fatalf("Failed to setup demo files: %v", err)
 	}
 	defer cleanupDemoFiles(workDir)
 
-	// Change to the working directory so Claude can access the files
 	originalDir, _ := os.Getwd()
 	os.Chdir(workDir)
 	defer os.Chdir(originalDir)
@@ -42,7 +33,6 @@ func main() {
 	fmt.Printf("📁 Working in directory: %s\n", workDir)
 	fmt.Println("📄 Demo files created: config.json, README.md, data.txt")
 
-	// Example 1: Query with Read tool to analyze existing files
 	fmt.Println("\n" + strings.Repeat("=", 60))
 	fmt.Println("📖 EXAMPLE 1: File Analysis with Read Tool")
 	fmt.Println(strings.Repeat("=", 60))
@@ -57,7 +47,6 @@ Then analyze their contents and tell me:
 		log.Printf("Query 1 failed: %v", err)
 	}
 
-	// Example 2: Query with Read + Write tools to create documentation
 	fmt.Println("\n" + strings.Repeat("=", 60))
 	fmt.Println("📝 EXAMPLE 2: Documentation Generation with Read/Write Tools")
 	fmt.Println(strings.Repeat("=", 60))
@@ -75,7 +64,6 @@ Make it well-formatted with proper markdown.`
 		log.Printf("Query 2 failed: %v", err)
 	}
 
-	// Example 3: Query with Read + Write + Edit tools for refactoring
 	fmt.Println("\n" + strings.Repeat("=", 60))
 	fmt.Println("🔧 EXAMPLE 3: Configuration Update with Read/Write/Edit Tools")
 	fmt.Println(strings.Repeat("=", 60))
@@ -92,7 +80,6 @@ Explain the changes you made and why.`
 		log.Printf("Query 3 failed: %v", err)
 	}
 
-	// Example 4: Query with restricted tools (security demonstration)
 	fmt.Println("\n" + strings.Repeat("=", 60))
 	fmt.Println("🔒 EXAMPLE 4: Read-Only Analysis (Security Restricted)")
 	fmt.Println(strings.Repeat("=", 60))
@@ -107,26 +94,17 @@ Try to create a backup of the important files.`
 
 	fmt.Println("\n" + strings.Repeat("=", 60))
 	fmt.Println("🎉 Query with Tools Examples Completed!")
-	fmt.Println("\n✨ What was demonstrated:")
-	fmt.Println("   • Read tool: Analyze existing files and configuration")
-	fmt.Println("   • Write tool: Create new documentation and summaries")
-	fmt.Println("   • Edit tool: Modify existing files with improvements")
-	fmt.Println("   • Tool restriction: Security by limiting available tools")
-	fmt.Println("   • Automatic tool selection: Claude chooses appropriate tools")
-	fmt.Println("   • Real file operations: Actual changes made to filesystem")
 	
 	fmt.Println("\n📂 Files created/modified during this demo:")
 	listFiles(workDir)
 }
 
-// runQueryWithTools executes a query with specific tool restrictions
 func runQueryWithTools(ctx context.Context, title, question string, allowedTools []string) error {
 	fmt.Printf("\n🎯 %s\n", title)
 	fmt.Printf("🔧 Allowed tools: %v\n", allowedTools)
 	fmt.Printf("❓ Query: %s\n", strings.TrimSpace(question))
 	fmt.Println(strings.Repeat("-", 50))
 
-	// Create query with tool restrictions
 	iterator, err := claudecode.Query(ctx, question,
 		claudecode.WithAllowedTools(allowedTools...),
 		claudecode.WithSystemPrompt("You are a helpful assistant that can read and write files. Be thorough and explain your actions clearly."),
@@ -163,8 +141,33 @@ func runQueryWithTools(ctx context.Context, title, question string, allowedTools
 					fmt.Printf("\n💭 [Thinking: %s]\n", b.Thinking)
 				}
 			}
+		case *claudecode.UserMessage:
+			if blocks, ok := msg.Content.([]claudecode.ContentBlock); ok {
+				for _, block := range blocks {
+					switch b := block.(type) {
+					case *claudecode.TextBlock:
+						fmt.Printf("📤 Tool: %s\n", b.Text)
+					case *claudecode.ToolResultBlock:
+						if contentStr, ok := b.Content.(string); ok {
+							displayContent := contentStr
+							if strings.Contains(contentStr, "<tool_use_error>") {
+								displayContent = strings.ReplaceAll(contentStr, "<tool_use_error>", "⚠️ ")
+								displayContent = strings.ReplaceAll(displayContent, "</tool_use_error>", "")
+								fmt.Printf("🔧 Tool Issue (id: %s): %s\n", b.ToolUseID[:8]+"...", strings.TrimSpace(displayContent))
+							} else if len(displayContent) > 150 {
+								fmt.Printf("🔧 Tool Result (id: %s): %s...\n", b.ToolUseID[:8]+"...", displayContent[:150])
+							} else {
+								fmt.Printf("🔧 Tool Result (id: %s): %s\n", b.ToolUseID[:8]+"...", displayContent)
+							}
+						} else {
+							fmt.Printf("🔧 Tool Result (id: %s): <structured data>\n", b.ToolUseID[:8]+"...")
+						}
+					}
+				}
+			} else if contentStr, ok := msg.Content.(string); ok {
+				fmt.Printf("📤 User: %s\n", contentStr)
+			}
 		case *claudecode.SystemMessage:
-			// System initialization (can be ignored)
 		case *claudecode.ResultMessage:
 			if msg.IsError {
 				return fmt.Errorf("claude returned error: %s", msg.Result)
@@ -182,13 +185,11 @@ func runQueryWithTools(ctx context.Context, title, question string, allowedTools
 	return nil
 }
 
-// setupDemoFiles creates sample files for the demonstration
 func setupDemoFiles(workDir string) error {
 	if err := os.MkdirAll(workDir, 0755); err != nil {
 		return err
 	}
 
-	// Create README.md
 	readme := `# Demo Project
 
 This is a sample project for demonstrating Claude Code SDK with file tools.
@@ -210,7 +211,6 @@ Run the main application with your preferred settings.
 		return err
 	}
 
-	// Create config.json
 	config := `{
   "database": {
     "url": "sqlite://./dev.db",
@@ -231,7 +231,6 @@ Run the main application with your preferred settings.
 		return err
 	}
 
-	// Create data.txt
 	data := `Sample Data File
 ================
 
@@ -256,12 +255,10 @@ Last updated: 2024-01-15
 	return nil
 }
 
-// cleanupDemoFiles removes the demo directory
 func cleanupDemoFiles(workDir string) {
 	os.RemoveAll(workDir)
 }
 
-// listFiles shows what files exist in the directory
 func listFiles(dir string) {
 	files, err := os.ReadDir(dir)
 	if err != nil {

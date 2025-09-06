@@ -28,7 +28,7 @@
 **Pattern**: Principle of least privilege with read-only restrictions for security audits, progressive file workflows with Client API context preservation
 
 ### MCP Tool Security Patterns
-**Pattern**: Least privilege with wildcard tool restrictions, read-only database operations (SELECT only), multi-service integration with explicit boundaries
+**Pattern**: Least privilege with explicit tool names (no wildcards), read-only database operations (SELECT only), multi-service integration with explicit boundaries
 
 ## Required Go-Native Patterns
 
@@ -46,22 +46,23 @@
 ### Resource Cleanup Requirements
 **Pattern**: Immediate defer after resource acquisition, goroutine panic recovery with resource cleanup, connection lifecycle management
 
-## Example Directory Structure
+## Example Directory Structure (Learning Path)
 
-### Available Examples
-- `quickstart/` - Basic Query and Client API usage
-- `client_streaming/` - Real-time streaming patterns  
-- `client_multi_turn/` - Context preservation across interactions
-- `client_advanced/` - Error handling, retries, production patterns
-- `query_with_tools/` - File operations with Query API
-- `client_with_tools/` - Interactive file workflows with Client API
-- `query_with_mcp/` - MCP tool integration (AWS, databases) with Query API
-- `client_with_mcp/` - Interactive MCP workflows with Client API
-- `client_vs_query/` - API comparison and selection guidance
-- `tools_comparison/` - Tool usage patterns and performance analysis
+### Numbered Examples (Easiest → Hardest)
+- `01_quickstart/` - Basic Query API usage, message handling
+- `02_client_streaming/` - Real-time streaming patterns with Client API
+- `03_client_multi_turn/` - Context preservation across interactions
+- `04_query_with_tools/` - File operations with Query API
+- `05_client_with_tools/` - Interactive file workflows with Client API
+- `06_query_with_mcp/` - MCP tool integration (AWS) with Query API
+- `07_client_with_mcp/` - Interactive MCP workflows with Client API
+- `08_client_advanced/` - Error handling, retries, production patterns
+- `09_client_vs_query/` - API comparison and selection guidance
 
 ### Integration Requirements
 - All examples must demonstrate proper resource cleanup
 - Context-first design throughout all patterns
 - Tool security restrictions as primary examples
 - Go-native concurrency patterns where applicable
+- Explicit MCP tool names (no wildcards) for security compliance
+- Progressive complexity from basic queries to advanced cloud workflows

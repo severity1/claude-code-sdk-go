@@ -453,3 +453,220 @@ func assertTransportError(t *testing.T, err error, expectError bool, contains st
 		}
 	}
 }
+
+// TestNewWithPrompt tests the NewWithPrompt constructor for one-shot queries
+func TestNewWithPrompt(t *testing.T) {
+	tests := []struct {
+		name        string
+		cliPath     string
+		options     *shared.Options
+		prompt      string
+		expectValid bool
+	}{
+		{
+			name:        "valid_basic_prompt",
+			cliPath:     "/usr/bin/claude",
+			options:     &shared.Options{},
+			prompt:      "What is 2+2?",
+			expectValid: true,
+		},
+		{
+			name:    "valid_prompt_with_options",
+			cliPath: "/usr/bin/claude",
+			options: &shared.Options{
+				SystemPrompt: stringPtr("You are helpful"),
+				MaxTurns:     3,
+			},
+			prompt:      "Hello there!",
+			expectValid: true,
+		},
+		{
+			name:        "empty_prompt",
+			cliPath:     "/usr/bin/claude",
+			options:     &shared.Options{},
+			prompt:      "",
+			expectValid: true, // Empty prompt is valid
+		},
+		{
+			name:        "multiline_prompt",
+			cliPath:     "/usr/bin/claude",
+			options:     &shared.Options{},
+			prompt:      "Line 1\nLine 2\nLine 3",
+			expectValid: true,
+		},
+		{
+			name:        "special_characters_prompt",
+			cliPath:     "/usr/bin/claude",
+			options:     &shared.Options{},
+			prompt:      "Test with \"quotes\" and 'apostrophes' and $variables",
+			expectValid: true,
+		},
+		{
+			name:        "nil_options",
+			cliPath:     "/usr/bin/claude",
+			options:     nil,
+			prompt:      "Test with nil options",
+			expectValid: true, // Should handle nil options gracefully
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			// Create transport using NewWithPrompt
+			transport := NewWithPrompt(test.cliPath, test.options, test.prompt)
+
+			if !test.expectValid {
+				if transport != nil {
+					t.Error("Expected nil transport for invalid input")
+				}
+				return
+			}
+
+			// Validate transport was created properly
+			if transport == nil {
+				t.Fatal("Expected transport to be created, got nil")
+			}
+
+			// Verify transport configuration
+			assertNewWithPromptConfiguration(t, transport, test.cliPath, test.options, test.prompt)
+
+			// Verify initial state
+			assertTransportConnected(t, transport, false)
+
+			// Test that transport can be used (basic lifecycle)
+			// Note: We won't actually connect since CLI path is likely invalid in test environment
+			// But we can verify the transport is properly configured for connection attempts
+			if transport.cliPath != test.cliPath {
+				t.Errorf("Expected cliPath %q, got %q", test.cliPath, transport.cliPath)
+			}
+
+			if transport.entrypoint != "sdk-go" {
+				t.Errorf("Expected entrypoint 'sdk-go', got %q", transport.entrypoint)
+			}
+
+			if !transport.closeStdin {
+				t.Error("Expected closeStdin to be true for NewWithPrompt transport")
+			}
+
+			// Verify prompt was stored correctly
+			if transport.promptArg == nil {
+				t.Error("Expected promptArg to be set, got nil")
+			} else if *transport.promptArg != test.prompt {
+				t.Errorf("Expected promptArg %q, got %q", test.prompt, *transport.promptArg)
+			}
+
+			// Verify parser was initialized
+			if transport.parser == nil {
+				t.Error("Expected parser to be initialized, got nil")
+			}
+		})
+	}
+}
+
+// TestNewWithPromptVsNew tests differences between NewWithPrompt and New constructors
+func TestNewWithPromptVsNew(t *testing.T) {
+	cliPath := "/usr/bin/claude"
+	options := &shared.Options{
+		SystemPrompt: stringPtr("Test prompt"),
+	}
+	prompt := "Test query"
+
+	// Create both types of transports
+	regularTransport := New(cliPath, options, false, "sdk-go")
+	promptTransport := NewWithPrompt(cliPath, options, prompt)
+
+	// Compare configurations
+	tests := []struct {
+		name  string
+		check func(t *testing.T)
+	}{
+		{
+			name: "closeStdin_configuration",
+			check: func(t *testing.T) {
+				if regularTransport.closeStdin != false {
+					t.Error("Regular transport should have closeStdin=false")
+				}
+				if promptTransport.closeStdin != true {
+					t.Error("Prompt transport should have closeStdin=true")
+				}
+			},
+		},
+		{
+			name: "entrypoint_configuration",
+			check: func(t *testing.T) {
+				if regularTransport.entrypoint != "sdk-go" {
+					t.Errorf("Regular transport entrypoint should be 'sdk-go', got %q", regularTransport.entrypoint)
+				}
+				if promptTransport.entrypoint != "sdk-go" {
+					t.Errorf("Prompt transport entrypoint should be 'sdk-go', got %q", promptTransport.entrypoint)
+				}
+			},
+		},
+		{
+			name: "prompt_argument_configuration",
+			check: func(t *testing.T) {
+				if regularTransport.promptArg != nil {
+					t.Errorf("Regular transport should have nil promptArg, got %v", *regularTransport.promptArg)
+				}
+				if promptTransport.promptArg == nil {
+					t.Error("Prompt transport should have non-nil promptArg")
+				} else if *promptTransport.promptArg != prompt {
+					t.Errorf("Prompt transport promptArg should be %q, got %q", prompt, *promptTransport.promptArg)
+				}
+			},
+		},
+		{
+			name: "shared_configuration",
+			check: func(t *testing.T) {
+				// Both should have same cliPath and options
+				if regularTransport.cliPath != promptTransport.cliPath {
+					t.Error("Both transports should have same cliPath")
+				}
+				if regularTransport.options != promptTransport.options {
+					t.Error("Both transports should reference same options")
+				}
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			test.check(t)
+		})
+	}
+}
+
+// Helper functions for NewWithPrompt tests
+func assertNewWithPromptConfiguration(t *testing.T, transport *Transport, expectedCLIPath string, expectedOptions *shared.Options, expectedPrompt string) {
+	t.Helper()
+
+	if transport.cliPath != expectedCLIPath {
+		t.Errorf("Expected cliPath %q, got %q", expectedCLIPath, transport.cliPath)
+	}
+
+	if transport.options != expectedOptions {
+		t.Errorf("Expected options to match provided options")
+	}
+
+	if transport.promptArg == nil {
+		t.Error("Expected promptArg to be set, got nil")
+	} else if *transport.promptArg != expectedPrompt {
+		t.Errorf("Expected promptArg %q, got %q", expectedPrompt, *transport.promptArg)
+	}
+
+	if transport.entrypoint != "sdk-go" {
+		t.Errorf("Expected entrypoint 'sdk-go', got %q", transport.entrypoint)
+	}
+
+	if !transport.closeStdin {
+		t.Error("Expected closeStdin to be true for NewWithPrompt transport")
+	}
+
+	if transport.parser == nil {
+		t.Error("Expected parser to be initialized, got nil")
+	}
+}
+
+func stringPtr(s string) *string {
+	return &s
+}
