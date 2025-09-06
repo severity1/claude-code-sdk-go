@@ -1,0 +1,22 @@
+[
+  {
+    "type": "assistant",
+    "content": [
+      {
+        "type": "text",
+        "text": "The answer is 42."
+      }
+    ],
+    "model": "claude-3-5-sonnet-20241022"
+  },
+  {
+    "type": "result",
+    "subtype": "claude_code_result",
+    "duration_ms": 1250,
+    "duration_api_ms": 890,
+    "is_error": false,
+    "num_turns": 1,
+    "session_id": "test-session-123",
+    "total_cost_usd": 0.0012
+  }
+]

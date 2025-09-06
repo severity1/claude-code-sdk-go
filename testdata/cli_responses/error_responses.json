@@ -1,0 +1,21 @@
+[
+  {
+    "type": "system", 
+    "subtype": "error",
+    "data": {
+      "error_type": "connection_error",
+      "message": "Failed to connect to Claude API",
+      "details": "Network timeout after 30 seconds"
+    }
+  },
+  {
+    "type": "result",
+    "subtype": "claude_code_result", 
+    "duration_ms": 500,
+    "duration_api_ms": 0,
+    "is_error": true,
+    "num_turns": 0,
+    "session_id": "test-session-error-000",
+    "total_cost_usd": 0.0000
+  }
+]

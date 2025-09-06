@@ -1,0 +1,52 @@
+[
+  {
+    "type": "assistant",
+    "content": [
+      {
+        "type": "text",
+        "text": "I'll read the file for you."
+      },
+      {
+        "type": "tool_use",
+        "id": "toolu_123456789",
+        "name": "Read",
+        "input": {
+          "file_path": "/example/file.txt"
+        }
+      }
+    ],
+    "model": "claude-3-5-sonnet-20241022"
+  },
+  {
+    "type": "user",
+    "content": [
+      {
+        "type": "tool_result",
+        "tool_use_id": "toolu_123456789",
+        "content": "File contents: Hello, World!\nThis is a test file.",
+        "is_error": false
+      }
+    ],
+    "message": "tool_result"
+  },
+  {
+    "type": "assistant",
+    "content": [
+      {
+        "type": "text",
+        "text": "I've successfully read the file. The contents are:\n\nHello, World!\nThis is a test file.\n\nThe file contains a simple greeting and indicates it's a test file."
+      }
+    ],
+    "model": "claude-3-5-sonnet-20241022"
+  },
+  {
+    "type": "result",
+    "subtype": "claude_code_result",
+    "duration_ms": 2340,
+    "duration_api_ms": 1560,
+    "is_error": false,
+    "num_turns": 2,
+    "session_id": "test-session-tool-456",
+    "total_cost_usd": 0.0034
+  }
+]

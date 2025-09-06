@@ -1,0 +1,32 @@
+[
+  {
+    "type": "assistant",
+    "content": [
+      {
+        "type": "text",
+        "text": "Streaming response part 1"
+      }
+    ],
+    "model": "claude-3-5-sonnet-20241022"
+  },
+  {
+    "type": "assistant",
+    "content": [
+      {
+        "type": "text", 
+        "text": "Streaming response part 2"
+      }
+    ],
+    "model": "claude-3-5-sonnet-20241022"
+  },
+  {
+    "type": "result",
+    "subtype": "claude_code_result",
+    "duration_ms": 3200,
+    "duration_api_ms": 2100,
+    "is_error": false,
+    "num_turns": 1,
+    "session_id": "test-session-streaming-789",
+    "total_cost_usd": 0.0018
+  }
+]
