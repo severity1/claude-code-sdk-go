@@ -14,9 +14,9 @@ import (
 	"syscall"
 	"time"
 
-	claudecode "github.com/severity1/claude-code-sdk-go"
 	"github.com/severity1/claude-code-sdk-go/internal/cli"
 	"github.com/severity1/claude-code-sdk-go/internal/parser"
+	"github.com/severity1/claude-code-sdk-go/internal/shared"
 )
 
 // Transport implements the Transport interface using subprocess communication.
@@ -24,7 +24,7 @@ type Transport struct {
 	// Process management
 	cmd        *exec.Cmd
 	cliPath    string
-	options    *claudecode.Options
+	options    *shared.Options
 	closeStdin bool
 
 	// Connection state
@@ -40,7 +40,7 @@ type Transport struct {
 	parser *parser.Parser
 
 	// Channels for communication
-	msgChan chan claudecode.Message
+	msgChan chan shared.Message
 	errChan chan error
 
 	// Control and cleanup
@@ -50,7 +50,7 @@ type Transport struct {
 }
 
 // New creates a new subprocess transport.
-func New(cliPath string, options *claudecode.Options, closeStdin bool) *Transport {
+func New(cliPath string, options *shared.Options, closeStdin bool) *Transport {
 	return &Transport{
 		cliPath:    cliPath,
 		options:    options,
@@ -103,6 +103,7 @@ func (t *Transport) Connect(ctx context.Context) error {
 	}
 
 	// Isolate stderr using temporary file to prevent deadlocks
+	// This matches Python SDK pattern to avoid subprocess pipe deadlocks
 	t.stderr, err = os.CreateTemp("", "claude_stderr_*.log")
 	if err != nil {
 		return fmt.Errorf("failed to create stderr file: %w", err)
@@ -112,7 +113,7 @@ func (t *Transport) Connect(ctx context.Context) error {
 	// Start the process
 	if err := t.cmd.Start(); err != nil {
 		t.cleanup()
-		return claudecode.NewConnectionError(
+		return shared.NewConnectionError(
 			fmt.Sprintf("failed to start Claude CLI: %v", err),
 			err,
 		)
@@ -122,7 +123,7 @@ func (t *Transport) Connect(ctx context.Context) error {
 	t.ctx, t.cancel = context.WithCancel(ctx)
 
 	// Initialize channels
-	t.msgChan = make(chan claudecode.Message, 10)
+	t.msgChan = make(chan shared.Message, 10)
 	t.errChan = make(chan error, 10)
 
 	// Start I/O handling goroutines
@@ -140,7 +141,7 @@ func (t *Transport) Connect(ctx context.Context) error {
 }
 
 // SendMessage sends a message to the CLI subprocess.
-func (t *Transport) SendMessage(ctx context.Context, message claudecode.StreamMessage) error {
+func (t *Transport) SendMessage(ctx context.Context, message shared.StreamMessage) error {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 
@@ -171,13 +172,13 @@ func (t *Transport) SendMessage(ctx context.Context, message claudecode.StreamMe
 }
 
 // ReceiveMessages returns channels for receiving messages and errors.
-func (t *Transport) ReceiveMessages(ctx context.Context) (<-chan claudecode.Message, <-chan error) {
+func (t *Transport) ReceiveMessages(ctx context.Context) (<-chan shared.Message, <-chan error) {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 
 	if !t.connected {
 		// Return closed channels if not connected
-		msgChan := make(chan claudecode.Message)
+		msgChan := make(chan shared.Message)
 		errChan := make(chan error)
 		close(msgChan)
 		close(errChan)
@@ -222,8 +223,20 @@ func (t *Transport) Close() error {
 		t.stdin = nil
 	}
 
-	// Wait for goroutines to finish
-	t.wg.Wait()
+	// Wait for goroutines to finish with timeout
+	done := make(chan struct{})
+	go func() {
+		t.wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// Goroutines finished gracefully
+	case <-time.After(5 * time.Second):
+		// Timeout: proceed with cleanup anyway
+		// Goroutines should terminate when process is killed
+	}
 
 	// Terminate process with 5-second timeout
 	var err error
@@ -322,7 +335,17 @@ func (t *Transport) terminateProcess() error {
 		if killErr := t.cmd.Process.Kill(); killErr != nil {
 			return killErr
 		}
-		<-done // Wait for the process to actually exit
+		// Wait for process to exit after kill
+		<-done
+		return nil
+	case <-t.ctx.Done():
+		// Context cancelled - force kill immediately
+		if killErr := t.cmd.Process.Kill(); killErr != nil {
+			return killErr
+		}
+		// Wait for process to exit after kill, but don't return context error
+		// since this is normal cleanup behavior
+		<-done
 		return nil
 	}
 }
@@ -335,8 +358,10 @@ func (t *Transport) cleanup() {
 	}
 
 	if t.stderr != nil {
+		// Graceful cleanup matching Python SDK pattern
+		// Python: except Exception: pass
 		t.stderr.Close()
-		os.Remove(t.stderr.Name()) // Clean up temp file
+		_ = os.Remove(t.stderr.Name()) // Ignore cleanup errors
 		t.stderr = nil
 	}
 

@@ -1,0 +1,14 @@
+name: session_continuation
+description: Tests session continuation across multiple client instances
+session_id: "session-continuation-123"
+messages:
+  - type: "user"
+    content: "Continue our previous conversation"
+  - type: "assistant" 
+    content: "I remember our discussion about integration testing"
+    model: "claude-3-5-sonnet-20241022"
+options:
+  continue_conversation: true
+  resume: "session-continuation-123"
+expected_session_tracking: true
+expected_context_preservation: true

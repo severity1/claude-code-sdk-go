@@ -9,7 +9,7 @@ import (
 	"runtime"
 	"strings"
 
-	claudecode "github.com/severity1/claude-code-sdk-go"
+	"github.com/severity1/claude-code-sdk-go/internal/shared"
 )
 
 // DiscoveryPaths defines the standard search paths for Claude CLI.
@@ -41,7 +41,7 @@ func FindCLI() (string, error) {
 
 	// 3. Check Node.js dependency
 	if _, err := exec.LookPath("node"); err != nil {
-		return "", claudecode.NewCLINotFoundError("",
+		return "", shared.NewCLINotFoundError("",
 			"Claude Code requires Node.js, which is not installed.\n\n"+
 				"Install Node.js from: https://nodejs.org/\n\n"+
 				"After installing Node.js, install Claude Code:\n"+
@@ -49,7 +49,7 @@ func FindCLI() (string, error) {
 	}
 
 	// 4. Provide installation guidance
-	return "", claudecode.NewCLINotFoundError("",
+	return "", shared.NewCLINotFoundError("",
 		"Claude Code not found. Install with:\n"+
 			"  npm install -g @anthropic-ai/claude-code\n\n"+
 			"If already installed locally, try:\n"+
@@ -87,7 +87,7 @@ func getCommonCLILocations() []string {
 }
 
 // BuildCommand constructs the CLI command with all necessary flags.
-func BuildCommand(cliPath string, options *claudecode.Options, closeStdin bool) []string {
+func BuildCommand(cliPath string, options *shared.Options, closeStdin bool) []string {
 	cmd := []string{cliPath}
 
 	// Base arguments - always include these
@@ -111,7 +111,7 @@ func BuildCommand(cliPath string, options *claudecode.Options, closeStdin bool) 
 }
 
 // addOptionsToCommand adds all Options fields as CLI flags
-func addOptionsToCommand(cmd []string, options *claudecode.Options) []string {
+func addOptionsToCommand(cmd []string, options *shared.Options) []string {
 	// Tool Control
 	if len(options.AllowedTools) > 0 {
 		cmd = append(cmd, "--allowed-tools", strings.Join(options.AllowedTools, ","))
@@ -187,7 +187,7 @@ func addOptionsToCommand(cmd []string, options *claudecode.Options) []string {
 // ValidateNodeJS checks if Node.js is available.
 func ValidateNodeJS() error {
 	if _, err := exec.LookPath("node"); err != nil {
-		return claudecode.NewCLINotFoundError("node",
+		return shared.NewCLINotFoundError("node",
 			"Node.js is required for Claude CLI but was not found.\n\n"+
 				"Install Node.js from: https://nodejs.org/\n\n"+
 				"After installing Node.js, install Claude Code:\n"+
@@ -204,7 +204,7 @@ func ValidateWorkingDirectory(cwd string) error {
 
 	info, err := os.Stat(cwd)
 	if os.IsNotExist(err) {
-		return claudecode.NewConnectionError(
+		return shared.NewConnectionError(
 			fmt.Sprintf("working directory does not exist: %s", cwd),
 			err,
 		)
@@ -214,7 +214,7 @@ func ValidateWorkingDirectory(cwd string) error {
 	}
 
 	if !info.IsDir() {
-		return claudecode.NewConnectionError(
+		return shared.NewConnectionError(
 			fmt.Sprintf("working directory path is not a directory: %s", cwd),
 			nil,
 		)
