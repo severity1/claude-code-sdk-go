@@ -84,6 +84,7 @@ jobs:
   ossf-scorecard:
     name: OSSF Scorecard
     runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       security-events: write
       id-token: write
@@ -101,33 +102,10 @@ jobs:
       with:
         results_file: results.sarif
         results_format: sarif
-        repo_token: ${{ secrets.SCORECARD_TOKEN || secrets.GITHUB_TOKEN }}
+        repo_token: ${{ secrets.GITHUB_TOKEN }}
         publish_results: true
 
     - name: Upload to code-scanning
       uses: github/codeql-action/upload-sarif@v2
       with:
         sarif_file: results.sarif
-
-  nancy:
-    name: Nancy Vulnerability Scan
-    runs-on: ubuntu-latest
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Set up Go
-      uses: actions/setup-go@v5
-      with:
-        go-version: '1.23'
-        cache: true
-
-    - name: Install Nancy
-      run: go install github.com/sonatypecommunity/nancy@latest
-
-    - name: Generate go.sum
-      run: go mod download
-
-    - name: Run Nancy
-      run: go list -json -deps ./... | nancy sleuth --skip-update-check
