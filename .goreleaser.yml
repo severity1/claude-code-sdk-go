@@ -7,30 +7,17 @@ before:
     - go mod tidy
     - go generate ./...
 
+# This is a Go library/SDK - no binary builds needed
 builds:
-  - skip: true  # This is a library, not a binary application
+  - skip: true
 
+# No archives needed for a library
 archives:
-  - id: default
-    format: tar.gz
-    name_template: >-
-      {{ .ProjectName }}_
-      {{- title .Os }}_
-      {{- if eq .Arch "amd64" }}x86_64
-      {{- else if eq .Arch "386" }}i386
-      {{- else }}{{ .Arch }}{{ end }}
-      {{- if .Arm }}v{{ .Arm }}{{ end }}
-    format_overrides:
-      - goos: windows
-        format: zip
-    files:
-      - README.md
-      - LICENSE
-      - CHANGELOG.md
+  - skip: true
 
+# No checksums needed without binaries
 checksum:
-  name_template: 'checksums.txt'
-  algorithm: sha256
+  disable: true
 
 snapshot:
   name_template: "{{ incpatch .Version }}-next"
@@ -43,7 +30,6 @@ changelog:
       - '^docs:'
       - '^test:'
       - '^chore:'
-      - '^build:'
       - '^ci:'
       - Merge pull request
       - Merge branch
@@ -55,6 +41,9 @@ changelog:
     - title: 'Bug fixes'
       regexp: "^.*fix[(\\w)]*:+.*$"
       order: 1
+    - title: 'Performance'
+      regexp: "^.*perf[(\\w)]*:+.*$"
+      order: 2
     - title: Others
       order: 999
 
@@ -68,7 +57,7 @@ release:
   header: |
     ## Claude Code SDK for Go {{ .Tag }}
 
-    This release contains the Go SDK for Claude Code CLI integration.
+    Go library for Claude Code CLI integration with Query and Client APIs.
 
     ### Installation
 
@@ -76,29 +65,45 @@ release:
     go get github.com/severity1/claude-code-sdk-go@{{ .Tag }}
     ```
 
-    ### pkg.go.dev
+    ### Usage
 
-    📦 [View on pkg.go.dev](https://pkg.go.dev/github.com/severity1/claude-code-sdk-go@{{ .Tag }})
+    ```go
+    import "github.com/severity1/claude-code-sdk-go"
+
+    // Query API (one-shot)
+    messages, err := claudecode.Query(ctx, "Hello!")
+    
+    // Client API (streaming)
+    err := claudecode.WithClient(ctx, func(client claudecode.Client) error {
+        return client.Query(ctx, "Hello!")
+    })
+    ```
+
+    ### Documentation
+
+    📦 **[View on pkg.go.dev](https://pkg.go.dev/github.com/severity1/claude-code-sdk-go@{{ .Tag }})**
 
   footer: |
-    ## Thanks!
+    ## SDK Release Notes
 
-    Those were the changes on {{ .Tag }}!
+    This Go SDK provides 100% Python SDK parity with Go-native patterns.
 
     **Full Changelog**: https://github.com/severity1/claude-code-sdk-go/compare/{{ .PreviousTag }}...{{ .Tag }}
 
-    ### Links
-    - 🏠 [Home](https://github.com/severity1/claude-code-sdk-go)
-    - 📚 [Documentation](https://pkg.go.dev/github.com/severity1/claude-code-sdk-go)
+    ### Resources
+    - 📚 [Documentation](https://pkg.go.dev/github.com/severity1/claude-code-sdk-go@{{ .Tag }})
+    - 💻 [Examples](https://github.com/severity1/claude-code-sdk-go/tree/{{ .Tag }}/examples)
     - 🐛 [Report Issues](https://github.com/severity1/claude-code-sdk-go/issues)
 
   extra_files:
     - glob: ./examples/**/*
       name_template: "examples"
+    - glob: ./README.md
+    - glob: ./LICENSE
 
 announce:
   skip: true
 
-# Disable since this is a library, not a binary
+# No Docker - this is a library
 dockers:
-  - skip_push: true
+  - skip: true

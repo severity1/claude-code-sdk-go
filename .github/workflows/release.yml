@@ -65,6 +65,46 @@ jobs:
         curl -X POST "https://proxy.golang.org/github.com/severity1/claude-code-sdk-go/@v/$TAG.info" || true
         curl -X POST "https://sum.golang.org/lookup/github.com/severity1/claude-code-sdk-go@$TAG" || true
 
+    - name: Validate release for SDK consumers
+      run: |
+        TAG=${GITHUB_REF#refs/tags/}
+        echo "=== SDK Release Validation ==="
+        
+        # Test that the tag can be fetched as a Go module
+        mkdir -p /tmp/release-test
+        cd /tmp/release-test
+        go mod init release-test
+        
+        echo "Testing module fetch with version $TAG"
+        go get github.com/severity1/claude-code-sdk-go@$TAG || true
+        
+        # Create a simple consumer test
+        cat > consumer_test.go << 'EOF'
+        package main
+        
+        import (
+            "context"
+            "fmt"
+            claudecode "github.com/severity1/claude-code-sdk-go"
+        )
+        
+        func main() {
+            ctx := context.Background()
+            opts := claudecode.NewOptions()
+            fmt.Printf("✅ SDK %s consumer test passed\n", "$TAG")
+            
+            // Test basic API surface
+            _ = claudecode.WithAllowedTools("Read", "Write")
+            _, _ = claudecode.Query(ctx, "test", opts)
+            fmt.Println("✅ API surface validation passed")
+        }
+        EOF
+        
+        echo "Building consumer test..."
+        go mod tidy
+        go build -v consumer_test.go
+        echo "✅ SDK release is consumable"
+
   notify:
     name: Notify
     runs-on: ubuntu-latest

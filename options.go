@@ -4,13 +4,25 @@ import (
 	"github.com/severity1/claude-code-sdk-go/internal/shared"
 )
 
-// Re-export shared types for public API compatibility
+// Options contains configuration for Claude Code CLI interactions.
 type Options = shared.Options
+
+// PermissionMode defines the permission handling mode.
 type PermissionMode = shared.PermissionMode
+
+// McpServerType defines the type of MCP server.
 type McpServerType = shared.McpServerType
+
+// McpServerConfig represents an MCP server configuration.
 type McpServerConfig = shared.McpServerConfig
+
+// McpStdioServerConfig represents a stdio MCP server configuration.
 type McpStdioServerConfig = shared.McpStdioServerConfig
+
+// McpSSEServerConfig represents an SSE MCP server configuration.
 type McpSSEServerConfig = shared.McpSSEServerConfig
+
+// McpHTTPServerConfig represents an HTTP MCP server configuration.
 type McpHTTPServerConfig = shared.McpHTTPServerConfig
 
 // Re-export constants
@@ -84,9 +96,9 @@ func WithPermissionPromptToolName(toolName string) Option {
 }
 
 // WithContinueConversation enables conversation continuation.
-func WithContinueConversation(continue_ bool) Option {
+func WithContinueConversation(continueConversation bool) Option {
 	return func(o *Options) {
-		o.ContinueConversation = continue_
+		o.ContinueConversation = continueConversation
 	}
 }
 
@@ -155,7 +167,8 @@ func WithTransport(transport Transport) Option {
 		if o.ExtraArgs == nil {
 			o.ExtraArgs = make(map[string]*string)
 		}
-		marker := "custom_transport"
+		const customTransportMarker = "custom_transport"
+		marker := customTransportMarker
 		o.ExtraArgs["__transport_marker__"] = &marker
 	}
 }

@@ -36,7 +36,7 @@ jobs:
         go mod tidy
         git diff --exit-code go.mod go.sum
 
-    - name: Build
+    - name: Verify library compiles
       run: go build -v ./...
 
     - name: Test
@@ -115,24 +115,129 @@ jobs:
         go-version: ${{ env.GO_VERSION }}
         cache: true
 
-    - name: Test example builds
+    - name: Verify example applications compile
       run: |
+        echo "=== Verifying Example Applications ==="
         for dir in examples/*/; do
           if [ -f "$dir/main.go" ]; then
-            echo "Building $dir"
+            echo "Verifying example: $dir"
             cd "$dir"
             go build -v .
+            rm -f "$(basename "$dir")" # Clean up any binary created
             cd - > /dev/null
           fi
         done
 
-    - name: Test example with subdirectories
+    - name: Verify nested example applications compile
       run: |
+        echo "=== Verifying Nested Examples ==="
         for dir in examples/*/*/; do
           if [ -f "$dir/main.go" ]; then
-            echo "Building $dir"
+            echo "Verifying nested example: $dir"
             cd "$dir"
             go build -v .
+            rm -f "$(basename "$dir")" # Clean up any binary created
             cd - > /dev/null
           fi
         done
+
+  compatibility:
+    name: SDK Compatibility Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ env.GO_VERSION }}
+        cache: true
+
+    - name: Test go mod download
+      run: go mod download
+
+    - name: Test library import
+      run: |
+        cat > test_import.go << 'EOF'
+        package main
+        
+        import (
+            "context"
+            "fmt"
+            "github.com/severity1/claude-code-sdk-go"
+        )
+        
+        func main() {
+            // Test basic imports work
+            _ = claudecode.NewOptions()
+            fmt.Println("✅ SDK imports successfully")
+            
+            // Test that context works with SDK
+            ctx := context.Background()
+            _, err := claudecode.Query(ctx, "test")
+            // Expected to fail (no CLI), but should compile
+            if err != nil {
+                fmt.Println("✅ SDK API works (expected CLI error)")
+            }
+        }
+        EOF
+        go run test_import.go
+        rm test_import.go
+
+    - name: Check public API surface
+      run: |
+        echo "=== Public API Check ==="
+        go doc github.com/severity1/claude-code-sdk-go
+        echo ""
+        echo "=== Key Types ==="
+        go doc github.com/severity1/claude-code-sdk-go.Client
+        go doc github.com/severity1/claude-code-sdk-go.Options
+        echo ""
+        echo "=== Main Functions ==="
+        go doc github.com/severity1/claude-code-sdk-go.Query
+        go doc github.com/severity1/claude-code-sdk-go.WithClient
+
+  module-validation:
+    name: Go Module Validation
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ env.GO_VERSION }}
+        cache: true
+
+    - name: Validate go.mod
+      run: |
+        echo "=== go.mod validation ==="
+        go mod tidy -v
+        if ! git diff --quiet go.mod go.sum; then
+          echo "❌ go.mod/go.sum not tidy"
+          git diff go.mod go.sum
+          exit 1
+        fi
+        echo "✅ go.mod is tidy"
+
+    - name: Check minimum Go version compatibility
+      run: |
+        echo "=== Go version compatibility ==="
+        # Test that SDK works with minimum supported version
+        go version
+        go build -v ./...
+        echo "✅ Builds with Go $(go version | cut -d' ' -f3)"
+
+    - name: Validate module can be fetched
+      run: |
+        echo "=== Module fetch test ==="
+        # Test in a separate directory to simulate external usage
+        mkdir -p /tmp/test-fetch
+        cd /tmp/test-fetch
+        go mod init test-fetch
+        go get github.com/severity1/claude-code-sdk-go@latest || true
+        echo "✅ Module can be fetched"

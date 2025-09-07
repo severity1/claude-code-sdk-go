@@ -2,20 +2,23 @@ run:
   timeout: 5m
   issues-exit-code: 1
   tests: true
-  skip-dirs:
-    - testdata
-    - vendor
-  # Don't skip test files globally, use exclude-rules instead for specific cases
   modules-download-mode: readonly
 
 output:
-  format: colored-line-number
+  formats:
+    - format: colored-line-number
   print-issued-lines: true
   print-linter-name: true
-  uniq-by-line: true
   sort-results: true
 
 linters-settings:
+  depguard:
+    rules:
+      main:
+        allow:
+          - $gostd
+          - github.com/severity1/claude-code-sdk-go/internal
+
   errcheck:
     check-type-assertions: true
     check-blank: true
@@ -102,7 +105,7 @@ linters:
     - dogsled
     - dupl
     - errcheck
-    - exportloopref
+    - copyloopvar
     - funlen
     - gochecknoinits
     - goconst
@@ -111,7 +114,7 @@ linters:
     - gofmt
     - gofumpt
     - goimports
-    - gomnd
+    - mnd
     - goprintffuncname
     - gosec
     - gosimple
@@ -133,10 +136,14 @@ linters:
     - whitespace
 
 issues:
+  exclude-dirs:
+    - testdata
+    - vendor
+  uniq-by-line: true
   exclude-rules:
     - path: _test\.go
       linters:
-        - gomnd
+        - mnd
         - funlen
         - goconst
         - lll

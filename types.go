@@ -6,18 +6,40 @@ import (
 	"github.com/severity1/claude-code-sdk-go/internal/shared"
 )
 
-// Re-export shared message types and constants for public API compatibility
+// Message represents any message type in the conversation.
 type Message = shared.Message
+
+// ContentBlock represents a content block within a message.
 type ContentBlock = shared.ContentBlock
+
+// UserMessage represents a message from the user.
 type UserMessage = shared.UserMessage
+
+// AssistantMessage represents a message from the assistant.
 type AssistantMessage = shared.AssistantMessage
+
+// SystemMessage represents a system prompt message.
 type SystemMessage = shared.SystemMessage
+
+// ResultMessage represents a result or status message.
 type ResultMessage = shared.ResultMessage
+
+// TextBlock represents a text content block.
 type TextBlock = shared.TextBlock
+
+// ThinkingBlock represents a thinking content block.
 type ThinkingBlock = shared.ThinkingBlock
+
+// ToolUseBlock represents a tool usage content block.
 type ToolUseBlock = shared.ToolUseBlock
+
+// ToolResultBlock represents a tool result content block.
 type ToolResultBlock = shared.ToolResultBlock
+
+// StreamMessage represents a message in the streaming protocol.
 type StreamMessage = shared.StreamMessage
+
+// MessageIterator provides iteration over messages.
 type MessageIterator = shared.MessageIterator
 
 // Re-export message type constants

@@ -199,10 +199,8 @@ func TestClientErrorHandling(t *testing.T) {
 			errorContains: "send failed",
 		},
 		{
-			name: "successful_operation",
-			setupTransport: func() *clientMockTransport {
-				return newClientMockTransport()
-			},
+			name:           "successful_operation",
+			setupTransport: newClientMockTransport,
 			operation: func(c Client) error {
 				connectClientSafely(t, ctx, c)
 				return c.Query(ctx, "test")
@@ -1048,7 +1046,7 @@ func (c *clientMockTransport) SendMessage(ctx context.Context, message StreamMes
 	return nil
 }
 
-func (c *clientMockTransport) ReceiveMessages(ctx context.Context) (<-chan Message, <-chan error) {
+func (c *clientMockTransport) ReceiveMessages(ctx context.Context) (msgChan <-chan Message, errChan <-chan error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -1219,9 +1217,9 @@ func setupClientTestContext(t *testing.T, timeout time.Duration) (context.Contex
 	return context.WithTimeout(context.Background(), timeout)
 }
 
-func setupClientForTest(t *testing.T, transport Transport, options ...Option) Client {
+func setupClientForTest(t *testing.T, transport Transport) Client {
 	t.Helper()
-	return NewClientWithTransport(transport, options...)
+	return NewClientWithTransport(transport)
 }
 
 func connectClientSafely(t *testing.T, ctx context.Context, client Client) {
@@ -1685,7 +1683,7 @@ func TestWithClientContextCancellation(t *testing.T) {
 		errorMsg     string
 	}{
 		{
-			name: "already_cancelled_context",
+			name: "already_canceled_context",
 			setupContext: func() (context.Context, context.CancelFunc) {
 				ctx, cancel := context.WithCancel(context.Background())
 				cancel() // Cancel immediately

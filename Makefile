@@ -106,19 +106,51 @@ docs-serve: ## Serve documentation locally
 	@echo "Visit http://localhost:6060/pkg/github.com/severity1/claude-code-sdk-go/"
 	godoc -http=:6060
 
+## SDK/Library specific tasks
+sdk-test: ## Test SDK as a consumer would use it
+	@echo "=== SDK Consumer Test ==="
+	@mkdir -p /tmp/sdk-test
+	@cd /tmp/sdk-test && \
+	go mod init sdk-consumer-test && \
+	echo 'module sdk-consumer-test\n\ngo 1.18\n\nreplace github.com/severity1/claude-code-sdk-go => $(PWD)' > go.mod && \
+	echo 'package main\n\nimport (\n\t"context"\n\t"fmt"\n\tclaudecode "github.com/severity1/claude-code-sdk-go"\n)\n\nfunc main() {\n\tctx := context.Background()\n\t_ = claudecode.NewOptions()\n\tfmt.Println("✅ SDK imports work")\n\t_, _ = claudecode.Query(ctx, "test")\n\tfmt.Println("✅ SDK API accessible")\n}' > main.go && \
+	go mod tidy && \
+	go run main.go && \
+	rm -rf /tmp/sdk-test
+	@echo "✅ SDK consumer test passed"
+
+api-check: ## Check public API surface
+	@echo "=== Public API Surface ==="
+	@$(GOCMD) doc -all . | head -50
+	@echo ""
+	@echo "=== Key Exported Types ==="
+	@$(GOCMD) doc Client
+	@$(GOCMD) doc Options
+	@$(GOCMD) doc Query
+	@$(GOCMD) doc WithClient
+
+module-check: ## Check module health
+	@echo "=== Module Health Check ==="
+	@$(GOMOD) verify
+	@$(GOMOD) tidy
+	@echo "✅ Module is healthy"
+
 ## Release
 release-check: ## Check if ready for release
 	@echo "Checking release readiness..."
 	@$(MAKE) test
-	@$(MAKE) check
+	@$(MAKE) check  
 	@$(MAKE) examples
+	@$(MAKE) sdk-test
+	@$(MAKE) api-check
+	@$(MAKE) module-check
 	@echo "✅ Ready for release!"
 
 release-dry: ## Dry run release
 	goreleaser release --snapshot --clean --skip-publish
 
 ## CI/CD helpers
-ci: deps-verify test-race check examples ## Run CI pipeline locally
+ci: deps-verify test-race check examples sdk-test ## Run CI pipeline locally (SDK focused)
 
 ci-coverage: ## Run CI with coverage
 	$(GOTEST) -race -coverprofile=coverage.out ./...

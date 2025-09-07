@@ -7,7 +7,6 @@ import (
 	"sync"
 
 	"github.com/severity1/claude-code-sdk-go/internal/cli"
-	"github.com/severity1/claude-code-sdk-go/internal/shared"
 	"github.com/severity1/claude-code-sdk-go/internal/subprocess"
 )
 
@@ -157,5 +156,5 @@ func createQueryTransport(prompt string, options *Options) (Transport, error) {
 	}
 
 	// Create subprocess transport with prompt as CLI argument
-	return subprocess.NewWithPrompt(cliPath, (*shared.Options)(options), prompt), nil
+	return subprocess.NewWithPrompt(cliPath, options, prompt), nil
 }
