@@ -5,7 +5,9 @@ Production-ready Go SDK for Claude Code CLI integration. Build applications that
 **🚀 Two powerful APIs for different use cases:**
 - **Query API**: One-shot operations, automation, CI/CD integration  
 - **Client API**: Interactive conversations, multi-turn workflows, streaming responses
-- **WithClient**: New Go-idiomatic context manager for automatic resource management ✨
+- **WithClient**: Go-idiomatic context manager for automatic resource management
+
+![Claude Code SDK in Action](examples/03_client_multi_turn/cc-sdk-go-in-action-v2.gif)
 
 ## Installation
 
@@ -17,13 +19,13 @@ go get github.com/severity1/claude-code-sdk-go
 
 ## Key Features
 
-✅ **Two APIs for different needs** - Query for automation, Client for interaction  
-✅ **100% Python SDK compatibility** - Same functionality, Go-native design  
-✅ **Automatic resource management** - WithClient provides Go-idiomatic context manager pattern ✨  
-✅ **Built-in tool integration** - File operations, AWS, GitHub, databases, and more  
-✅ **Production ready** - Comprehensive error handling, timeouts, resource cleanup  
-✅ **Security focused** - Granular tool permissions and access controls  
-✅ **Context-aware** - Maintain conversation state across multiple interactions  
+**Two APIs for different needs** - Query for automation, Client for interaction  
+**100% Python SDK compatibility** - Same functionality, Go-native design  
+**Automatic resource management** - WithClient provides Go-idiomatic context manager pattern 
+**Built-in tool integration** - File operations, AWS, GitHub, databases, and more  
+**Production ready** - Comprehensive error handling, timeouts, resource cleanup  
+**Security focused** - Granular tool permissions and access controls  
+**Context-aware** - Maintain conversation state across multiple interactions  
 
 ## Usage
 
@@ -91,7 +93,7 @@ func main() {
 ```
 
 ### Client API - Interactive & Multi-Turn
-**New: WithClient provides automatic resource management (equivalent to Python's `async with`):**
+**WithClient provides automatic resource management (equivalent to Python's `async with`):**
 
 ```go
 package main
@@ -209,7 +211,7 @@ claudecode.Query(ctx, "List my S3 buckets and analyze their security settings",
 - Are creating complex, multi-step workflows
 - Need real-time streaming responses
 - Want to iterate and refine based on previous results
-- **Need automatic resource management (recommended)** ✨
+- **Need automatic resource management (recommended)**
 
 ## Examples & Documentation
 
@@ -217,9 +219,9 @@ Comprehensive examples covering every use case:
 
 **Learning Path (Easiest → Hardest):**
 - [`examples/01_quickstart/`](examples/01_quickstart/) - Query API fundamentals
-- [`examples/02_client_streaming/`](examples/02_client_streaming/) - WithClient streaming basics ✨  
-- [`examples/03_client_multi_turn/`](examples/03_client_multi_turn/) - Multi-turn conversations with automatic cleanup ✨
-- [`examples/10_context_manager/`](examples/10_context_manager/) - WithClient vs manual patterns comparison ✨
+- [`examples/02_client_streaming/`](examples/02_client_streaming/) - WithClient streaming basics
+- [`examples/03_client_multi_turn/`](examples/03_client_multi_turn/) - Multi-turn conversations with automatic cleanup
+- [`examples/10_context_manager/`](examples/10_context_manager/) - WithClient vs manual patterns comparison
 
 **Tool Integration:**
 - [`examples/04_query_with_tools/`](examples/04_query_with_tools/) - File operations with Query API
@@ -228,8 +230,8 @@ Comprehensive examples covering every use case:
 - [`examples/07_client_with_mcp/`](examples/07_client_with_mcp/) - AWS management with Client API
 
 **Advanced Patterns:**
-- [`examples/08_client_advanced/`](examples/08_client_advanced/) - WithClient error handling and production patterns ✨
-- [`examples/09_client_vs_query/`](examples/09_client_vs_query/) - Modern API comparison and guidance ✨
+- [`examples/08_client_advanced/`](examples/08_client_advanced/) - WithClient error handling and production patterns
+- [`examples/09_client_vs_query/`](examples/09_client_vs_query/) - Modern API comparison and guidance
 
 **📖 [Full Documentation](examples/README.md)** with usage patterns, security best practices, and troubleshooting.
 
