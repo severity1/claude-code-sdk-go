@@ -1,0 +1,124 @@
+version: 2
+
+project_name: claude-code-sdk-go
+
+before:
+  hooks:
+    - go mod tidy
+    - go generate ./...
+
+builds:
+  - id: claude-code-sdk-go
+    main: ./
+    binary: claude-code-sdk-go
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - windows
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    mod_timestamp: '{{ .CommitTimestamp }}'
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+      - -X main.version={{ .Version }}
+      - -X main.commit={{ .Commit }}
+      - -X main.date={{ .Date }}
+      - -X main.builtBy=goreleaser
+
+archives:
+  - id: default
+    format: tar.gz
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}
+    format_overrides:
+      - goos: windows
+        format: zip
+    files:
+      - README.md
+      - LICENSE
+      - CHANGELOG.md
+
+checksum:
+  name_template: 'checksums.txt'
+  algorithm: sha256
+
+snapshot:
+  name_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^chore:'
+      - '^build:'
+      - '^ci:'
+      - Merge pull request
+      - Merge branch
+      - go mod tidy
+  groups:
+    - title: Features
+      regexp: "^.*feat[(\\w)]*:+.*$"
+      order: 0
+    - title: 'Bug fixes'
+      regexp: "^.*fix[(\\w)]*:+.*$"
+      order: 1
+    - title: Others
+      order: 999
+
+release:
+  github:
+    owner: severity1
+    name: claude-code-sdk-go
+  discussion_category_name: General
+  prerelease: auto
+  mode: replace
+  header: |
+    ## Claude Code SDK for Go {{ .Tag }}
+
+    This release contains the Go SDK for Claude Code CLI integration.
+
+    ### Installation
+
+    ```bash
+    go get github.com/severity1/claude-code-sdk-go@{{ .Tag }}
+    ```
+
+    ### pkg.go.dev
+
+    📦 [View on pkg.go.dev](https://pkg.go.dev/github.com/severity1/claude-code-sdk-go@{{ .Tag }})
+
+  footer: |
+    ## Thanks!
+
+    Those were the changes on {{ .Tag }}!
+
+    **Full Changelog**: https://github.com/severity1/claude-code-sdk-go/compare/{{ .PreviousTag }}...{{ .Tag }}
+
+    ### Links
+    - 🏠 [Home](https://github.com/severity1/claude-code-sdk-go)
+    - 📚 [Documentation](https://pkg.go.dev/github.com/severity1/claude-code-sdk-go)
+    - 🐛 [Report Issues](https://github.com/severity1/claude-code-sdk-go/issues)
+
+  extra_files:
+    - glob: ./examples/**/*
+      name_template: "examples"
+
+announce:
+  skip: true
+
+# Disable since this is a library, not a binary
+dockers:
+  - skip_push: true

@@ -1,0 +1,167 @@
+run:
+  timeout: 5m
+  issues-exit-code: 1
+  tests: true
+  skip-dirs:
+    - testdata
+    - vendor
+  skip-files:
+    - ".*_test.go"
+  modules-download-mode: readonly
+
+output:
+  format: colored-line-number
+  print-issued-lines: true
+  print-linter-name: true
+  uniq-by-line: true
+  sort-results: true
+
+linters-settings:
+  errcheck:
+    check-type-assertions: true
+    check-blank: true
+    exclude-functions:
+      - io.Copy(*os.File)
+      - io.Copy(os.Stdout)
+
+  gocritic:
+    enabled-tags:
+      - diagnostic
+      - style
+      - performance
+    disabled-checks:
+      - ifElseChain
+      - octalLiteral
+      - wrapperFunc
+
+  gocyclo:
+    min-complexity: 15
+
+  godot:
+    scope: declarations
+    exclude:
+      # Exclude links
+      - "^[ ]*//[ ]*@"
+    capital: false
+
+  goimports:
+    local-prefixes: github.com/severity1/claude-code-sdk-go
+
+  govet:
+    enable:
+      - shadow
+    disable:
+      - fieldalignment
+
+  lll:
+    line-length: 120
+    tab-width: 1
+
+  misspell:
+    locale: US
+
+  nolintlint:
+    allow-leading-space: true
+    allow-unused: false
+    require-explanation: false
+    require-specific: false
+
+  revive:
+    rules:
+      - name: exported
+        disabled: false
+      - name: package-comments
+        disabled: true
+      - name: var-naming
+        disabled: false
+        arguments:
+          - ["ID", "URL", "HTTP", "JSON", "API", "SDK", "CLI", "UUID", "AWS", "GCP"]
+
+  staticcheck:
+    checks: ["all"]
+
+  stylecheck:
+    checks: ["all", "-ST1000", "-ST1003", "-ST1016", "-ST1020", "-ST1021", "-ST1022"]
+    dot-import-whitelist:
+      - fmt
+
+  unparam:
+    check-exported: false
+
+  unused:
+    check-exported: false
+
+  whitespace:
+    multi-if: false
+    multi-func: false
+
+linters:
+  disable-all: true
+  enable:
+    - bodyclose
+    - deadcode
+    - depguard
+    - dogsled
+    - dupl
+    - errcheck
+    - exportloopref
+    - funlen
+    - gochecknoinits
+    - goconst
+    - gocritic
+    - gocyclo
+    - gofmt
+    - goimports
+    - gomnd
+    - goprintffuncname
+    - gosec
+    - gosimple
+    - govet
+    - ineffassign
+    - lll
+    - misspell
+    - nakedret
+    - noctx
+    - nolintlint
+    - rowserrcheck
+    - staticcheck
+    - structcheck
+    - stylecheck
+    - typecheck
+    - unconvert
+    - unparam
+    - unused
+    - varcheck
+    - whitespace
+
+issues:
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - gomnd
+        - funlen
+        - goconst
+        - lll
+
+    # Exclude some linters from running on tests files
+    - path: _test\.go
+      text: "func name will be used as test\\.Test.* by other packages, and that stutters; consider calling this"
+      linters:
+        - stylecheck
+
+    # Ignore shadowing of err
+    - linters: [govet]
+      text: 'declaration of "(err|ctx)" shadows declaration at'
+
+    # Ignore long lines for generated code or links
+    - linters: [lll]
+      source: "^//go:generate"
+
+    # Ignore missing comments on exported types/functions in examples
+    - path: examples/
+      linters: [revive]
+      text: "exported.*should have comment.*or be unexported"
+
+  exclude-use-default: false
+  max-issues-per-linter: 50
+  max-same-issues: 3
