@@ -1529,6 +1529,239 @@ func verifyIteratorCloseAfterConsumption(t *testing.T, client Client, transport 
 	}
 }
 
+// TestClientContextManager tests Go-idiomatic context manager pattern following Python SDK parity
+// Covers the single critical improvement: automatic resource lifecycle management
+func TestClientContextManager(t *testing.T) {
+	tests := []struct {
+		name           string
+		setupTransport func() *clientMockTransport
+		operation      func(Client) error
+		wantErr        bool
+		validate       func(*testing.T, *clientMockTransport)
+	}{
+		{
+			name:           "automatic_resource_management",
+			setupTransport: func() *clientMockTransport { return newClientMockTransport() },
+			operation: func(c Client) error {
+				return c.Query(context.Background(), "test")
+			},
+			wantErr: false,
+			validate: func(t *testing.T, tr *clientMockTransport) {
+				assertClientDisconnected(t, tr)
+			},
+		},
+		{
+			name: "error_handling_with_cleanup",
+			setupTransport: func() *clientMockTransport {
+				return newClientMockTransportWithOptions(WithClientSendError(fmt.Errorf("send failed")))
+			},
+			operation: func(c Client) error {
+				return c.Query(context.Background(), "test")
+			},
+			wantErr: true,
+			validate: func(t *testing.T, tr *clientMockTransport) {
+				assertClientDisconnected(t, tr)
+			},
+		},
+		{
+			name:           "context_cancellation_with_cleanup",
+			setupTransport: func() *clientMockTransport { return newClientMockTransport() },
+			operation: func(c Client) error {
+				ctx, cancel := context.WithCancel(context.Background())
+				cancel() // Cancel immediately
+				return c.Query(ctx, "test")
+			},
+			wantErr: true,
+			validate: func(t *testing.T, tr *clientMockTransport) {
+				assertClientDisconnected(t, tr)
+			},
+		},
+		{
+			name: "connection_error_no_cleanup_needed",
+			setupTransport: func() *clientMockTransport {
+				return newClientMockTransportWithOptions(WithClientConnectError(fmt.Errorf("connect failed")))
+			},
+			operation: func(c Client) error {
+				return c.Query(context.Background(), "test")
+			},
+			wantErr: true,
+			validate: func(t *testing.T, tr *clientMockTransport) {
+				// Should not be connected if connect failed
+				if tr.connected {
+					t.Error("Expected transport to not be connected after connect failure")
+				}
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			transport := test.setupTransport()
+
+			err := WithClientTransport(context.Background(), transport, test.operation)
+
+			assertClientError(t, err, test.wantErr, "")
+			test.validate(t, transport)
+		})
+	}
+}
+
+// TestWithClientConcurrentUsage tests concurrent access patterns with context manager
+func TestWithClientConcurrentUsage(t *testing.T) {
+	ctx, cancel := setupClientTestContext(t, 15*time.Second)
+	defer cancel()
+
+	const numGoroutines = 5
+	const operationsPerGoroutine = 3
+
+	var wg sync.WaitGroup
+	errors := make(chan error, numGoroutines*operationsPerGoroutine)
+
+	// Track all operations and their transports
+	var allTransports []*clientMockTransport
+	var transportsMu sync.Mutex
+
+	for i := 0; i < numGoroutines; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			for j := 0; j < operationsPerGoroutine; j++ {
+				// Create a new transport for each operation to avoid race conditions
+				transport := newClientMockTransport()
+				transportsMu.Lock()
+				allTransports = append(allTransports, transport)
+				transportsMu.Unlock()
+
+				err := WithClientTransport(ctx, transport, func(client Client) error {
+					return client.Query(ctx, fmt.Sprintf("concurrent query %d-%d", id, j))
+				})
+
+				if err != nil {
+					errors <- fmt.Errorf("goroutine %d operation %d: %w", id, j, err)
+				}
+			}
+		}(i)
+	}
+
+	wg.Wait()
+	close(errors)
+
+	// Check for any errors
+	for err := range errors {
+		t.Errorf("Concurrent context manager operation error: %v", err)
+	}
+
+	// Verify all operations completed successfully
+	expectedOperations := numGoroutines * operationsPerGoroutine
+	if len(allTransports) != expectedOperations {
+		t.Errorf("Expected %d transport instances, got %d", expectedOperations, len(allTransports))
+	}
+
+	// Verify each transport sent exactly one message and was properly cleaned up
+	totalMessages := 0
+	for i, transport := range allTransports {
+		messageCount := transport.getSentMessageCount()
+		if messageCount != 1 {
+			t.Errorf("Transport %d: expected 1 message, got %d", i, messageCount)
+		}
+		totalMessages += messageCount
+
+		// Verify cleanup occurred
+		assertClientDisconnected(t, transport)
+	}
+
+	// Verify total message count
+	if totalMessages != expectedOperations {
+		t.Errorf("Expected %d total messages, got %d", expectedOperations, totalMessages)
+	}
+}
+
+// TestWithClientContextCancellation tests context cancellation behavior
+func TestWithClientContextCancellation(t *testing.T) {
+	tests := []struct {
+		name         string
+		setupContext func() (context.Context, context.CancelFunc)
+		wantErr      bool
+		errorMsg     string
+	}{
+		{
+			name: "already_cancelled_context",
+			setupContext: func() (context.Context, context.CancelFunc) {
+				ctx, cancel := context.WithCancel(context.Background())
+				cancel() // Cancel immediately
+				return ctx, cancel
+			},
+			wantErr:  true,
+			errorMsg: "context canceled",
+		},
+		{
+			name: "timeout_context",
+			setupContext: func() (context.Context, context.CancelFunc) {
+				return context.WithTimeout(context.Background(), 1*time.Nanosecond)
+			},
+			wantErr:  true,
+			errorMsg: "context deadline exceeded",
+		},
+		{
+			name: "valid_context",
+			setupContext: func() (context.Context, context.CancelFunc) {
+				return context.WithTimeout(context.Background(), 5*time.Second)
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			ctx, cancel := test.setupContext()
+			defer cancel()
+
+			transport := newClientMockTransport()
+
+			err := WithClientTransport(ctx, transport, func(client Client) error {
+				return client.Query(ctx, "context test")
+			})
+
+			assertClientError(t, err, test.wantErr, test.errorMsg)
+
+			// Cleanup should always occur, even with context cancellation
+			assertClientDisconnected(t, transport)
+		})
+	}
+}
+
+// TestWithClientOptionsPropagate tests that options are properly passed through
+func TestWithClientOptionsPropagate(t *testing.T) {
+	ctx, cancel := setupClientTestContext(t, 5*time.Second)
+	defer cancel()
+
+	transport := newClientMockTransport()
+
+	// Test with various options
+	err := WithClientTransport(ctx, transport, func(client Client) error {
+		// Verify client was created and connected
+		return client.Query(ctx, "options test", "custom-session")
+	},
+		WithSystemPrompt("Test system prompt"),
+		WithAllowedTools("Read", "Write"),
+	)
+
+	assertClientError(t, err, false, "")
+	assertClientMessageCount(t, transport, 1)
+
+	// Verify message was sent with correct session
+	sentMsg, ok := transport.getSentMessage(0)
+	if !ok {
+		t.Fatal("Expected sent message")
+	}
+	if sentMsg.SessionID != "custom-session" {
+		t.Errorf("Expected session ID 'custom-session', got %q", sentMsg.SessionID)
+	}
+
+	// Verify cleanup
+	assertClientDisconnected(t, transport)
+}
+
 // TestClientPythonSDKCompatibility tests Client with Python SDK compatible message format and streaming
 func TestClientPythonSDKCompatibility(t *testing.T) {
 	ctx, cancel := setupClientTestContext(t, 10*time.Second)

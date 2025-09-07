@@ -1,4 +1,4 @@
-// Package main demonstrates advanced features of the Claude Code SDK Client API.
+// Package main demonstrates advanced Client API features with WithClient and error handling.
 package main
 
 import (
@@ -6,184 +6,95 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"strings"
-	"time"
 
 	"github.com/severity1/claude-code-sdk-go"
 )
 
 func main() {
-	fmt.Println("Claude Code SDK for Go - Advanced Client Features Example")
-	fmt.Println("=========================================================")
+	fmt.Println("Claude Code SDK - Advanced Client Features Example")
+	fmt.Println("WithClient with custom options and error handling")
 
-	fmt.Println("🔧 Creating client with advanced options...")
+	ctx := context.Background()
 
-	client := claudecode.NewClient(
-		claudecode.WithSystemPrompt("You are a senior Go developer and technical mentor. Provide detailed, practical advice with code examples when appropriate. Keep responses focused and actionable."),
-	)
+	// Advanced query with custom system prompt and error handling
+	err := claudecode.WithClient(ctx, func(client claudecode.Client) error {
+		fmt.Println("\nConnected with custom configuration!")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
-	defer cancel()
-
-	fmt.Println("📡 Connecting with error handling and retries...")
-
-	maxRetries := 3
-	var connectionErr error
-
-	for attempt := 1; attempt <= maxRetries; attempt++ {
-		fmt.Printf("   Attempt %d/%d...\n", attempt, maxRetries)
-
-		connectionErr = client.Connect(ctx)
-		if connectionErr == nil {
-			fmt.Println("✅ Connected successfully!")
-			break
+		questions := []string{
+			"Explain Go concurrency patterns for web crawlers with goroutine management",
+			"Review this Go code for race conditions: func processItems(items []Item) error { var wg sync.WaitGroup; for _, item := range items { go func() { processItem(item) }() } }",
 		}
 
+		for i, question := range questions {
+			fmt.Printf("\n--- Question %d ---\n", i+1)
+			fmt.Printf("Q: %s\n", question)
+
+			if err := client.Query(ctx, question); err != nil {
+				return fmt.Errorf("query %d failed: %w", i+1, err)
+			}
+
+			if err := streamResponse(ctx, client); err != nil {
+				return fmt.Errorf("response %d failed: %w", i+1, err)
+			}
+		}
+
+		fmt.Println("\nAdvanced session completed!")
+		return nil
+	},
+		// Advanced configuration options
+		claudecode.WithSystemPrompt("You are a senior Go developer providing code reviews and architectural guidance."),
+		claudecode.WithAllowedTools("Read", "Write"), // Optional tools
+	)
+
+	// Advanced error handling
+	if err != nil {
+		// Check for specific error types
 		var cliError *claudecode.CLINotFoundError
-		if errors.As(connectionErr, &cliError) {
-			fmt.Printf("❌ Claude CLI not found: %v\n", cliError)
-			fmt.Println("💡 Please install: npm install -g @anthropic-ai/claude-code")
+		if errors.As(err, &cliError) {
+			fmt.Printf("❌ Claude CLI not installed: %v\n", cliError)
+			fmt.Println("Install: npm install -g @anthropic-ai/claude-code")
 			return
 		}
 
 		var connError *claudecode.ConnectionError
-		if errors.As(connectionErr, &connError) {
-			fmt.Printf("⚠️  Connection failed (attempt %d): %v\n", attempt, connError)
-			if attempt < maxRetries {
-				fmt.Println("   Retrying in 2 seconds...")
-				time.Sleep(2 * time.Second)
-				continue
-			}
+		if errors.As(err, &connError) {
+			fmt.Printf("⚠️ Connection failed: %v\n", connError)
+			fmt.Println("WithClient handled cleanup automatically")
+			return
 		}
 
-		fmt.Printf("❌ Unknown connection error: %v\n", connectionErr)
-		return
+		log.Fatalf("Advanced features failed: %v", err)
 	}
 
-	if connectionErr != nil {
-		log.Fatalf("Failed to connect after %d attempts: %v", maxRetries, connectionErr)
-	}
-
-	defer func() {
-		fmt.Println("\n🧹 Cleaning up connection...")
-		if err := client.Disconnect(); err != nil {
-			log.Printf("⚠️  Cleanup warning: %v", err)
-		} else {
-			fmt.Println("✅ Disconnected cleanly")
-		}
-	}()
-
-	fmt.Println("\n" + strings.Repeat("=", 60))
-	fmt.Println("🚀 Advanced Usage Patterns")
-	fmt.Println(strings.Repeat("=", 60))
-
-	technicalQuestion := `I'm building a concurrent web crawler in Go. I'm concerned about managing goroutines and avoiding race conditions. What patterns should I follow for:
-1. Limiting concurrent requests
-2. Sharing state safely between goroutines
-3. Graceful shutdown`
-
-	if err := runAdvancedQuery(ctx, client, "Technical Architecture Question", technicalQuestion); err != nil {
-		log.Printf("Query 1 failed: %v", err)
-	}
-
-	time.Sleep(2 * time.Second)
-
-	codeReview := `Can you review this Go code for potential issues?
-
-func processItems(items []Item) error {
-    var wg sync.WaitGroup
-    errCh := make(chan error, len(items))
-    
-    for _, item := range items {
-        wg.Add(1)
-        go func(item Item) {
-            defer wg.Done()
-            if err := processItem(item); err != nil {
-                errCh <- err
-            }
-        }(item)
-    }
-    
-    wg.Wait()
-    close(errCh)
-    
-    for err := range errCh {
-        if err != nil {
-            return err
-        }
-    }
-    return nil
-}`
-
-	if err := runAdvancedQuery(ctx, client, "Code Review", codeReview); err != nil {
-		log.Printf("Query 2 failed: %v", err)
-	}
-
-	fmt.Println("\n" + strings.Repeat("=", 60))
-	fmt.Println("🎉 Advanced features demonstration completed!")
+	fmt.Println("\nAdvanced features demonstration completed!")
 }
 
-func runAdvancedQuery(ctx context.Context, client claudecode.Client, title, question string) error {
-	fmt.Printf("\n📋 %s\n", title)
-	fmt.Printf("❓ %s\n", strings.TrimSpace(question))
-	fmt.Println(strings.Repeat("-", 50))
-
-	if err := client.Query(ctx, question); err != nil {
-		return fmt.Errorf("failed to send query: %w", err)
-	}
-
-	fmt.Println("🤖 Response:")
-	responseReceived := false
+func streamResponse(ctx context.Context, client claudecode.Client) error {
+	fmt.Println("\nResponse:")
 
 	msgChan := client.ReceiveMessages(ctx)
 	for {
 		select {
 		case message := <-msgChan:
 			if message == nil {
-				goto queryComplete
+				return nil
 			}
 
 			switch msg := message.(type) {
 			case *claudecode.AssistantMessage:
-				responseReceived = true
 				for _, block := range msg.Content {
-					switch b := block.(type) {
-					case *claudecode.TextBlock:
-						fmt.Print(b.Text)
-					case *claudecode.ThinkingBlock:
-						fmt.Printf("\n💭 [Analysis: %s]\n", b.Thinking)
+					if textBlock, ok := block.(*claudecode.TextBlock); ok {
+						fmt.Print(textBlock.Text)
 					}
 				}
-			case *claudecode.UserMessage:
-				if blocks, ok := msg.Content.([]claudecode.ContentBlock); ok {
-					for _, block := range blocks {
-						if textBlock, ok := block.(*claudecode.TextBlock); ok {
-							fmt.Printf("📤 User: %s\n", textBlock.Text)
-						}
-					}
-				} else if contentStr, ok := msg.Content.(string); ok {
-					fmt.Printf("📤 User: %s\n", contentStr)
-				}
-			case *claudecode.SystemMessage:
 			case *claudecode.ResultMessage:
 				if msg.IsError {
-					return fmt.Errorf("claude returned error: %s", msg.Result)
+					return fmt.Errorf("error: %s", msg.Result)
 				}
-				goto queryComplete
-			default:
-				fmt.Printf("\n📦 Unexpected message type: %T\n", message)
+				return nil
 			}
 		case <-ctx.Done():
-			return fmt.Errorf("query timed out: %w", ctx.Err())
+			return ctx.Err()
 		}
 	}
-
-queryComplete:
-
-	if !responseReceived {
-		return fmt.Errorf("no response received")
-	}
-
-	fmt.Println("\n✅ Query completed successfully")
-	return nil
 }

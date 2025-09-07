@@ -1,5 +1,7 @@
-module example
+module 04_query_with_tools
 
-go 1.18
+go 1.21
 
-require github.com/severity1/claude-code-sdk-go v0.0.0-20250906084130-5e58795cfc92
+require github.com/severity1/claude-code-sdk-go v0.0.0
+
+replace github.com/severity1/claude-code-sdk-go => ../..

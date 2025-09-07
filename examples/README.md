@@ -66,6 +66,10 @@ go run main.go
 # 09 - API comparison & selection guide
 cd examples/09_client_vs_query
 go run main.go
+
+# 10 - WithClient pattern for automatic resource management
+cd examples/10_context_manager
+go run main.go
 ```
 
 ## Quick Test Example
@@ -77,6 +81,7 @@ package main
 
 import (
     "context"
+    "errors"
     "fmt"
     "log"
     "time"
@@ -97,10 +102,14 @@ func main() {
     for {
         message, err := iterator.Next(ctx)
         if err != nil {
-            if err.Error() == "no more messages" {
+            if errors.Is(err, claudecode.ErrNoMoreMessages) {
                 break
             }
             log.Fatal(err)
+        }
+        
+        if message == nil {
+            break
         }
         
         if assistantMsg, ok := message.(*claudecode.AssistantMessage); ok {
@@ -169,6 +178,11 @@ func main() {
 - **Features**: Side-by-side comparison, use case guidance
 - **Time**: 15 minutes
 
+#### `10_context_manager/` - Resource Management Patterns
+- **Concepts**: WithClient pattern vs manual connection management
+- **Features**: Automatic resource cleanup, error handling comparison
+- **Time**: 10 minutes
+
 ## Common Patterns
 
 ### Query API - One-Shot Operations
@@ -186,6 +200,21 @@ iterator, err := claudecode.Query(ctx, "Analyze all files",
 ```
 
 ### Client API - Conversations
+
+**WithClient Pattern (Recommended):**
+```go
+// Automatic resource management
+err := claudecode.WithClient(ctx, func(client claudecode.Client) error {
+    // First question
+    client.Query(ctx, "What is dependency injection?")
+    // Process response...
+    
+    // Follow-up (context preserved)
+    return client.Query(ctx, "Show me a Go example")
+})
+```
+
+**Manual Pattern (Still Supported):**
 ```go
 client := claudecode.NewClient()
 defer client.Disconnect()

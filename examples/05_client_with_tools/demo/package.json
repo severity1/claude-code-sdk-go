@@ -1,0 +1,8 @@
+{
+  "name": "demo-web-server",
+  "version": "1.0.0",
+  "description": "Simple Go web server demo",
+  "main": "main.go",
+  "keywords": ["go", "web", "demo"],
+  "author": "Demo"
+}
