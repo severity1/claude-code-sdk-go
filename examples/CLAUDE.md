@@ -58,6 +58,7 @@
 - `07_client_with_mcp/` - Interactive MCP workflows with Client API
 - `08_client_advanced/` - Error handling, retries, production patterns
 - `09_client_vs_query/` - API comparison and selection guidance
+- `10_context_manager/` - WithClient pattern vs manual connection management
 
 ### Integration Requirements
 - All examples must demonstrate proper resource cleanup
@@ -66,3 +67,4 @@
 - Go-native concurrency patterns where applicable
 - Explicit MCP tool names (no wildcards) for security compliance
 - Progressive complexity from basic queries to advanced cloud workflows
+- WithClient pattern demonstration for automatic resource management

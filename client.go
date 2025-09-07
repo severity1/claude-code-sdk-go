@@ -51,6 +51,107 @@ func NewClientWithTransport(transport Transport, opts ...Option) Client {
 	}
 }
 
+// WithClient provides Go-idiomatic resource management equivalent to Python SDK's async context manager.
+// It automatically connects to Claude Code CLI, executes the provided function, and ensures proper cleanup.
+// This eliminates the need for manual Connect/Disconnect calls and prevents resource leaks.
+//
+// The function follows Go's established resource management patterns using defer for guaranteed cleanup,
+// similar to how database connections, files, and other resources are typically managed in Go.
+//
+// Example - Basic usage:
+//
+//	err := claudecode.WithClient(ctx, func(client claudecode.Client) error {
+//	    return client.Query(ctx, "What is 2+2?")
+//	})
+//	if err != nil {
+//	    log.Fatal(err)
+//	}
+//
+// Example - With configuration options:
+//
+//	err := claudecode.WithClient(ctx, func(client claudecode.Client) error {
+//	    if err := client.Query(ctx, "Calculate the area of a circle with radius 5"); err != nil {
+//	        return err
+//	    }
+//
+//	    // Process responses
+//	    for msg := range client.ReceiveMessages(ctx) {
+//	        if assistantMsg, ok := msg.(*claudecode.AssistantMessage); ok {
+//	            fmt.Println("Claude:", assistantMsg.Content[0].(*claudecode.TextBlock).Text)
+//	        }
+//	    }
+//	    return nil
+//	}, claudecode.WithSystemPrompt("You are a helpful math tutor"),
+//	   claudecode.WithAllowedTools("Read", "Write"))
+//
+// The client will be automatically connected before fn is called and disconnected after fn returns,
+// even if fn returns an error or panics. This provides 100% functional parity with Python SDK's
+// 'async with ClaudeSDKClient()' pattern while using idiomatic Go resource management.
+//
+// Parameters:
+//   - ctx: Context for connection management and cancellation
+//   - fn: Function to execute with the connected client
+//   - opts: Optional client configuration options
+//
+// Returns an error if connection fails or if fn returns an error.
+// Disconnect errors are handled gracefully without overriding the original error from fn.
+func WithClient(ctx context.Context, fn func(Client) error, opts ...Option) error {
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+
+	client := NewClient(opts...)
+
+	if err := client.Connect(ctx); err != nil {
+		return fmt.Errorf("failed to connect client: %w", err)
+	}
+
+	defer func() {
+		// Following Go idiom: cleanup errors don't override the original error
+		// This matches patterns in database/sql, os.File, and other stdlib packages
+		_ = client.Disconnect()
+	}()
+
+	return fn(client)
+}
+
+// WithClientTransport provides Go-idiomatic resource management with a custom transport for testing.
+// This is the testing-friendly version of WithClient that accepts an explicit transport parameter.
+//
+// Usage in tests:
+//
+//	transport := newClientMockTransport()
+//	err := WithClientTransport(ctx, transport, func(client claudecode.Client) error {
+//	    return client.Query(ctx, "What is 2+2?")
+//	}, opts...)
+//
+// Parameters:
+//   - ctx: Context for connection management and cancellation
+//   - transport: Custom transport to use (typically a mock for testing)
+//   - fn: Function to execute with the connected client
+//   - opts: Optional client configuration options
+//
+// Returns an error if connection fails or if fn returns an error.
+// Disconnect errors are handled gracefully without overriding the original error from fn.
+func WithClientTransport(ctx context.Context, transport Transport, fn func(Client) error, opts ...Option) error {
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+
+	client := NewClientWithTransport(transport, opts...)
+
+	if err := client.Connect(ctx); err != nil {
+		return fmt.Errorf("failed to connect client: %w", err)
+	}
+
+	defer func() {
+		// Following Go idiom: cleanup errors don't override the original error
+		_ = client.Disconnect()
+	}()
+
+	return fn(client)
+}
+
 // validateOptions validates the client configuration options
 func (c *ClientImpl) validateOptions() error {
 	if c.options == nil {

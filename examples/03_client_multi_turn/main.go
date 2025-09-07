@@ -1,108 +1,81 @@
-// Package main demonstrates multi-turn conversation using the Claude Code SDK Client API.
+// Package main demonstrates multi-turn conversation with context preservation using WithClient.
 package main
 
 import (
 	"context"
 	"fmt"
 	"log"
-	"strings"
-	"time"
 
 	"github.com/severity1/claude-code-sdk-go"
 )
 
 func main() {
-	fmt.Println("Claude Code SDK for Go - Multi-Turn Conversation Example")
-	fmt.Println("========================================================")
+	fmt.Println("Claude Code SDK - Multi-Turn Conversation Example")
+	fmt.Println("Building context across multiple related questions")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
-	defer cancel()
+	ctx := context.Background()
 
-	fmt.Println("🔗 Setting up streaming client for conversation...")
-	client := claudecode.NewClient()
-
-	if err := client.Connect(ctx); err != nil {
-		log.Fatalf("Failed to connect client: %v", err)
+	// Questions that build on each other
+	questions := []string{
+		"What is a binary search tree?",
+		"Can you show me a Go implementation of inserting a node?",
+		"What would be the time complexity of that insertion?",
+		"How would I implement a search function for the same tree?",
 	}
 
-	defer func() {
-		fmt.Println("\n🧹 Ending conversation...")
-		if err := client.Disconnect(); err != nil {
-			log.Printf("Warning: Failed to disconnect cleanly: %v", err)
-		}
-		fmt.Println("👋 Goodbye!")
-	}()
+	// WithClient maintains conversation context automatically
+	err := claudecode.WithClient(ctx, func(client claudecode.Client) error {
+		fmt.Println("\nConnected! Starting conversation...")
 
-	fmt.Println("✅ Connected! Starting multi-turn conversation...")
+		for i, question := range questions {
+			fmt.Printf("\n--- Turn %d ---\n", i+1)
+			fmt.Printf("Q: %s\n\n", question)
 
-	conversation := []struct {
-		turn     int
-		question string
-	}{
-		{1, "What is a binary search tree?"},
-		{2, "Can you show me a Go implementation of inserting a node?"},
-		{3, "What would be the time complexity of that insertion?"},
-		{4, "How would I implement a search function for the same tree?"},
-	}
+			if err := client.Query(ctx, question); err != nil {
+				return fmt.Errorf("turn %d failed: %w", i+1, err)
+			}
 
-	for _, turn := range conversation {
-		fmt.Printf("\n%s\n", strings.Repeat("=", 60))
-		fmt.Printf("🗣️  Turn %d\n", turn.turn)
-		fmt.Printf("❓ Question: %s\n", turn.question)
-		fmt.Println(strings.Repeat("-", 60))
-
-		if err := client.Query(ctx, turn.question); err != nil {
-			log.Fatalf("Failed to send question for turn %d: %v", turn.turn, err)
-		}
-
-		fmt.Printf("🤖 Claude's Response:\n\n")
-		responseReceived := false
-
-		msgChan := client.ReceiveMessages(ctx)
-		for {
-			select {
-			case message := <-msgChan:
-				if message == nil {
-					goto turnComplete
-				}
-
-				switch msg := message.(type) {
-				case *claudecode.AssistantMessage:
-					responseReceived = true
-					for _, block := range msg.Content {
-						switch b := block.(type) {
-						case *claudecode.TextBlock:
-							fmt.Print(b.Text)
-						case *claudecode.ThinkingBlock:
-							fmt.Printf("\n💭 [Claude is thinking: %s]\n", b.Thinking)
-						}
-					}
-				case *claudecode.ResultMessage:
-					if msg.IsError {
-						fmt.Printf("\n❌ Issue: %s\n", msg.Result)
-					}
-					goto turnComplete
-				}
-			case <-time.After(30 * time.Second):
-				fmt.Printf("\n⏰ Turn %d timed out\n", turn.turn)
-				goto turnComplete
+			// Stream the response
+			if err := streamFullResponse(ctx, client); err != nil {
+				return fmt.Errorf("turn %d streaming failed: %w", i+1, err)
 			}
 		}
 
-	turnComplete:
+		fmt.Println("\n\nConversation completed!")
+		fmt.Println("Notice: Each question built on previous responses automatically")
+		return nil
+	})
 
-		if !responseReceived {
-			fmt.Printf("⚠️  No response received for turn %d\n", turn.turn)
-		}
+	if err != nil {
+		log.Fatalf("Conversation failed: %v", err)
+	}
+}
 
-		if turn.turn < len(conversation) {
-			fmt.Printf("\n\n⏳ Preparing next question...\n")
-			time.Sleep(1 * time.Second)
+// streamFullResponse streams a complete response from the client
+func streamFullResponse(ctx context.Context, client claudecode.Client) error {
+	msgChan := client.ReceiveMessages(ctx)
+	for {
+		select {
+		case message := <-msgChan:
+			if message == nil {
+				return nil
+			}
+
+			switch msg := message.(type) {
+			case *claudecode.AssistantMessage:
+				for _, block := range msg.Content {
+					if textBlock, ok := block.(*claudecode.TextBlock); ok {
+						fmt.Print(textBlock.Text)
+					}
+				}
+			case *claudecode.ResultMessage:
+				if msg.IsError {
+					return fmt.Errorf("error: %s", msg.Result)
+				}
+				return nil
+			}
+		case <-ctx.Done():
+			return ctx.Err()
 		}
 	}
-
-	fmt.Printf("\n%s\n", strings.Repeat("=", 60))
-	fmt.Println("🎉 Multi-turn conversation completed!")
-	fmt.Println("\n✨ Context was preserved across all questions")
-	fmt.Println("💡 Each follow-up built on previous responses automatically")
 }

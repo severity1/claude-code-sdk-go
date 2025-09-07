@@ -1,132 +1,65 @@
-// Package main demonstrates the differences between Query API and Client API.
+// Package main demonstrates the differences between Query API and Client API patterns.
 package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
-	"strings"
-	"time"
 
 	"github.com/severity1/claude-code-sdk-go"
 )
 
 func main() {
-	fmt.Println("Claude Code SDK for Go - Query vs Client API Comparison")
-	fmt.Println("=======================================================")
+	fmt.Println("Claude Code SDK - Query vs Client API Comparison")
+	fmt.Println("Demonstrating when to use each API pattern")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
-	defer cancel()
+	ctx := context.Background()
+	question := "What are the key differences between channels and mutexes in Go?"
 
-	question := "What are the key differences between channels and mutexes in Go concurrency?"
+	fmt.Printf("\nComparing both APIs with question: %s\n", question)
 
-	fmt.Println("📊 Comparing Query API vs Client API for the same task:")
-	fmt.Printf("❓ Question: %s\n\n", question)
+	// Demonstrate Query API
+	fmt.Println("\n--- Query API Example ---")
+	fmt.Println("Best for: One-shot operations, automation, CI/CD")
 
-	fmt.Println(strings.Repeat("=", 60))
-	fmt.Println("🎯 QUERY API - One-shot approach")
-	fmt.Println(strings.Repeat("=", 60))
-
-	startTime := time.Now()
-	if err := demonstrateQueryAPI(ctx, question); err != nil {
-		log.Printf("Query API demo failed: %v", err)
-	}
-	queryDuration := time.Since(startTime)
-
-	fmt.Printf("\n⏱️  Query API completed in: %v\n", queryDuration)
-
-	fmt.Println("\n⏳ Switching to Client API...")
-	time.Sleep(2 * time.Second)
-
-	fmt.Println("\n" + strings.Repeat("=", 60))
-	fmt.Println("🔄 CLIENT API - Streaming approach")
-	fmt.Println(strings.Repeat("=", 60))
-
-	startTime = time.Now()
-	if err := demonstrateClientAPI(ctx, question); err != nil {
-		log.Printf("Client API demo failed: %v", err)
-	}
-	clientDuration := time.Since(startTime)
-
-	fmt.Printf("\n⏱️  Client API completed in: %v\n", clientDuration)
-
-	fmt.Println("\n" + strings.Repeat("=", 60))
-	fmt.Println("📈 COMPREHENSIVE COMPARISON")
-	fmt.Println(strings.Repeat("=", 60))
-
-	fmt.Printf("\n⏱️  Performance Comparison:\n")
-	fmt.Printf("   Query API: %v\n", queryDuration)
-	fmt.Printf("   Client API: %v\n", clientDuration)
-	if queryDuration < clientDuration {
-		fmt.Printf("   → Query API was faster by %v\n", clientDuration-queryDuration)
-	} else {
-		fmt.Printf("   → Client API was faster by %v\n", queryDuration-clientDuration)
+	if err := queryExample(ctx, question); err != nil {
+		log.Printf("Query API failed: %v", err)
 	}
 
-	fmt.Println("\n🎯 When to use Query API:")
-	fmt.Println("   ✅ One-shot questions or commands")
-	fmt.Println("   ✅ Batch processing")
-	fmt.Println("   ✅ CI/CD scripts")
-	fmt.Println("   ✅ Simple automation tasks")
-	fmt.Println("   ✅ Lower resource overhead")
-	fmt.Println("   ✅ Fire-and-forget operations")
+	// Demonstrate Client API
+	fmt.Println("\n--- Client API Example ---")
+	fmt.Println("Best for: Multi-turn conversations, interactive sessions")
 
-	fmt.Println("\n🔄 When to use Client API:")
-	fmt.Println("   ✅ Multi-turn conversations")
-	fmt.Println("   ✅ Interactive applications")
-	fmt.Println("   ✅ Context-dependent workflows")
-	fmt.Println("   ✅ Real-time streaming needs")
-	fmt.Println("   ✅ Complex state management")
-	fmt.Println("   ✅ Long-running sessions")
-
-	fmt.Println("\n💡 Resource Considerations:")
-	fmt.Println("   Query API: Creates new process per query")
-	fmt.Println("   Client API: Maintains persistent connection")
-	fmt.Println("   → Use Query for occasional calls")
-	fmt.Println("   → Use Client for frequent interactions")
-
-	fmt.Println("\n🏗️  Architecture Patterns:")
-	fmt.Println("   Query API: Stateless, functional approach")
-	fmt.Println("   Client API: Stateful, object-oriented approach")
-
-	fmt.Println("\n" + strings.Repeat("=", 60))
-	fmt.Println("🌟 CLIENT API ADVANTAGE - Multi-turn scenario")
-	fmt.Println(strings.Repeat("=", 60))
-
-	if err := demonstrateClientAdvantage(ctx); err != nil {
-		log.Printf("Client advantage demo failed: %v", err)
+	if err := clientExample(ctx, question); err != nil {
+		log.Printf("Client API failed: %v", err)
 	}
 
-	fmt.Println("\n🎉 Comparison complete!")
-	fmt.Println("\n🧠 Key Takeaways:")
-	fmt.Println("   • Both APIs are production-ready with 100% Python SDK compatibility")
-	fmt.Println("   • Choose based on your use case, not just preference")
-	fmt.Println("   • Query API: Simple, stateless, efficient for one-shots")
-	fmt.Println("   • Client API: Powerful, stateful, ideal for conversations")
-	fmt.Println("   • Consider resource usage patterns in your application")
+	// Show Client API advantage
+	fmt.Println("\n--- Client API Advantage: Context Preservation ---")
+	if err := conversationExample(ctx); err != nil {
+		log.Printf("Conversation failed: %v", err)
+	}
+
+	fmt.Println("\n🎯 API Selection Guide:")
+	fmt.Println("Query API: Stateless, simple, automated scripts")
+	fmt.Println("Client API: Stateful, conversations, interactive apps")
 }
 
-func demonstrateQueryAPI(ctx context.Context, question string) error {
-	fmt.Println("🚀 Starting Query API...")
-	fmt.Println("   • Creates new Claude process")
-	fmt.Println("   • Sends question")
-	fmt.Println("   • Receives complete response")
-	fmt.Println("   • Automatically cleans up")
-	fmt.Println("\n📤 Sending query...")
+func queryExample(ctx context.Context, question string) error {
+	fmt.Println("Creating one-shot query...")
 
 	iterator, err := claudecode.Query(ctx, question)
 	if err != nil {
-		return fmt.Errorf("failed to create query: %w", err)
+		return fmt.Errorf("query failed: %w", err)
 	}
 	defer iterator.Close()
 
-	fmt.Println("📥 Response:")
-	fmt.Println(strings.Repeat("-", 40))
-
+	fmt.Println("Response:")
 	for {
 		message, err := iterator.Next(ctx)
 		if err != nil {
-			if err.Error() == "no more messages" {
+			if errors.Is(err, claudecode.ErrNoMoreMessages) {
 				break
 			}
 			return fmt.Errorf("failed to get next message: %w", err)
@@ -145,139 +78,126 @@ func demonstrateQueryAPI(ctx context.Context, question string) error {
 		}
 	}
 
-	fmt.Println(strings.Repeat("-", 40))
-	fmt.Println("✅ Query API completed - process automatically cleaned up")
+	fmt.Println("✅ Query completed - automatic cleanup")
 	return nil
 }
 
-func demonstrateClientAPI(ctx context.Context, question string) error {
-	fmt.Println("🚀 Starting Client API...")
-	fmt.Println("   • Creates persistent connection")
-	fmt.Println("   • Maintains session state")
-	fmt.Println("   • Streams responses in real-time")
-	fmt.Println("   • Keeps connection for future queries")
+func clientExample(ctx context.Context, question string) error {
+	fmt.Println("Using WithClient for automatic resource management...")
 
-	client := claudecode.NewClient()
+	return claudecode.WithClient(ctx, func(client claudecode.Client) error {
+		fmt.Println("Connected! Sending query...")
 
-	fmt.Println("\n🔗 Connecting...")
-	if err := client.Connect(ctx); err != nil {
-		return fmt.Errorf("failed to connect: %w", err)
-	}
-
-	defer func() {
-		fmt.Println("🧹 Manually cleaning up connection...")
-		if err := client.Disconnect(); err != nil {
-			log.Printf("Warning: %v", err)
+		if err := client.Query(ctx, question); err != nil {
+			return fmt.Errorf("query failed: %w", err)
 		}
-	}()
 
-	fmt.Println("📤 Sending query...")
-	if err := client.Query(ctx, question); err != nil {
-		return fmt.Errorf("failed to send query: %w", err)
+		fmt.Println("Response:")
+		msgChan := client.ReceiveMessages(ctx)
+		for {
+			select {
+			case message := <-msgChan:
+				if message == nil {
+					return nil
+				}
+
+				switch msg := message.(type) {
+				case *claudecode.AssistantMessage:
+					for _, block := range msg.Content {
+						if textBlock, ok := block.(*claudecode.TextBlock); ok {
+							fmt.Print(textBlock.Text)
+						}
+					}
+				case *claudecode.ResultMessage:
+					if msg.IsError {
+						return fmt.Errorf("error: %s", msg.Result)
+					}
+					return nil
+				}
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		}
+	})
+}
+
+func conversationExample(ctx context.Context) error {
+	fmt.Println("Multi-turn conversation showing context preservation...")
+
+	questions := []string{
+		"What is dependency injection?",
+		"Show me a Go example of the pattern you just described",
+		"What are the testing benefits of that approach?",
 	}
 
-	fmt.Println("📥 Streaming response:")
-	fmt.Println(strings.Repeat("-", 40))
+	return claudecode.WithClient(ctx, func(client claudecode.Client) error {
+		for i, question := range questions {
+			fmt.Printf("\nTurn %d: %s\n", i+1, question)
 
+			if err := client.Query(ctx, question); err != nil {
+				return fmt.Errorf("turn %d failed: %w", i+1, err)
+			}
+
+			// Show first few lines of response
+			if err := showFirstLines(ctx, client, 3); err != nil {
+				return fmt.Errorf("turn %d display failed: %w", i+1, err)
+			}
+
+			// Drain remaining messages
+			drainMessages(client.ReceiveMessages(ctx))
+		}
+
+		fmt.Println("\n✅ Context preserved across all turns!")
+		fmt.Println("Each question built on the previous response automatically.")
+		return nil
+	})
+}
+
+// showFirstLines displays the first few lines of response from the client
+func showFirstLines(ctx context.Context, client claudecode.Client, maxLines int) error {
 	msgChan := client.ReceiveMessages(ctx)
-	for {
+	lines := 0
+
+	for lines < maxLines {
 		select {
 		case message := <-msgChan:
 			if message == nil {
-				goto clientDone
+				return nil
 			}
 
 			if assistantMsg, ok := message.(*claudecode.AssistantMessage); ok {
 				for _, block := range assistantMsg.Content {
 					if textBlock, ok := block.(*claudecode.TextBlock); ok {
-						fmt.Print(textBlock.Text)
+						text := textBlock.Text
+						if len(text) > 100 {
+							fmt.Printf("  %s...\n", text[:100])
+						} else {
+							fmt.Printf("  %s\n", text)
+						}
+						lines++
+						if lines >= maxLines {
+							return nil
+						}
 					}
 				}
 			}
 		case <-ctx.Done():
-			goto clientDone
+			return ctx.Err()
 		}
 	}
-
-clientDone:
-
-	fmt.Println(strings.Repeat("-", 40))
-	fmt.Println("✅ Client API response completed - connection still available for more queries")
 	return nil
 }
 
-func demonstrateClientAdvantage(ctx context.Context) error {
-	fmt.Println("🎭 Demonstrating why Client API is superior for conversations...")
-	fmt.Println("Scenario: Building on previous answers (context preservation)")
-
-	client := claudecode.NewClient()
-	if err := client.Connect(ctx); err != nil {
-		return err
-	}
-	defer client.Disconnect()
-
-	turns := []string{
-		"What is dependency injection in software development?",
-		"Show me how to implement it in Go using interfaces",
-		"What are the testing advantages of the approach you just showed?",
-	}
-
-	for i, question := range turns {
-		fmt.Printf("\n🗣️  Turn %d: %s\n", i+1, question)
-		fmt.Println(strings.Repeat("-", 30))
-
-		if err := client.Query(ctx, question); err != nil {
-			return err
-		}
-
-		responseLines := 0
-		msgChan := client.ReceiveMessages(ctx)
-		for responseLines < 5 {
-			select {
-			case message := <-msgChan:
-				if message == nil {
-					goto turnDone
-				}
-				if assistantMsg, ok := message.(*claudecode.AssistantMessage); ok {
-					for _, block := range assistantMsg.Content {
-						if textBlock, ok := block.(*claudecode.TextBlock); ok {
-							lines := strings.Split(textBlock.Text, "\n")
-							for _, line := range lines {
-								if responseLines < 5 && strings.TrimSpace(line) != "" {
-									fmt.Printf("   %s\n", line)
-									responseLines++
-								}
-							}
-						}
-					}
-				}
-			case <-time.After(10 * time.Second):
-				goto turnDone
+// drainMessages consumes remaining messages from a channel
+func drainMessages(msgChan <-chan claudecode.Message) {
+	for {
+		select {
+		case message := <-msgChan:
+			if message == nil {
+				return
 			}
+		default:
+			return
 		}
-		if responseLines >= 5 {
-			fmt.Println("   [... response continues with full context from previous turns ...]")
-		}
-
-	turnDone:
-		for {
-			select {
-			case message := <-msgChan:
-				if message == nil {
-					goto drained
-				}
-			case <-time.After(1 * time.Second):
-				goto drained
-			}
-		}
-	drained:
 	}
-
-	fmt.Println("\n💡 Notice: Each follow-up question built on the previous context!")
-	fmt.Println("   • Turn 2 referenced 'it' (dependency injection)")
-	fmt.Println("   • Turn 3 referenced 'the approach you just showed'")
-	fmt.Println("   • Client API maintained full conversation history")
-	fmt.Println("   • Query API would require repeating full context each time")
-
-	return nil
 }

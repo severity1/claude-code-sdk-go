@@ -1,4 +1,4 @@
-module 06_query_with_mcp
+module 10_context_manager
 
 go 1.21
 
