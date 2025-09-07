@@ -33,7 +33,7 @@ jobs:
         cache: true
 
     - name: Initialize CodeQL
-      uses: github/codeql-action/init@v2
+      uses: github/codeql-action/init@v3
       with:
         languages: ${{ matrix.language }}
         queries: +security-and-quality
@@ -42,7 +42,7 @@ jobs:
       run: go build ./...
 
     - name: Perform CodeQL Analysis
-      uses: github/codeql-action/analyze@v2
+      uses: github/codeql-action/analyze@v3
       with:
         category: "/language:${{matrix.language}}"
 
@@ -106,6 +106,6 @@ jobs:
         publish_results: true
 
     - name: Upload to code-scanning
-      uses: github/codeql-action/upload-sarif@v2
+      uses: github/codeql-action/upload-sarif@v3
       with:
         sarif_file: results.sarif

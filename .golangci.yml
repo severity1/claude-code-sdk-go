@@ -5,8 +5,7 @@ run:
   skip-dirs:
     - testdata
     - vendor
-  skip-files:
-    - ".*_test.go"
+  # Don't skip test files globally, use exclude-rules instead for specific cases
   modules-download-mode: readonly
 
 output:
@@ -99,7 +98,6 @@ linters:
   disable-all: true
   enable:
     - bodyclose
-    - deadcode
     - depguard
     - dogsled
     - dupl
@@ -111,6 +109,7 @@ linters:
     - gocritic
     - gocyclo
     - gofmt
+    - gofumpt
     - goimports
     - gomnd
     - goprintffuncname
@@ -123,15 +122,14 @@ linters:
     - nakedret
     - noctx
     - nolintlint
+    - revive
     - rowserrcheck
     - staticcheck
-    - structcheck
     - stylecheck
     - typecheck
     - unconvert
     - unparam
     - unused
-    - varcheck
     - whitespace
 
 issues:
