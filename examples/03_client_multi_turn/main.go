@@ -24,7 +24,7 @@ func main() {
 	if err := client.Connect(ctx); err != nil {
 		log.Fatalf("Failed to connect client: %v", err)
 	}
-	
+
 	defer func() {
 		fmt.Println("\n🧹 Ending conversation...")
 		if err := client.Disconnect(); err != nil {
@@ -57,7 +57,7 @@ func main() {
 
 		fmt.Printf("🤖 Claude's Response:\n\n")
 		responseReceived := false
-		
+
 		msgChan := client.ReceiveMessages(ctx)
 		for {
 			select {

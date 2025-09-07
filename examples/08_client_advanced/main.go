@@ -17,7 +17,7 @@ func main() {
 	fmt.Println("=========================================================")
 
 	fmt.Println("🔧 Creating client with advanced options...")
-	
+
 	client := claudecode.NewClient(
 		claudecode.WithSystemPrompt("You are a senior Go developer and technical mentor. Provide detailed, practical advice with code examples when appropriate. Keep responses focused and actionable."),
 	)
@@ -26,26 +26,26 @@ func main() {
 	defer cancel()
 
 	fmt.Println("📡 Connecting with error handling and retries...")
-	
+
 	maxRetries := 3
 	var connectionErr error
-	
+
 	for attempt := 1; attempt <= maxRetries; attempt++ {
 		fmt.Printf("   Attempt %d/%d...\n", attempt, maxRetries)
-		
+
 		connectionErr = client.Connect(ctx)
 		if connectionErr == nil {
 			fmt.Println("✅ Connected successfully!")
 			break
 		}
-		
+
 		var cliError *claudecode.CLINotFoundError
 		if errors.As(connectionErr, &cliError) {
 			fmt.Printf("❌ Claude CLI not found: %v\n", cliError)
 			fmt.Println("💡 Please install: npm install -g @anthropic-ai/claude-code")
 			return
 		}
-		
+
 		var connError *claudecode.ConnectionError
 		if errors.As(connectionErr, &connError) {
 			fmt.Printf("⚠️  Connection failed (attempt %d): %v\n", attempt, connError)
@@ -55,11 +55,11 @@ func main() {
 				continue
 			}
 		}
-		
+
 		fmt.Printf("❌ Unknown connection error: %v\n", connectionErr)
 		return
 	}
-	
+
 	if connectionErr != nil {
 		log.Fatalf("Failed to connect after %d attempts: %v", maxRetries, connectionErr)
 	}
@@ -134,7 +134,7 @@ func runAdvancedQuery(ctx context.Context, client claudecode.Client, title, ques
 
 	fmt.Println("🤖 Response:")
 	responseReceived := false
-	
+
 	msgChan := client.ReceiveMessages(ctx)
 	for {
 		select {

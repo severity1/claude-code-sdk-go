@@ -94,7 +94,7 @@ Try to create a backup of the important files.`
 
 	fmt.Println("\n" + strings.Repeat("=", 60))
 	fmt.Println("🎉 Query with Tools Examples Completed!")
-	
+
 	fmt.Println("\n📂 Files created/modified during this demo:")
 	listFiles(workDir)
 }

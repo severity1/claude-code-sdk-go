@@ -39,7 +39,7 @@ func main() {
 
 	iterator, err := claudecode.Query(ctx, query,
 		claudecode.WithAllowedTools(
-			"mcp__aws-api-mcp__call_aws", 
+			"mcp__aws-api-mcp__call_aws",
 			"mcp__aws-api-mcp__suggest_aws_commands"),
 		claudecode.WithSystemPrompt("You are an AWS expert. Help list and analyze S3 buckets using AWS MCP tools."),
 	)

@@ -18,7 +18,7 @@ func main() {
 	defer cancel()
 
 	fmt.Println("🤖 Asking Claude: What is 2+2?")
-	
+
 	iterator, err := claudecode.Query(ctx, "What is 2+2?")
 	if err != nil {
 		log.Fatalf("Failed to create query: %v", err)
@@ -26,7 +26,7 @@ func main() {
 	defer iterator.Close()
 
 	fmt.Println("\n📥 Response:")
-	
+
 	for {
 		message, err := iterator.Next(ctx)
 		if err != nil {

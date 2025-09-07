@@ -25,7 +25,7 @@ func main() {
 	if err := client.Connect(ctx); err != nil {
 		log.Fatalf("Failed to connect client: %v", err)
 	}
-	
+
 	defer func() {
 		fmt.Println("\n🧹 Cleaning up connection...")
 		if err := client.Disconnect(); err != nil {
@@ -38,7 +38,7 @@ func main() {
 
 	question := "Explain what Go goroutines are and show a simple example"
 	fmt.Printf("\n🤖 Asking Claude: %s\n", question)
-	
+
 	if err := client.Query(ctx, question); err != nil {
 		log.Fatalf("Failed to send query: %v", err)
 	}

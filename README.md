@@ -43,32 +43,31 @@ import (
 func main() {
     ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
     defer cancel()
-    
-    // Query Claude Code (equivalent to Python's: async for message in query(...))
-    iterator, err := claudecode.Query(ctx, "What is 2 + 2?")
+
+    iterator, err := claudecode.Query(ctx, "What is 2+2?")
     if err != nil {
-        log.Fatal(err)
+        log.Fatalf("Failed to create query: %v", err)
     }
     defer iterator.Close()
-    
+
     for {
         message, err := iterator.Next(ctx)
         if err != nil {
             if err.Error() == "no more messages" {
-                break // Normal completion
+                break
             }
-            log.Fatal(err)
+            log.Fatalf("Failed to get next message: %v", err)
         }
-        
+
         if message == nil {
             break
         }
-        
-        // Handle Claude's response
-        if assistantMsg, ok := message.(*claudecode.AssistantMessage); ok {
-            for _, block := range assistantMsg.Content {
+
+        switch msg := message.(type) {
+        case *claudecode.AssistantMessage:
+            for _, block := range msg.Content {
                 if textBlock, ok := block.(*claudecode.TextBlock); ok {
-                    fmt.Printf("Claude: %s\n", textBlock.Text)
+                    fmt.Printf("Answer: %s\n", textBlock.Text)
                 }
             }
         }
@@ -94,45 +93,37 @@ import (
 func main() {
     ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
     defer cancel()
-    
-    // Create streaming client
+
     client := claudecode.NewClient()
     if err := client.Connect(ctx); err != nil {
-        log.Fatal(err)
+        log.Fatalf("Failed to connect client: %v", err)
     }
     defer client.Disconnect()
-    
-    // Send message and receive streaming responses
-    if err := client.Query(ctx, "Hello! Can you help me with Go programming?"); err != nil {
-        log.Fatal(err)
+
+    if err := client.Query(ctx, "Explain what Go goroutines are"); err != nil {
+        log.Fatalf("Failed to send query: %v", err)
     }
-    
-    // Process streaming messages
+
     msgChan := client.ReceiveMessages(ctx)
     for {
         select {
         case message := <-msgChan:
             if message == nil {
-                goto done // Stream ended
+                return // Stream ended
             }
             
-            if assistantMsg, ok := message.(*claudecode.AssistantMessage); ok {
-                for _, block := range assistantMsg.Content {
+            switch msg := message.(type) {
+            case *claudecode.AssistantMessage:
+                for _, block := range msg.Content {
                     if textBlock, ok := block.(*claudecode.TextBlock); ok {
-                        fmt.Print(textBlock.Text) // Stream output in real-time
+                        fmt.Print(textBlock.Text)
                     }
                 }
             }
         case <-ctx.Done():
-            goto done // Context cancelled
+            return
         }
     }
-
-done:
-    
-    // Follow-up question (multi-turn conversation)
-    client.Query(ctx, "Can you show me an example of using goroutines?")
-    // ... process next response
 }
 ```
 
@@ -150,16 +141,9 @@ claudecode.Query(ctx, "Read all Go files and create API documentation",
 **MCP Tools** (external service integrations):
 ```go
 // AWS infrastructure automation
-claudecode.Query(ctx, "Audit my AWS costs and create optimization plan", 
-    claudecode.WithAllowedTools("mcp__aws-api-mcp__*", "Write"))
-
-// Database analysis with security
-claudecode.Query(ctx, "Analyze user patterns from database",
-    claudecode.WithAllowedTools("mcp__postgres__select*", "Write"), // Read-only DB access
-    claudecode.WithDisallowedTools("mcp__postgres__delete*"))       // Block destructive operations
+claudecode.Query(ctx, "List my S3 buckets and analyze their security settings", 
+    claudecode.WithAllowedTools("mcp__aws-api-mcp__call_aws", "mcp__aws-api-mcp__suggest_aws_commands", "Write"))
 ```
-
-**Popular integrations:** AWS, GitHub, PostgreSQL, Puppeteer, Brave Search, and [hundreds more](https://mcpcat.io/guides/best-mcp-servers-for-claude-code/)
 
 ## When to Use Which API
 

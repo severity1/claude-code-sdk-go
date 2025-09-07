@@ -1,0 +1,15 @@
+{
+  "name": "demo-web-app",
+  "version": "1.0.0",
+  "description": "A sample web application for demonstrating Claude Code SDK",
+  "main": "src/main.go",
+  "scripts": {
+    "build": "go build -o bin/app src/main.go"
+  },
+  "keywords": ["demo", "web", "go"],
+  "author": "Claude Code SDK Demo",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.0"
+  }
+}

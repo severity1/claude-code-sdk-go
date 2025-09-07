@@ -31,7 +31,7 @@ func main() {
 	fmt.Println("\n🔗 Creating client with AWS MCP tools for S3 security analysis...")
 	client := claudecode.NewClient(
 		claudecode.WithAllowedTools(
-			"mcp__aws-api-mcp__call_aws", 
+			"mcp__aws-api-mcp__call_aws",
 			"mcp__aws-api-mcp__suggest_aws_commands",
 			"Read", "Write", "Edit", "TodoWrite"),
 		claudecode.WithSystemPrompt("You are an expert AWS security specialist focusing on S3 storage security. You can discover S3 buckets, analyze their public access configurations, and identify security recommendations."),
@@ -79,7 +79,7 @@ func main() {
 
 		if err := executeAWSStep(ctx, client, step.step, step.query); err != nil {
 			log.Printf("Step %d failed: %v", step.step, err)
-			
+
 			fmt.Printf("\n⚠️  Step %d encountered an error. Continuing to next step...\n", step.step)
 			continue
 		}
@@ -92,7 +92,7 @@ func main() {
 
 	fmt.Printf("\n%s\n", strings.Repeat("=", 80))
 	fmt.Println("🎉 S3 Security Analysis Session Completed!")
-	
+
 	fmt.Println("\n📊 Workflow Summary:")
 	for _, step := range workflow {
 		fmt.Printf("   ✅ Step %d: %s\n", step.step, step.title)

@@ -26,7 +26,7 @@ func main() {
 	fmt.Println(strings.Repeat("=", 60))
 	fmt.Println("🎯 QUERY API - One-shot approach")
 	fmt.Println(strings.Repeat("=", 60))
-	
+
 	startTime := time.Now()
 	if err := demonstrateQueryAPI(ctx, question); err != nil {
 		log.Printf("Query API demo failed: %v", err)
@@ -34,14 +34,14 @@ func main() {
 	queryDuration := time.Since(startTime)
 
 	fmt.Printf("\n⏱️  Query API completed in: %v\n", queryDuration)
-	
+
 	fmt.Println("\n⏳ Switching to Client API...")
 	time.Sleep(2 * time.Second)
 
 	fmt.Println("\n" + strings.Repeat("=", 60))
 	fmt.Println("🔄 CLIENT API - Streaming approach")
 	fmt.Println(strings.Repeat("=", 60))
-	
+
 	startTime = time.Now()
 	if err := demonstrateClientAPI(ctx, question); err != nil {
 		log.Printf("Client API demo failed: %v", err)
@@ -92,7 +92,7 @@ func main() {
 	fmt.Println("\n" + strings.Repeat("=", 60))
 	fmt.Println("🌟 CLIENT API ADVANTAGE - Multi-turn scenario")
 	fmt.Println(strings.Repeat("=", 60))
-	
+
 	if err := demonstrateClientAdvantage(ctx); err != nil {
 		log.Printf("Client advantage demo failed: %v", err)
 	}
@@ -158,12 +158,12 @@ func demonstrateClientAPI(ctx context.Context, question string) error {
 	fmt.Println("   • Keeps connection for future queries")
 
 	client := claudecode.NewClient()
-	
+
 	fmt.Println("\n🔗 Connecting...")
 	if err := client.Connect(ctx); err != nil {
 		return fmt.Errorf("failed to connect: %w", err)
 	}
-	
+
 	defer func() {
 		fmt.Println("🧹 Manually cleaning up connection...")
 		if err := client.Disconnect(); err != nil {
@@ -225,7 +225,7 @@ func demonstrateClientAdvantage(ctx context.Context) error {
 	for i, question := range turns {
 		fmt.Printf("\n🗣️  Turn %d: %s\n", i+1, question)
 		fmt.Println(strings.Repeat("-", 30))
-		
+
 		if err := client.Query(ctx, question); err != nil {
 			return err
 		}
@@ -258,7 +258,7 @@ func demonstrateClientAdvantage(ctx context.Context) error {
 		if responseLines >= 5 {
 			fmt.Println("   [... response continues with full context from previous turns ...]")
 		}
-		
+
 	turnDone:
 		for {
 			select {
