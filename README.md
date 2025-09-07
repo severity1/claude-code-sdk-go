@@ -1,5 +1,9 @@
 # Claude Code SDK for Go
 
+<div align="center">
+  <img src="gopher.png" alt="Go Gopher" width="200"/>
+</div>
+
 Production-ready Go SDK for Claude Code CLI integration. Build applications that leverage Claude's code understanding, file operations, and external tool integrations through a clean, idiomatic Go API.
 
 **🚀 Two powerful APIs for different use cases:**
@@ -7,7 +11,7 @@ Production-ready Go SDK for Claude Code CLI integration. Build applications that
 - **Client API**: Interactive conversations, multi-turn workflows, streaming responses
 - **WithClient**: Go-idiomatic context manager for automatic resource management
 
-![Claude Code SDK in Action](examples/03_client_multi_turn/cc-sdk-go-in-action-v2.gif)
+![Claude Code SDK in Action](cc-sdk-go-in-action-v2.gif)
 
 ## Installation
 
