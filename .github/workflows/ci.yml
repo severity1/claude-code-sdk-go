@@ -160,7 +160,10 @@ jobs:
 
     - name: Test library import
       run: |
-        cat > test_import.go << 'EOF'
+        mkdir -p /tmp/test-claude-sdk
+        cd /tmp/test-claude-sdk
+        go mod init test-import
+        cat > main.go << 'EOF'
         package main
         
         import (
@@ -183,8 +186,9 @@ jobs:
             }
         }
         EOF
-        go run test_import.go
-        rm test_import.go
+        go run main.go
+        cd -
+        rm -rf /tmp/test-claude-sdk
 
     - name: Check public API surface
       run: |

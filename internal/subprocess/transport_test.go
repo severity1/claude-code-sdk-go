@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -359,21 +360,54 @@ func newTransportMockCLIWithOptions(options ...TransportMockOption) string {
 	}
 
 	var script string
-	switch {
-	case opts.shouldFail:
-		script = `#!/bin/bash
+	var extension string
+	
+	if runtime.GOOS == "windows" {
+		extension = ".bat"
+		switch {
+		case opts.shouldFail:
+			script = `@echo off
+echo Mock CLI failing >&2
+exit /b 1
+`
+		case opts.longRunning:
+			script = `@echo off
+echo {"type":"assistant","content":[{"type":"text","text":"Long running mock"}],"model":"claude-3"}
+timeout /t 30 /nobreak > NUL
+`
+		case opts.checkEnvironment:
+			script = `@echo off
+if "%CLAUDE_CODE_ENTRYPOINT%"=="sdk-go" (
+    echo {"type":"assistant","content":[{"type":"text","text":"Environment OK"}],"model":"claude-3"}
+) else (
+    echo Missing environment variable >&2
+    exit /b 1
+)
+timeout /t 1 /nobreak > NUL
+`
+		default:
+			script = `@echo off
+echo {"type":"assistant","content":[{"type":"text","text":"Mock response"}],"model":"claude-3"}
+timeout /t 1 /nobreak > NUL
+`
+		}
+	} else {
+		extension = ""
+		switch {
+		case opts.shouldFail:
+			script = `#!/bin/bash
 echo "Mock CLI failing" >&2
 exit 1
 `
-	case opts.longRunning:
-		script = `#!/bin/bash
+		case opts.longRunning:
+			script = `#!/bin/bash
 # Ignore SIGTERM initially to test 5-second timeout
 trap 'echo "Received SIGTERM, ignoring for 6 seconds"; sleep 6; exit 1' TERM
 echo '{"type":"assistant","content":[{"type":"text","text":"Long running mock"}],"model":"claude-3"}'
 sleep 30  # Run long enough to test termination
 `
-	case opts.checkEnvironment:
-		script = `#!/bin/bash
+		case opts.checkEnvironment:
+			script = `#!/bin/bash
 if [ "$CLAUDE_CODE_ENTRYPOINT" = "sdk-go" ]; then
     echo '{"type":"assistant","content":[{"type":"text","text":"Environment OK"}],"model":"claude-3"}'
 else
@@ -382,19 +416,20 @@ else
 fi
 sleep 0.5
 `
-	default:
-		script = `#!/bin/bash
+		default:
+			script = `#!/bin/bash
 echo '{"type":"assistant","content":[{"type":"text","text":"Mock response"}],"model":"claude-3"}'
 sleep 0.5
 `
+		}
 	}
 
-	return createTransportTempScript(script)
+	return createTransportTempScript(script, extension)
 }
 
-func createTransportTempScript(script string) string {
+func createTransportTempScript(script string, extension string) string {
 	tempDir := os.TempDir()
-	scriptPath := filepath.Join(tempDir, fmt.Sprintf("mock-claude-%d", time.Now().UnixNano()))
+	scriptPath := filepath.Join(tempDir, fmt.Sprintf("mock-claude-%d%s", time.Now().UnixNano(), extension))
 
 	err := os.WriteFile(scriptPath, []byte(script), 0o755) // #nosec G306 - Test script needs to be executable
 	if err != nil {
