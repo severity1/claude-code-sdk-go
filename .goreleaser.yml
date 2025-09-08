@@ -8,7 +8,8 @@ before:
     - go generate ./...
 
 # This is a Go library/SDK - no binary builds needed
-# No builds section needed for library
+builds:
+  - skip: true
 
 snapshot:
   name_template: "{{ incpatch .Version }}-next"
