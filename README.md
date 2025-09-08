@@ -15,7 +15,7 @@
 
 </div>
 
-Unofficial Go SDK for Claude Code CLI integration. Build applications that leverage Claude's code understanding, file operations, and external tool integrations through a clean, idiomatic Go API.
+Unofficial Go SDK for Claude Code CLI integration. Build production-ready applications that leverage Claude's advanced code understanding, secure file operations, and external tool integrations through a clean, idiomatic Go API with comprehensive error handling and automatic resource management.
 
 **🚀 Two powerful APIs for different use cases:**
 - **Query API**: One-shot operations, automation, CI/CD integration  
