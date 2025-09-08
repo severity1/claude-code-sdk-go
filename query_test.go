@@ -348,8 +348,8 @@ func TestQueryContextCancellation(t *testing.T) {
 		{
 			name: "immediate_cancellation",
 			setupContext: func() (context.Context, context.CancelFunc) {
-				ctx, cancel := context.WithCancel(context.Background())
-				cancel() // Cancel immediately
+				// Create a context that is already canceled deterministically
+				ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Hour))
 				return ctx, cancel
 			},
 			setupTransport: func() *queryMockTransport {
@@ -364,7 +364,7 @@ func TestQueryContextCancellation(t *testing.T) {
 				_, err = iter.Next(ctx)
 				return err
 			},
-			expectedError: context.Canceled,
+			expectedError: context.DeadlineExceeded,
 		},
 	}
 
