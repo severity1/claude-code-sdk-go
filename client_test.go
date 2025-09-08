@@ -1020,6 +1020,14 @@ type clientMockTransport struct {
 func (c *clientMockTransport) Connect(ctx context.Context) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	
+	// Check context cancellation first
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+	
 	if c.connectError != nil {
 		return c.connectError
 	}
@@ -1036,6 +1044,14 @@ func (c *clientMockTransport) Connect(ctx context.Context) error {
 func (c *clientMockTransport) SendMessage(ctx context.Context, message StreamMessage) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	
+	// Check context cancellation first
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+	
 	if c.sendError != nil {
 		return c.sendError
 	}
@@ -1694,8 +1710,11 @@ func TestWithClientContextCancellation(t *testing.T) {
 		{
 			name: "timeout_context",
 			setupContext: func() (context.Context, context.CancelFunc) {
-				// Use a more reliable timeout that works across platforms
-				return context.WithTimeout(context.Background(), 1*time.Microsecond)
+				// Create a context that will timeout very quickly
+				ctx, cancel := context.WithTimeout(context.Background(), 1*time.Nanosecond)
+				// Give it a moment to timeout before using it
+				time.Sleep(10 * time.Microsecond)
+				return ctx, cancel
 			},
 			wantErr:  true,
 			errorMsg: "context deadline exceeded",
