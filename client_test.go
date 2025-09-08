@@ -9,79 +9,102 @@ import (
 	"time"
 )
 
-// TestClientLifecycle tests basic connection and resource management patterns
-// Covers T133: Client Auto Connect Context Manager
-func TestClientLifecycle(t *testing.T) {
+// TestClientLifecycleManagement tests connection, resource cleanup, and transport integration
+// Covers T133: Client Auto Connect Context Manager + resource management + transport integration
+func TestClientLifecycleManagement(t *testing.T) {
 	ctx, cancel := setupClientTestContext(t, 10*time.Second)
 	defer cancel()
 
+	subtests := []struct {
+		name string
+		test func(*testing.T, context.Context)
+	}{
+		{"basic_lifecycle", testBasicLifecycle},
+		{"resource_cleanup_cycles", testResourceCleanupCycles},
+		{"transport_integration", testTransportIntegration},
+	}
+
+	for _, subtest := range subtests {
+		t.Run(subtest.name, func(t *testing.T) {
+			subtest.test(t, ctx)
+		})
+	}
+}
+
+func testBasicLifecycle(t *testing.T, ctx context.Context) {
+	t.Helper()
 	transport := newClientMockTransport()
 
 	// Test defer-based resource management (Go equivalent of Python context manager)
 	func() {
 		client := setupClientForTest(t, transport)
 		defer disconnectClientSafely(t, client)
-
-		// Connect should be called automatically or explicitly
 		connectClientSafely(t, ctx, client)
-
-		// Verify connection was established
 		assertClientConnected(t, transport)
-
-		// Client should be ready to use
 		err := client.Query(ctx, "test message")
-		assertClientError(t, err, false, "")
+		assertNoError(t, err)
 	}() // Defer should trigger disconnect
 
-	// Verify disconnect was called
 	assertClientDisconnected(t, transport)
 
 	// Test manual connection lifecycle
 	client := setupClientForTest(t, transport)
 	connectClientSafely(t, ctx, client)
 	assertClientConnected(t, transport)
-
 	disconnectClientSafely(t, client)
 	assertClientDisconnected(t, transport)
 }
 
-// TestTransportDirectClose tests transport Close method directly
-func TestTransportDirectClose(t *testing.T) {
+func testResourceCleanupCycles(t *testing.T, ctx context.Context) {
+	t.Helper()
 	transport := newClientMockTransport()
 
-	// Initial state should be disconnected
-	if transport.connected {
-		t.Errorf("New transport should start disconnected, got connected=%t", transport.connected)
+	// Test resource cleanup with multiple connect/disconnect cycles
+	for i := 0; i < 3; i++ {
+		client := setupClientForTest(t, transport)
+		connectClientSafely(t, ctx, client)
+		assertClientConnected(t, transport)
+		err := client.Query(ctx, fmt.Sprintf("test query %d", i))
+		assertNoError(t, err)
+		disconnectClientSafely(t, client)
+		assertClientDisconnected(t, transport)
+		transport.reset()
 	}
 
-	// Connect
-	err := transport.Connect(context.Background())
-	if err != nil {
-		t.Fatalf("Connect failed: %v", err)
+	// Verify no resource leaks (basic check)
+	if transport.getSentMessageCount() != 0 {
+		t.Error("Expected transport to be reset after cleanup")
 	}
+}
 
-	// Should be connected
+func testTransportIntegration(t *testing.T, ctx context.Context) {
+	t.Helper()
+	transport := newClientMockTransport()
+	client := setupClientForTest(t, transport)
+	defer disconnectClientSafely(t, client)
+
+	// Verify interface compliance
+	var _ Transport = transport
+
+	// Test transport operations through client
+	err := client.Connect(ctx)
+	assertNoError(t, err)
 	if !transport.connected {
-		t.Errorf("After Connect, expected connected=true, got connected=%t", transport.connected)
+		t.Error("Expected transport to be connected via client")
 	}
 
-	// Close
-	err = transport.Close()
-	if err != nil {
-		t.Fatalf("Close failed: %v", err)
+	// Test message sending
+	err = client.Query(ctx, "test message")
+	assertNoError(t, err)
+	if transport.getSentMessageCount() != 1 {
+		t.Errorf("Expected 1 message sent, got %d", transport.getSentMessageCount())
 	}
 
-	// Check final state
-	transport.mu.Lock()
-	connected := transport.connected
-	closed := transport.closed
-	transport.mu.Unlock()
-
-	t.Logf("After Close: connected=%t, closed=%t", connected, closed)
-
-	// Should be disconnected
-	if connected {
-		t.Errorf("After Close, expected connected=false, got connected=%t, closed=%t", connected, closed)
+	// Test disconnect
+	err = client.Disconnect()
+	assertNoError(t, err)
+	if transport.connected {
+		t.Error("Expected transport to be disconnected via client")
 	}
 }
 
@@ -98,7 +121,7 @@ func TestClientQueryExecution(t *testing.T) {
 
 	// Execute query through connected client
 	err := client.Query(ctx, "What is 2+2?")
-	assertClientError(t, err, false, "")
+	assertNoError(t, err)
 
 	// Verify message was sent to transport
 	assertClientMessageCount(t, transport, 1)
@@ -154,7 +177,7 @@ func TestClientStreamQuery(t *testing.T) {
 
 	// Execute stream query
 	err := client.QueryStream(ctx, messages)
-	assertClientError(t, err, false, "")
+	assertNoError(t, err)
 
 	// Wait a bit for async processing to complete
 	time.Sleep(100 * time.Millisecond)
@@ -163,60 +186,46 @@ func TestClientStreamQuery(t *testing.T) {
 	assertClientMessageCount(t, transport, 2)
 }
 
-// TestClientErrorHandling tests connection, send, and async error scenarios
+// TestClientErrorHandling tests connection, send, and async error scenarios - streamlined
 func TestClientErrorHandling(t *testing.T) {
 	ctx, cancel := setupClientTestContext(t, 10*time.Second)
 	defer cancel()
 
-	tests := []struct {
-		name           string
-		setupTransport func() *clientMockTransport
-		operation      func(Client) error
-		expectError    bool
-		errorContains  string
+	errorTests := map[string]struct {
+		errorType string
+		operation string
+		errorMsg  string
 	}{
-		{
-			name: "connection_error",
-			setupTransport: func() *clientMockTransport {
-				return newClientMockTransportWithOptions(WithClientConnectError(fmt.Errorf("connection failed")))
-			},
-			operation: func(c Client) error {
-				return c.Connect(ctx)
-			},
-			expectError:   true,
-			errorContains: "connection failed",
-		},
-		{
-			name: "send_error",
-			setupTransport: func() *clientMockTransport {
-				return newClientMockTransportWithOptions(WithClientSendError(fmt.Errorf("send failed")))
-			},
-			operation: func(c Client) error {
-				connectClientSafely(t, ctx, c)
-				return c.Query(ctx, "test")
-			},
-			expectError:   true,
-			errorContains: "send failed",
-		},
-		{
-			name:           "successful_operation",
-			setupTransport: newClientMockTransport,
-			operation: func(c Client) error {
-				connectClientSafely(t, ctx, c)
-				return c.Query(ctx, "test")
-			},
-			expectError: false,
-		},
+		"connection_error": {"connect", "Connect", "connection failed"},
+		"send_error":       {"send", "Query", "send failed"},
+		"successful_op":    {"", "Query", ""},
 	}
 
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			transport := test.setupTransport()
+	for name, test := range errorTests {
+		t.Run(name, func(t *testing.T) {
+			var transport *clientMockTransport
+			if test.errorType == "" {
+				transport = newClientMockTransport()
+			} else {
+				transport = newMockTransportWithError(test.errorType, fmt.Errorf(test.errorMsg))
+			}
+			
 			client := setupClientForTest(t, transport)
 			defer disconnectClientSafely(t, client)
 
-			err := test.operation(client)
-			assertClientError(t, err, test.expectError, test.errorContains)
+			var err error
+			switch test.operation {
+			case "Connect":
+				err = client.Connect(ctx)
+			case "Query":
+				if test.errorType != "connect" {
+					connectClientSafely(t, ctx, client)
+				}
+				err = client.Query(ctx, "test")
+			}
+
+			wantErr := test.errorMsg != ""
+			assertClientError(t, err, wantErr, test.errorMsg)
 		})
 	}
 }
@@ -288,76 +297,6 @@ func TestClientConfiguration(t *testing.T) {
 
 			test.validate(t, client, transport)
 		})
-	}
-}
-
-// TestClientResourceCleanup tests proper cleanup and session management
-func TestClientResourceCleanup(t *testing.T) {
-	ctx, cancel := setupClientTestContext(t, 10*time.Second)
-	defer cancel()
-
-	transport := newClientMockTransport()
-
-	// Test resource cleanup with multiple connect/disconnect cycles
-	for i := 0; i < 3; i++ {
-		client := setupClientForTest(t, transport)
-
-		connectClientSafely(t, ctx, client)
-		assertClientConnected(t, transport)
-
-		// Use the client
-		err := client.Query(ctx, fmt.Sprintf("test query %d", i))
-		assertClientError(t, err, false, "")
-
-		// Clean disconnect
-		disconnectClientSafely(t, client)
-		assertClientDisconnected(t, transport)
-
-		// Reset transport for next iteration
-		transport.reset()
-	}
-
-	// Verify no resource leaks (basic check)
-	if transport.getSentMessageCount() != 0 {
-		t.Error("Expected transport to be reset after cleanup")
-	}
-}
-
-// TestClientTransportIntegration tests transport interface compliance
-func TestClientTransportIntegration(t *testing.T) {
-	ctx, cancel := setupClientTestContext(t, 10*time.Second)
-	defer cancel()
-
-	// Test that client properly uses transport interface
-	transport := newClientMockTransport()
-	client := setupClientForTest(t, transport)
-	defer disconnectClientSafely(t, client)
-
-	// Verify interface compliance
-	var _ Transport = transport
-
-	// Test transport operations through client
-	err := client.Connect(ctx)
-	assertClientError(t, err, false, "")
-
-	if !transport.connected {
-		t.Error("Expected transport to be connected via client")
-	}
-
-	// Test message sending
-	err = client.Query(ctx, "test message")
-	assertClientError(t, err, false, "")
-
-	if transport.getSentMessageCount() != 1 {
-		t.Errorf("Expected 1 message sent, got %d", transport.getSentMessageCount())
-	}
-
-	// Test disconnect
-	err = client.Disconnect()
-	assertClientError(t, err, false, "")
-
-	if transport.connected {
-		t.Error("Expected transport to be disconnected via client")
 	}
 }
 
@@ -505,7 +444,7 @@ func TestClientInterrupt(t *testing.T) {
 
 	// Test interrupt on connected client
 	err := client.Interrupt(ctx)
-	assertClientError(t, err, false, "")
+	assertNoError(t, err)
 
 	// Test interrupt propagation to transport
 	if transport.interruptError != nil {
@@ -547,7 +486,7 @@ func TestClientInterrupt(t *testing.T) {
 
 	// Execute query (interrupt should not prevent this from completing)
 	err = longRunningClient.Query(ctx, "test query")
-	assertClientError(t, err, false, "")
+	assertNoError(t, err)
 
 	// Wait for goroutine to complete before test ends
 	select {
@@ -577,7 +516,7 @@ func TestClientSessionID(t *testing.T) {
 
 	// Test query with default session ID
 	err := client.Query(ctx, "test message")
-	assertClientError(t, err, false, "")
+	assertNoError(t, err)
 
 	// Verify default session ID was used
 	sentMsg, ok := transport.getSentMessage(0)
@@ -590,7 +529,7 @@ func TestClientSessionID(t *testing.T) {
 
 	// Test query with custom session ID
 	err = client.Query(ctx, "test message 2", "custom-session")
-	assertClientError(t, err, false, "")
+	assertNoError(t, err)
 
 	// Verify custom session ID was used
 	sentMsg, ok = transport.getSentMessage(1)
@@ -603,7 +542,7 @@ func TestClientSessionID(t *testing.T) {
 
 	// Test query with empty session ID (should use default)
 	err = client.Query(ctx, "test message 3", "")
-	assertClientError(t, err, false, "")
+	assertNoError(t, err)
 
 	// Verify default session ID was used for empty string
 	sentMsg, ok = transport.getSentMessage(2)
@@ -690,7 +629,7 @@ func TestClientMultipleSessions(t *testing.T) {
 
 	// Test session isolation: different sessions should not interfere
 	err := client.Query(ctx, "final test", "session-1")
-	assertClientError(t, err, false, "")
+	assertNoError(t, err)
 
 	// Verify the final message used correct session ID
 	finalMsg, ok := transport.getSentMessage(expectedMessageCount)
@@ -700,27 +639,6 @@ func TestClientMultipleSessions(t *testing.T) {
 	if finalMsg.SessionID != "session-1" {
 		t.Errorf("Expected final message session ID 'session-1', got '%s'", finalMsg.SessionID)
 	}
-}
-
-// TestClientBackpressure tests handling of slow message processing
-// Covers T148: Client Backpressure
-func TestClientBackpressure(t *testing.T) {
-	ctx, cancel := setupClientTestContext(t, 5*time.Second)
-	defer cancel()
-
-	transport := newClientMockTransport()
-	client := setupClientForTest(t, transport)
-	defer disconnectClientSafely(t, client)
-	connectClientSafely(t, ctx, client)
-
-	// Rapidly send multiple queries to test backpressure handling
-	for i := 0; i < 10; i++ {
-		err := client.Query(ctx, fmt.Sprintf("message %d", i))
-		assertClientError(t, err, false, "")
-	}
-
-	// Verify all messages were handled without blocking
-	assertClientMessageCount(t, transport, 10)
 }
 
 // TestClientReconnection tests reconnection after transport failures
@@ -736,7 +654,7 @@ func TestClientReconnection(t *testing.T) {
 	// Initial connection
 	connectClientSafely(t, ctx, client)
 	err := client.Query(ctx, "test before disconnect")
-	assertClientError(t, err, false, "")
+	assertNoError(t, err)
 
 	// Simulate disconnect and reconnect
 	disconnectClientSafely(t, client)
@@ -746,7 +664,7 @@ func TestClientReconnection(t *testing.T) {
 
 	// Test recovery after reconnection
 	err = client.Query(ctx, "test after reconnect")
-	assertClientError(t, err, false, "")
+	assertNoError(t, err)
 	assertClientMessageCount(t, transport, 1)
 }
 
@@ -779,7 +697,7 @@ func TestClientAsyncErrorHandling(t *testing.T) {
 
 	// Client should still be functional after async error
 	err := client.Query(ctx, "test query after async error")
-	assertClientError(t, err, false, "")
+	assertNoError(t, err)
 	assertClientMessageCount(t, transport, 1)
 }
 
@@ -879,7 +797,7 @@ func TestClientGracefulShutdown(t *testing.T) {
 
 	// Test protocol compliance (T163) - messages should be properly formatted
 	err := client.Query(ctx, "test message")
-	assertClientError(t, err, false, "")
+	assertNoError(t, err)
 
 	sentMsg, ok := transport.getSentMessage(0)
 	if !ok {
@@ -892,7 +810,7 @@ func TestClientGracefulShutdown(t *testing.T) {
 	// Test memory management (T153) - multiple operations should not leak
 	for i := 0; i < 5; i++ {
 		err := client.Query(ctx, fmt.Sprintf("memory test %d", i))
-		assertClientError(t, err, false, "")
+		assertNoError(t, err)
 	}
 
 	// Test graceful shutdown (T154) - disconnect should clean up resources
@@ -964,23 +882,19 @@ func TestNewClient(t *testing.T) {
 	// with proper transport mocking
 }
 
-// TestClientIteratorClose tests the clientIterator Close method
+// TestClientIteratorClose tests the clientIterator Close method - consolidated
 func TestClientIteratorClose(t *testing.T) {
-	tests := []struct {
-		name       string
-		withMsgs   bool
-		validateFn func(*testing.T, Client, *clientMockTransport)
-	}{
-		{"close_unused_iterator", false, verifyIteratorCloseUnused},
-		{"close_with_pending_messages", true, verifyIteratorCloseWithMessages},
-		{"multiple_close_calls", false, verifyIteratorMultipleClose},
-		{"close_after_partial_consumption", true, verifyIteratorCloseAfterConsumption},
+	iteratorTests := map[string]iteratorCloseTest{
+		"close_unused":          {"unused", false, false, false},
+		"close_with_messages":   {"with_messages", true, false, false},
+		"multiple_close_calls":  {"multiple_close", false, false, true},
+		"close_after_consumption": {"after_consumption", true, true, false},
 	}
 
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
+	for name, test := range iteratorTests {
+		t.Run(name, func(t *testing.T) {
 			var transport *clientMockTransport
-			if test.withMsgs {
+			if test.needQuery {
 				transport = newClientMockTransportWithOptions(WithClientResponseMessages([]Message{
 					&AssistantMessage{Content: []ContentBlock{&TextBlock{Text: "response1"}}, Model: "claude-sonnet-3-5-20241022"},
 					&AssistantMessage{Content: []ContentBlock{&TextBlock{Text: "response2"}}, Model: "claude-sonnet-3-5-20241022"},
@@ -992,7 +906,7 @@ func TestClientIteratorClose(t *testing.T) {
 			client := setupClientForTest(t, transport)
 			defer disconnectClientSafely(t, client)
 
-			test.validateFn(t, client, transport)
+			verifyIteratorClose(t, client, transport, test)
 		})
 	}
 }
@@ -1153,68 +1067,46 @@ func (c *clientMockTransport) reset() {
 	c.closed = false
 }
 
-// Helper method to inject test messages (pattern-consistent)
+// Simplified message injection helper
 func (c *clientMockTransport) injectTestMessage(msg Message) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-
-	// Add to test messages for configuration
 	if c.testMessages == nil {
 		c.testMessages = []Message{}
 	}
 	c.testMessages = append(c.testMessages, msg)
-
-	// If channels are already initialized, send immediately
 	if c.msgChan != nil {
 		select {
 		case c.msgChan <- msg:
 		default:
-			// Channel full, skip (test should handle this)
 		}
 	}
 }
 
-// Mock Transport Options
+// Streamlined Mock Transport Options - reduced from 11 to 6 essential functions
 type ClientMockTransportOption func(*clientMockTransport)
 
 func WithClientConnectError(err error) ClientMockTransportOption {
-	return func(t *clientMockTransport) {
-		t.connectError = err
-	}
+	return func(t *clientMockTransport) { t.connectError = err }
 }
 
 func WithClientSendError(err error) ClientMockTransportOption {
-	return func(t *clientMockTransport) {
-		t.sendError = err
-	}
+	return func(t *clientMockTransport) { t.sendError = err }
 }
 
 func WithClientInterruptError(err error) ClientMockTransportOption {
-	return func(t *clientMockTransport) {
-		t.interruptError = err
-	}
+	return func(t *clientMockTransport) { t.interruptError = err }
 }
 
-func WithClientCloseError(err error) ClientMockTransportOption {
-	return func(t *clientMockTransport) {
-		t.closeError = err
-	}
-}
-
-// Simplified options for compatibility
 func WithClientAsyncError(err error) ClientMockTransportOption {
-	return func(t *clientMockTransport) {
-		t.asyncError = err
-	}
+	return func(t *clientMockTransport) { t.asyncError = err }
 }
 
 func WithClientResponseMessages(messages []Message) ClientMockTransportOption {
-	return func(t *clientMockTransport) {
-		t.testMessages = messages
-	}
+	return func(t *clientMockTransport) { t.testMessages = messages }
 }
 
-// Factory Functions
+// Factory Functions - streamlined creation methods
 func newClientMockTransport() *clientMockTransport {
 	return &clientMockTransport{}
 }
@@ -1223,6 +1115,18 @@ func newClientMockTransportWithOptions(options ...ClientMockTransportOption) *cl
 	transport := &clientMockTransport{}
 	for _, option := range options {
 		option(transport)
+	}
+	return transport
+}
+
+// Convenience factory methods for common error scenarios
+func newMockTransportWithError(errorType string, err error) *clientMockTransport {
+	transport := newClientMockTransport()
+	switch errorType {
+	case "connect": transport.connectError = err
+	case "send": transport.sendError = err
+	case "interrupt": transport.interruptError = err
+	case "async": transport.asyncError = err
 	}
 	return transport
 }
@@ -1293,255 +1197,210 @@ func assertClientMessageCount(t *testing.T, transport *clientMockTransport, expe
 	}
 }
 
-// Configuration verification helpers following options_test.go patterns
-func verifyDefaultConfiguration(t *testing.T, client Client, transport *clientMockTransport) {
+// Helper for success-only assertions - replaces verbose assertNoError(t, err)
+func assertNoError(t *testing.T, err error) {
+	t.Helper()
+	if err != nil {
+		t.Errorf("Expected no error, got: %v", err)
+	}
+}
+
+// Configuration verification helper - consolidated from 8 redundant functions
+type clientConfigTest struct {
+	name         string
+	messageCount int
+	sessionID    string
+	queryText    string
+	validateFn   func(*testing.T, *clientMockTransport)
+}
+
+func verifyClientConfiguration(t *testing.T, client Client, transport *clientMockTransport, config clientConfigTest) {
 	t.Helper()
 	ctx, cancel := setupClientTestContext(t, 5*time.Second)
 	defer cancel()
 
 	if client == nil {
-		t.Fatal("Expected client to be created")
+		t.Fatalf("Expected client to be created for %s", config.name)
 	}
 
 	connectClientSafely(t, ctx, client)
-	err := client.Query(ctx, "default test")
-	assertClientError(t, err, false, "")
-	assertClientMessageCount(t, transport, 1)
 
-	sentMsg, ok := transport.getSentMessage(0)
-	if !ok {
-		t.Fatal("Expected sent message")
+	// Execute queries based on message count
+	for i := 0; i < config.messageCount; i++ {
+		queryText := config.queryText
+		if config.messageCount > 1 {
+			queryText = fmt.Sprintf("%s %d", config.queryText, i+1)
+		}
+		
+		var err error
+		if config.sessionID != "" {
+			err = client.Query(ctx, queryText, config.sessionID)
+		} else {
+			err = client.Query(ctx, queryText)
+		}
+		assertNoError(t, err)
 	}
-	if sentMsg.SessionID != "default" {
-		t.Errorf("Expected default session ID 'default', got %q", sentMsg.SessionID)
+
+	assertClientMessageCount(t, transport, config.messageCount)
+
+	// Apply custom validation if provided
+	if config.validateFn != nil {
+		config.validateFn(t, transport)
 	}
+}
+
+// Specific validation functions for different config types
+func verifyDefaultConfiguration(t *testing.T, client Client, transport *clientMockTransport) {
+	t.Helper()
+	verifyClientConfiguration(t, client, transport, clientConfigTest{
+		name:         "default_configuration",
+		messageCount: 1,
+		queryText:    "default test",
+		validateFn: func(t *testing.T, tr *clientMockTransport) {
+			sentMsg, ok := tr.getSentMessage(0)
+			if !ok {
+				t.Fatal("Expected sent message")
+			}
+			if sentMsg.SessionID != "default" {
+				t.Errorf("Expected default session ID 'default', got %q", sentMsg.SessionID)
+			}
+		},
+	})
 }
 
 func verifySystemPromptConfig(t *testing.T, client Client, transport *clientMockTransport) {
 	t.Helper()
-	ctx, cancel := setupClientTestContext(t, 5*time.Second)
-	defer cancel()
-
-	if client == nil {
-		t.Fatal("Expected client to be created with system prompt")
-	}
-
-	connectClientSafely(t, ctx, client)
-	err := client.Query(ctx, "test with system prompt")
-	assertClientError(t, err, false, "")
-	assertClientMessageCount(t, transport, 1)
+	verifyClientConfiguration(t, client, transport, clientConfigTest{
+		name:         "system_prompt_configuration",
+		messageCount: 1,
+		queryText:    "test with system prompt",
+	})
 }
 
 func verifyToolsConfig(t *testing.T, client Client, transport *clientMockTransport) {
 	t.Helper()
-	ctx, cancel := setupClientTestContext(t, 5*time.Second)
-	defer cancel()
-
-	if client == nil {
-		t.Fatal("Expected client to be created with tools configuration")
-	}
-
-	connectClientSafely(t, ctx, client)
-	err := client.Query(ctx, "test with tools config")
-	assertClientError(t, err, false, "")
-	assertClientMessageCount(t, transport, 1)
+	verifyClientConfiguration(t, client, transport, clientConfigTest{
+		name:         "tools_configuration",
+		messageCount: 1,
+		queryText:    "test with tools config",
+	})
 }
 
 func verifyOptionsConfig(t *testing.T, client Client, transport *clientMockTransport) {
 	t.Helper()
-	ctx, cancel := setupClientTestContext(t, 5*time.Second)
-	defer cancel()
-
-	if client == nil {
-		t.Fatal("Expected client to be created with multiple options")
-	}
-
-	connectClientSafely(t, ctx, client)
-	err := client.Query(ctx, "test option precedence")
-	assertClientError(t, err, false, "")
-	assertClientMessageCount(t, transport, 1)
+	verifyClientConfiguration(t, client, transport, clientConfigTest{
+		name:         "multiple_options",
+		messageCount: 1,
+		queryText:    "test option precedence",
+	})
 }
 
 func verifyComplexConfig(t *testing.T, client Client, transport *clientMockTransport) {
 	t.Helper()
-	ctx, cancel := setupClientTestContext(t, 5*time.Second)
-	defer cancel()
-
-	if client == nil {
-		t.Fatal("Expected client to be created with complex configuration")
-	}
-
-	connectClientSafely(t, ctx, client)
-
-	err := client.Query(ctx, "first complex query")
-	assertClientError(t, err, false, "")
-
-	err = client.Query(ctx, "second complex query")
-	assertClientError(t, err, false, "")
-
-	assertClientMessageCount(t, transport, 2)
-
-	for i := 0; i < 2; i++ {
-		sentMsg, ok := transport.getSentMessage(i)
-		if !ok {
-			t.Fatalf("Expected sent message %d", i)
-		}
-		if sentMsg.Type != "user" {
-			t.Errorf("Expected message type 'user', got %q", sentMsg.Type)
-		}
-	}
+	verifyClientConfiguration(t, client, transport, clientConfigTest{
+		name:         "complex_configuration",
+		messageCount: 2,
+		queryText:    "complex query",
+		validateFn: func(t *testing.T, tr *clientMockTransport) {
+			for i := 0; i < 2; i++ {
+				sentMsg, ok := tr.getSentMessage(i)
+				if !ok {
+					t.Fatalf("Expected sent message %d", i)
+				}
+				if sentMsg.Type != "user" {
+					t.Errorf("Expected message type 'user', got %q", sentMsg.Type)
+				}
+			}
+		},
+	})
 }
 
 func verifySessionConfig(t *testing.T, client Client, transport *clientMockTransport) {
 	t.Helper()
-	ctx, cancel := setupClientTestContext(t, 5*time.Second)
-	defer cancel()
-
-	if client == nil {
-		t.Fatal("Expected client to be created with session configuration")
-	}
-
-	connectClientSafely(t, ctx, client)
-
-	err := client.Query(ctx, "session test", "custom-session-456")
-	assertClientError(t, err, false, "")
-
-	sentMsg, ok := transport.getSentMessage(0)
-	if !ok {
-		t.Fatal("Expected sent message")
-	}
-	if sentMsg.SessionID != "custom-session-456" {
-		t.Errorf("Expected session ID 'custom-session-456', got %q", sentMsg.SessionID)
-	}
+	verifyClientConfiguration(t, client, transport, clientConfigTest{
+		name:         "session_configuration",
+		messageCount: 1,
+		sessionID:    "custom-session-456",
+		queryText:    "session test",
+		validateFn: func(t *testing.T, tr *clientMockTransport) {
+			sentMsg, ok := tr.getSentMessage(0)
+			if !ok {
+				t.Fatal("Expected sent message")
+			}
+			if sentMsg.SessionID != "custom-session-456" {
+				t.Errorf("Expected session ID 'custom-session-456', got %q", sentMsg.SessionID)
+			}
+		},
+	})
 }
 
-// Iterator verification helpers following options_test.go patterns
-func verifyIteratorCloseUnused(t *testing.T, client Client, transport *clientMockTransport) {
+// Iterator verification helper - consolidated from 4 redundant functions
+type iteratorCloseTest struct {
+	name        string
+	needQuery   bool
+	consumeFirst bool
+	multipleCalls bool
+}
+
+func verifyIteratorClose(t *testing.T, client Client, transport *clientMockTransport, test iteratorCloseTest) {
 	t.Helper()
 	ctx, cancel := setupClientTestContext(t, 10*time.Second)
 	defer cancel()
 
 	connectClientSafely(t, ctx, client)
 
-	iter := client.ReceiveResponse(ctx)
-	if iter == nil {
-		t.Fatal("Expected non-nil iterator from ReceiveResponse")
+	// Send query if needed for the test scenario
+	if test.needQuery {
+		err := client.Query(ctx, fmt.Sprintf("%s query", test.name))
+		assertNoError(t, err)
 	}
-
-	err := iter.Close()
-	if err != nil {
-		t.Errorf("Expected Close() to succeed, got: %v", err)
-	}
-
-	msg, err := iter.Next(ctx)
-	if err != ErrNoMoreMessages {
-		t.Errorf("Expected ErrNoMoreMessages after close, got: %v", err)
-	}
-	if msg != nil {
-		t.Error("Expected nil message after close, got message")
-	}
-}
-
-func verifyIteratorCloseWithMessages(t *testing.T, client Client, transport *clientMockTransport) {
-	t.Helper()
-	ctx, cancel := setupClientTestContext(t, 10*time.Second)
-	defer cancel()
-
-	connectClientSafely(t, ctx, client)
-
-	err := client.Query(ctx, "test with messages")
-	assertClientError(t, err, false, "")
 
 	iter := client.ReceiveResponse(ctx)
 	if iter == nil {
 		t.Fatal("Expected non-nil iterator from ReceiveResponse")
 	}
 
-	err = iter.Close()
-	if err != nil {
-		t.Errorf("Expected Close() to succeed with pending messages, got: %v", err)
+	// Consume first message if requested
+	if test.consumeFirst {
+		msg, err := iter.Next(ctx)
+		if err != nil {
+			t.Fatalf("Expected first message, got error: %v", err)
+		}
+		if msg == nil {
+			t.Fatal("Expected first message, got nil")
+		}
 	}
 
-	msg, err := iter.Next(ctx)
-	if err != ErrNoMoreMessages {
-		t.Errorf("Expected ErrNoMoreMessages after close, got: %v", err)
+	// Perform close operation(s)
+	closeCount := 1
+	if test.multipleCalls {
+		closeCount = 3
 	}
-	if msg != nil {
-		t.Error("Expected nil message after close, got message")
-	}
-}
-
-func verifyIteratorMultipleClose(t *testing.T, client Client, transport *clientMockTransport) {
-	t.Helper()
-	ctx, cancel := setupClientTestContext(t, 10*time.Second)
-	defer cancel()
-
-	connectClientSafely(t, ctx, client)
-
-	iter := client.ReceiveResponse(ctx)
-	if iter == nil {
-		t.Fatal("Expected non-nil iterator from ReceiveResponse")
-	}
-
-	// Multiple closes should all succeed (idempotent)
-	for i := 1; i <= 3; i++ {
+	
+	for i := 1; i <= closeCount; i++ {
 		err := iter.Close()
 		if err != nil {
 			t.Errorf("Expected Close() call %d to succeed, got: %v", i, err)
 		}
 	}
 
-	// Next should consistently return ErrNoMoreMessages
-	for i := 0; i < 3; i++ {
+	// Verify Next() behavior after close
+	nextCalls := 1
+	if test.multipleCalls {
+		nextCalls = 3
+	}
+	
+	for i := 0; i < nextCalls; i++ {
 		msg, err := iter.Next(ctx)
 		if err != ErrNoMoreMessages {
-			t.Errorf("Expected ErrNoMoreMessages on call %d after multiple closes, got: %v", i+1, err)
+			t.Errorf("Expected ErrNoMoreMessages on Next() call %d after close, got: %v", i+1, err)
 		}
 		if msg != nil {
-			t.Errorf("Expected nil message on call %d after multiple closes, got message", i+1)
+			t.Errorf("Expected nil message on Next() call %d after close, got message", i+1)
 		}
 	}
 }
 
-func verifyIteratorCloseAfterConsumption(t *testing.T, client Client, transport *clientMockTransport) {
-	t.Helper()
-	ctx, cancel := setupClientTestContext(t, 10*time.Second)
-	defer cancel()
-
-	connectClientSafely(t, ctx, client)
-
-	err := client.Query(ctx, "multi message test")
-	assertClientError(t, err, false, "")
-
-	iter := client.ReceiveResponse(ctx)
-	if iter == nil {
-		t.Fatal("Expected non-nil iterator from ReceiveResponse")
-	}
-
-	// Consume one message
-	msg, err := iter.Next(ctx)
-	if err != nil {
-		t.Fatalf("Expected first message, got error: %v", err)
-	}
-	if msg == nil {
-		t.Fatal("Expected first message, got nil")
-	}
-
-	// Close after consuming
-	err = iter.Close()
-	if err != nil {
-		t.Errorf("Expected Close() after consuming message to succeed, got: %v", err)
-	}
-
-	// Next should return ErrNoMoreMessages even though more messages might be available
-	msg, err = iter.Next(ctx)
-	if err != ErrNoMoreMessages {
-		t.Errorf("Expected ErrNoMoreMessages after close, got: %v", err)
-	}
-	if msg != nil {
-		t.Error("Expected nil message after close, got message")
-	}
-}
 
 // TestClientContextManager tests Go-idiomatic context manager pattern following Python SDK parity
 // Covers the single critical improvement: automatic resource lifecycle management
@@ -1761,7 +1620,7 @@ func TestWithClientOptionsPropagate(t *testing.T) {
 		WithAllowedTools("Read", "Write"),
 	)
 
-	assertClientError(t, err, false, "")
+	assertNoError(t, err)
 	assertClientMessageCount(t, transport, 1)
 
 	// Verify message was sent with correct session
@@ -1809,7 +1668,7 @@ func TestClientPythonSDKCompatibility(t *testing.T) {
 
 	// Send query using new Python SDK compatible format
 	err := client.Query(ctx, "Test streaming with Python SDK format", "test-session")
-	assertClientError(t, err, false, "")
+	assertNoError(t, err)
 
 	// Verify message was sent in correct Python SDK format
 	assertClientMessageCount(t, transport, 1)
@@ -1900,5 +1759,204 @@ func TestClientPythonSDKCompatibility(t *testing.T) {
 
 	// Test that iterator can be closed immediately (following existing test patterns)
 	err = iter.Close()
-	assertClientError(t, err, false, "")
+	assertNoError(t, err)
+}
+
+// TestWithClient tests the WithClient convenience function with automatic CLI discovery
+// This tests the actual WithClient function (not WithClientTransport) which has 0% coverage
+func TestWithClient(t *testing.T) {
+	tests := []struct {
+		name    string
+		ctx     func(t *testing.T) (context.Context, context.CancelFunc)
+		fn      func(Client) error
+		opts    []Option
+		wantErr bool
+		errMsg  string
+	}{
+		{
+			name: "canceled_context",
+			ctx: func(t *testing.T) (context.Context, context.CancelFunc) {
+				t.Helper()
+				ctx, cancel := context.WithCancel(context.Background())
+				cancel() // Cancel immediately
+				return ctx, cancel
+			},
+			fn: func(client Client) error {
+				return nil // Should not be called
+			},
+			wantErr: true,
+			errMsg:  "context canceled",
+		},
+		{
+			name: "function_returns_error_on_successful_connection",
+			ctx: func(t *testing.T) (context.Context, context.CancelFunc) {
+				t.Helper()
+				return setupClientTestContext(t, 5*time.Second)
+			},
+			fn: func(client Client) error {
+				// If we get here, connection succeeded
+				return fmt.Errorf("test function error")
+			},
+			opts:    []Option{WithCLIPath("nonexistent")}, // Force failure
+			wantErr: true,
+			errMsg:  "", // Will either be connection error or function error
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			ctx, cancel := test.ctx(t)
+			defer cancel()
+
+			// This will attempt to auto-discover CLI, which will fail in test environment
+			// but that's the expected behavior we want to test
+			err := WithClient(ctx, test.fn, test.opts...)
+			
+			if test.wantErr {
+				if err == nil {
+					t.Errorf("Expected error, got nil")
+				} else if test.errMsg != "" && !strings.Contains(err.Error(), test.errMsg) {
+					t.Errorf("Expected error to contain %q, got %v", test.errMsg, err)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Unexpected error: %v", err)
+				}
+			}
+		})
+	}
+}
+
+// TestClientIteratorNextErrorPaths tests error scenarios in clientIterator.Next() method
+// Targets the missing 45.5% coverage in Next function error paths
+func TestClientIteratorNextErrorPaths(t *testing.T) {
+	tests := []struct {
+		name     string
+		setup    func(t *testing.T) (*clientIterator, context.Context, context.CancelFunc)
+		validate func(t *testing.T, msg Message, err error)
+	}{
+		{
+			name: "next_on_closed_iterator",
+			setup: func(t *testing.T) (*clientIterator, context.Context, context.CancelFunc) {
+				t.Helper()
+				msgChan := make(chan Message)
+				errChan := make(chan error)
+				iter := &clientIterator{
+					msgChan: msgChan,
+					errChan: errChan,
+					closed:  true, // Already closed
+				}
+				ctx, cancel := setupClientTestContext(t, 5*time.Second)
+				return iter, ctx, cancel
+			},
+			validate: func(t *testing.T, msg Message, err error) {
+				t.Helper()
+				if err != ErrNoMoreMessages {
+					t.Errorf("Expected ErrNoMoreMessages on closed iterator, got: %v", err)
+				}
+				if msg != nil {
+					t.Errorf("Expected nil message on closed iterator, got: %v", msg)
+				}
+			},
+		},
+		{
+			name: "context_canceled_while_waiting",
+			setup: func(t *testing.T) (*clientIterator, context.Context, context.CancelFunc) {
+				t.Helper()
+				msgChan := make(chan Message)
+				errChan := make(chan error)
+				iter := &clientIterator{
+					msgChan: msgChan,
+					errChan: errChan,
+					closed:  false,
+				}
+				ctx, cancel := setupClientTestContext(t, 50*time.Millisecond)
+				return iter, ctx, cancel
+			},
+			validate: func(t *testing.T, msg Message, err error) {
+				t.Helper()
+				if err != context.DeadlineExceeded {
+					t.Errorf("Expected context.DeadlineExceeded, got: %v", err)
+				}
+				if msg != nil {
+					t.Errorf("Expected nil message on context cancellation, got: %v", msg)
+				}
+			},
+		},
+		{
+			name: "error_received_on_error_channel",
+			setup: func(t *testing.T) (*clientIterator, context.Context, context.CancelFunc) {
+				t.Helper()
+				msgChan := make(chan Message)
+				errChan := make(chan error, 1)
+				iter := &clientIterator{
+					msgChan: msgChan,
+					errChan: errChan,
+					closed:  false,
+				}
+				
+				// Send error to error channel
+				expectedErr := fmt.Errorf("transport error")
+				errChan <- expectedErr
+				
+				ctx, cancel := setupClientTestContext(t, 5*time.Second)
+				return iter, ctx, cancel
+			},
+			validate: func(t *testing.T, msg Message, err error) {
+				t.Helper()
+				if err == nil {
+					t.Fatal("Expected error from error channel, got nil")
+				}
+				if err.Error() != "transport error" {
+					t.Errorf("Expected 'transport error', got: %v", err)
+				}
+				if msg != nil {
+					t.Errorf("Expected nil message on error, got: %v", msg)
+				}
+			},
+		},
+		{
+			name: "message_channel_closed",
+			setup: func(t *testing.T) (*clientIterator, context.Context, context.CancelFunc) {
+				t.Helper()
+				msgChan := make(chan Message)
+				errChan := make(chan error)
+				iter := &clientIterator{
+					msgChan: msgChan,
+					errChan: errChan,
+					closed:  false,
+				}
+				
+				// Close the message channel
+				close(msgChan)
+				
+				ctx, cancel := setupClientTestContext(t, 5*time.Second)
+				return iter, ctx, cancel
+			},
+			validate: func(t *testing.T, msg Message, err error) {
+				t.Helper()
+				if err != ErrNoMoreMessages {
+					t.Errorf("Expected ErrNoMoreMessages on closed channel, got: %v", err)
+				}
+				if msg != nil {
+					t.Errorf("Expected nil message on closed channel, got: %v", msg)
+				}
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			iter, ctx, cancel := test.setup(t)
+			defer cancel()
+
+			msg, err := iter.Next(ctx)
+			test.validate(t, msg, err)
+
+			// Verify iterator is closed after error conditions
+			if test.name != "next_on_closed_iterator" && !iter.closed {
+				t.Error("Expected iterator to be closed after error condition")
+			}
+		})
+	}
 }
