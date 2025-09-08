@@ -88,8 +88,6 @@ release:
     - 🐛 [Report Issues](https://github.com/severity1/claude-code-sdk-go/issues)
 
   extra_files:
-    - glob: ./examples/**/*
-      name_template: "examples"
     - glob: ./README.md
     - glob: ./LICENSE
 
