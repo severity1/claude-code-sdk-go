@@ -25,6 +25,8 @@ const (
 	channelBufferSize = 10
 	// terminationTimeoutSeconds is the timeout for graceful process termination.
 	terminationTimeoutSeconds = 5
+	// windowsOS is the GOOS value for Windows platform.
+	windowsOS = "windows"
 )
 
 // Transport implements the Transport interface using subprocess communication.
@@ -241,7 +243,7 @@ func (t *Transport) Interrupt(ctx context.Context) error {
 	}
 
 	// Windows doesn't support os.Interrupt signal
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == windowsOS {
 		return fmt.Errorf("interrupt not supported by windows")
 	}
 

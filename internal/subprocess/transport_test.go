@@ -125,7 +125,7 @@ func TestTransportProcessManagement(t *testing.T) {
 
 	// Test interrupt handling
 	t.Run("interrupt_handling", func(t *testing.T) {
-		if runtime.GOOS == "windows" {
+		if runtime.GOOS == windowsOS {
 			t.Skip("Interrupt not supported on Windows")
 		}
 
@@ -299,7 +299,7 @@ func TestTransportEnvironmentSetup(t *testing.T) {
 	assertTransportConnected(t, transport, true)
 
 	// Test interrupt (platform-specific signals)
-	if runtime.GOOS != "windows" {
+	if runtime.GOOS != windowsOS {
 		err := transport.Interrupt(ctx)
 		assertNoTransportError(t, err)
 	}
@@ -368,7 +368,7 @@ func newTransportMockCLIWithOptions(options ...TransportMockOption) string {
 	var script string
 	var extension string
 
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == windowsOS {
 		extension = ".bat"
 		switch {
 		case opts.shouldFail:
