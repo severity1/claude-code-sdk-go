@@ -1710,10 +1710,10 @@ func TestWithClientContextCancellation(t *testing.T) {
 		{
 			name: "timeout_context",
 			setupContext: func() (context.Context, context.CancelFunc) {
-				// Create a context that will timeout very quickly
-				ctx, cancel := context.WithTimeout(context.Background(), 1*time.Nanosecond)
-				// Give it a moment to timeout before using it
-				time.Sleep(10 * time.Microsecond)
+				// Create a context that has already timed out
+				ctx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
+				// Wait for it to timeout reliably
+				time.Sleep(5 * time.Millisecond)
 				return ctx, cancel
 			},
 			wantErr:  true,
