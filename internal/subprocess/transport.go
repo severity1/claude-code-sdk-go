@@ -366,8 +366,10 @@ func (t *Transport) terminateProcess() error {
 
 	// Wait exactly 5 seconds
 	done := make(chan error, 1)
+	// Capture cmd while we know it's valid to avoid data race
+	cmd := t.cmd
 	go func() {
-		done <- t.cmd.Wait()
+		done <- cmd.Wait()
 	}()
 
 	select {

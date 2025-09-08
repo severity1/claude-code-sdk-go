@@ -1020,14 +1020,14 @@ type clientMockTransport struct {
 func (c *clientMockTransport) Connect(ctx context.Context) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	
+
 	// Check context cancellation first
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
 	default:
 	}
-	
+
 	if c.connectError != nil {
 		return c.connectError
 	}
@@ -1044,14 +1044,14 @@ func (c *clientMockTransport) Connect(ctx context.Context) error {
 func (c *clientMockTransport) SendMessage(ctx context.Context, message StreamMessage) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	
+
 	// Check context cancellation first
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
 	default:
 	}
-	
+
 	if c.sendError != nil {
 		return c.sendError
 	}
