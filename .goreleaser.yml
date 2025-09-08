@@ -8,16 +8,7 @@ before:
     - go generate ./...
 
 # This is a Go library/SDK - no binary builds needed
-builds:
-  - skip: true
-
-# No archives needed for a library
-archives:
-  - skip: true
-
-# No checksums needed without binaries
-checksum:
-  disable: true
+# No builds section needed for library
 
 snapshot:
   name_template: "{{ incpatch .Version }}-next"
@@ -104,6 +95,4 @@ release:
 announce:
   skip: true
 
-# No Docker - this is a library
-dockers:
-  - skip: true
+# No Docker section needed for library
