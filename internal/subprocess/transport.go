@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 	"sync"
 	"syscall"
@@ -239,7 +240,12 @@ func (t *Transport) Interrupt(ctx context.Context) error {
 		return fmt.Errorf("process not running")
 	}
 
-	// Send interrupt signal (platform-specific)
+	// Windows doesn't support os.Interrupt signal
+	if runtime.GOOS == "windows" {
+		return fmt.Errorf("interrupt not supported by windows")
+	}
+
+	// Send interrupt signal (Unix/Linux/macOS)
 	return t.cmd.Process.Signal(os.Interrupt)
 }
 

@@ -125,6 +125,10 @@ func TestTransportProcessManagement(t *testing.T) {
 
 	// Test interrupt handling
 	t.Run("interrupt_handling", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("Interrupt not supported on Windows")
+		}
+
 		transport := setupTransportForTest(t, newTransportMockCLI())
 		defer disconnectTransportSafely(t, transport)
 
@@ -295,8 +299,10 @@ func TestTransportEnvironmentSetup(t *testing.T) {
 	assertTransportConnected(t, transport, true)
 
 	// Test interrupt (platform-specific signals)
-	err := transport.Interrupt(ctx)
-	assertNoTransportError(t, err)
+	if runtime.GOOS != "windows" {
+		err := transport.Interrupt(ctx)
+		assertNoTransportError(t, err)
+	}
 }
 
 // TestTransportCleanup tests resource cleanup and multiple close scenarios
@@ -361,7 +367,7 @@ func newTransportMockCLIWithOptions(options ...TransportMockOption) string {
 
 	var script string
 	var extension string
-	
+
 	if runtime.GOOS == "windows" {
 		extension = ".bat"
 		switch {
@@ -427,7 +433,7 @@ sleep 0.5
 	return createTransportTempScript(script, extension)
 }
 
-func createTransportTempScript(script string, extension string) string {
+func createTransportTempScript(script, extension string) string {
 	tempDir := os.TempDir()
 	scriptPath := filepath.Join(tempDir, fmt.Sprintf("mock-claude-%d%s", time.Now().UnixNano(), extension))
 

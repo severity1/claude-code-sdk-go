@@ -1694,7 +1694,8 @@ func TestWithClientContextCancellation(t *testing.T) {
 		{
 			name: "timeout_context",
 			setupContext: func() (context.Context, context.CancelFunc) {
-				return context.WithTimeout(context.Background(), 1*time.Nanosecond)
+				// Use a more reliable timeout that works across platforms
+				return context.WithTimeout(context.Background(), 1*time.Microsecond)
 			},
 			wantErr:  true,
 			errorMsg: "context deadline exceeded",
