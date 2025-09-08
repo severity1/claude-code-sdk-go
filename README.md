@@ -10,7 +10,6 @@
 [![Go Reference](https://pkg.go.dev/badge/github.com/severity1/claude-code-sdk-go.svg)](https://pkg.go.dev/github.com/severity1/claude-code-sdk-go)
 [![Go Report Card](https://goreportcard.com/badge/github.com/severity1/claude-code-sdk-go)](https://goreportcard.com/report/github.com/severity1/claude-code-sdk-go)
 [![codecov](https://codecov.io/gh/severity1/claude-code-sdk-go/branch/main/graph/badge.svg)](https://codecov.io/gh/severity1/claude-code-sdk-go)
-[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/severity1/claude-code-sdk-go/badge)](https://scorecard.dev/viewer/?uri=github.com/severity1/claude-code-sdk-go)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 </div>
