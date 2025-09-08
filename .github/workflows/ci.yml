@@ -163,6 +163,9 @@ jobs:
         mkdir -p /tmp/test-claude-sdk
         cd /tmp/test-claude-sdk
         go mod init test-import
+        # Use local SDK with replace directive
+        echo "replace github.com/severity1/claude-code-sdk-go => $GITHUB_WORKSPACE" >> go.mod
+        go mod edit -require=github.com/severity1/claude-code-sdk-go@v0.0.0
         cat > main.go << 'EOF'
         package main
         
