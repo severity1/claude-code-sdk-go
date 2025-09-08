@@ -45,7 +45,6 @@ func main() {
 		claudecode.WithSystemPrompt("You are a senior Go developer providing code reviews and architectural guidance."),
 		claudecode.WithAllowedTools("Read", "Write"), // Optional tools
 	)
-
 	// Advanced error handling
 	if err != nil {
 		// Check for specific error types

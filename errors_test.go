@@ -84,7 +84,7 @@ func assertErrorMessage(t *testing.T, err error, shouldBeEmpty bool) {
 // assertSDKErrorInterface verifies that error implements SDKError interface properly
 func assertSDKErrorInterface(t *testing.T, err SDKError) {
 	t.Helper()
-	var sdkErr SDKError = err
+	sdkErr := err
 	if sdkErr.Error() == "" {
 		t.Error("Expected error message from SDKError interface")
 	}

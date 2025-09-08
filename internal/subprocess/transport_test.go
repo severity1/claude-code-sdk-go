@@ -33,8 +33,8 @@ func TestTransportLifecycle(t *testing.T) {
 	err1 := transport.Close()
 	err2 := transport.Close()
 
-	assertTransportError(t, err1, false, "")
-	assertTransportError(t, err2, false, "")
+	assertNoTransportError(t, err1)
+	assertNoTransportError(t, err2)
 	assertTransportConnected(t, transport, false)
 }
 
@@ -76,7 +76,7 @@ func TestTransportMessageIO(t *testing.T) {
 	}
 
 	err := transport.SendMessage(ctx, message)
-	assertTransportError(t, err, false, "")
+	assertNoTransportError(t, err)
 
 	// Test message receiving
 	msgChan, errChan := transport.ReceiveMessages(ctx)
@@ -112,7 +112,7 @@ func TestTransportProcessManagement(t *testing.T) {
 		err := transport.Close()
 		duration := time.Since(start)
 
-		assertTransportError(t, err, false, "")
+		assertNoTransportError(t, err)
 
 		// Should complete in reasonable time (allowing buffer for 5-second sequence)
 		if duration > 6*time.Second {
@@ -130,7 +130,7 @@ func TestTransportProcessManagement(t *testing.T) {
 		connectTransportSafely(t, ctx, transport)
 
 		err := transport.Interrupt(ctx)
-		assertTransportError(t, err, false, "")
+		assertNoTransportError(t, err)
 
 		// Process should still be manageable after interrupt
 		assertTransportConnected(t, transport, true)
@@ -180,11 +180,11 @@ func TestTransportErrorHandling(t *testing.T) {
 			},
 			operation: func(tr *Transport) error {
 				connectTransportSafely(t, ctx, tr)
-				// Use cancelled context
-				cancelledCtx, cancel := context.WithCancel(ctx)
+				// Use canceled context
+				canceledCtx, cancel := context.WithCancel(ctx)
 				cancel()
 				message := shared.StreamMessage{Type: "user", SessionID: "test"}
-				return tr.SendMessage(cancelledCtx, message)
+				return tr.SendMessage(canceledCtx, message)
 			},
 			expectError:   false, // Context cancellation handling may vary
 			errorContains: "",
@@ -295,7 +295,7 @@ func TestTransportEnvironmentSetup(t *testing.T) {
 
 	// Test interrupt (platform-specific signals)
 	err := transport.Interrupt(ctx)
-	assertTransportError(t, err, false, "")
+	assertNoTransportError(t, err)
 }
 
 // TestTransportCleanup tests resource cleanup and multiple close scenarios
@@ -312,11 +312,11 @@ func TestTransportCleanup(t *testing.T) {
 
 	// Cleanup should not error
 	err := transport.Close()
-	assertTransportError(t, err, false, "")
+	assertNoTransportError(t, err)
 
 	// Multiple cleanups should be safe
 	err = transport.Close()
-	assertTransportError(t, err, false, "")
+	assertNoTransportError(t, err)
 
 	assertTransportConnected(t, transport, false)
 }
@@ -396,7 +396,7 @@ func createTransportTempScript(script string) string {
 	tempDir := os.TempDir()
 	scriptPath := filepath.Join(tempDir, fmt.Sprintf("mock-claude-%d", time.Now().UnixNano()))
 
-	err := os.WriteFile(scriptPath, []byte(script), 0755)
+	err := os.WriteFile(scriptPath, []byte(script), 0o755) // #nosec G306 - Test script needs to be executable
 	if err != nil {
 		panic(fmt.Sprintf("Failed to create mock CLI script: %v", err))
 	}
@@ -439,18 +439,10 @@ func assertTransportConnected(t *testing.T, transport *Transport, expected bool)
 	}
 }
 
-func assertTransportError(t *testing.T, err error, expectError bool, contains string) {
+func assertNoTransportError(t *testing.T, err error) {
 	t.Helper()
-	if expectError {
-		if err == nil {
-			t.Errorf("Expected error but got none")
-		} else if contains != "" && !strings.Contains(err.Error(), contains) {
-			t.Errorf("Expected error containing '%s', got: %v", contains, err)
-		}
-	} else {
-		if err != nil && contains == "" {
-			t.Errorf("Unexpected error: %v", err)
-		}
+	if err != nil {
+		t.Errorf("Unexpected error: %v", err)
 	}
 }
 

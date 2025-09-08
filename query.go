@@ -30,7 +30,12 @@ func Query(ctx context.Context, prompt string, opts ...Option) (MessageIterator,
 
 // QueryWithTransport executes a query with a custom transport.
 // The transport parameter is required and must not be nil.
-func QueryWithTransport(ctx context.Context, prompt string, transport Transport, opts ...Option) (MessageIterator, error) {
+func QueryWithTransport(
+	ctx context.Context,
+	prompt string,
+	transport Transport,
+	opts ...Option,
+) (MessageIterator, error) {
 	if transport == nil {
 		return nil, fmt.Errorf("transport is required")
 	}
@@ -40,7 +45,12 @@ func QueryWithTransport(ctx context.Context, prompt string, transport Transport,
 }
 
 // Internal helper functions
-func queryWithTransportAndOptions(ctx context.Context, prompt string, transport Transport, options *Options) (MessageIterator, error) {
+func queryWithTransportAndOptions(
+	ctx context.Context,
+	prompt string,
+	transport Transport,
+	options *Options,
+) (MessageIterator, error) {
 	if transport == nil {
 		return nil, fmt.Errorf("transport is required")
 	}

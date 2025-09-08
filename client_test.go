@@ -1539,7 +1539,7 @@ func TestClientContextManager(t *testing.T) {
 	}{
 		{
 			name:           "automatic_resource_management",
-			setupTransport: func() *clientMockTransport { return newClientMockTransport() },
+			setupTransport: newClientMockTransport,
 			operation: func(c Client) error {
 				return c.Query(context.Background(), "test")
 			},
@@ -1563,7 +1563,7 @@ func TestClientContextManager(t *testing.T) {
 		},
 		{
 			name:           "context_cancellation_with_cleanup",
-			setupTransport: func() *clientMockTransport { return newClientMockTransport() },
+			setupTransport: newClientMockTransport,
 			operation: func(c Client) error {
 				ctx, cancel := context.WithCancel(context.Background())
 				cancel() // Cancel immediately
@@ -1633,7 +1633,6 @@ func TestWithClientConcurrentUsage(t *testing.T) {
 				err := WithClientTransport(ctx, transport, func(client Client) error {
 					return client.Query(ctx, fmt.Sprintf("concurrent query %d-%d", id, j))
 				})
-
 				if err != nil {
 					errors <- fmt.Errorf("goroutine %d operation %d: %w", id, j, err)
 				}

@@ -65,7 +65,6 @@ func main() {
 		return nil
 	}, claudecode.WithAllowedTools("Read", "Write", "Edit"),
 		claudecode.WithSystemPrompt("You are a helpful software development assistant."))
-
 	if err != nil {
 		log.Fatalf("Session failed: %v", err)
 	}
@@ -116,7 +115,7 @@ func streamResponse(ctx context.Context, client claudecode.Client) error {
 }
 
 func setupFiles() error {
-	if err := os.MkdirAll("demo", 0755); err != nil {
+	if err := os.MkdirAll("demo", 0o755); err != nil {
 		return err
 	}
 
@@ -151,7 +150,7 @@ func main() {
 	}
 
 	for path, content := range files {
-		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 			return err
 		}
 	}

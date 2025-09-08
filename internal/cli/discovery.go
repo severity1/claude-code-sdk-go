@@ -33,7 +33,7 @@ func FindCLI() (string, error) {
 		if info, err := os.Stat(location); err == nil && !info.IsDir() {
 			// Verify it's executable (Unix-like systems)
 			if runtime.GOOS != windowsOS {
-				if info.Mode()&0111 == 0 {
+				if info.Mode()&0o111 == 0 {
 					continue // Not executable
 				}
 			}
@@ -121,10 +121,7 @@ func BuildCommandWithPrompt(cliPath string, options *shared.Options, prompt stri
 	cmd := []string{cliPath}
 
 	// Base arguments - always include these
-	cmd = append(cmd, "--output-format", "stream-json", "--verbose")
-
-	// One-shot mode with prompt as command argument
-	cmd = append(cmd, "--print", prompt)
+	cmd = append(cmd, "--output-format", "stream-json", "--verbose", "--print", prompt)
 
 	// Add all configuration options as CLI flags
 	if options != nil {
@@ -210,10 +207,8 @@ func addFileSystemFlags(cmd []string, options *shared.Options) []string {
 }
 
 func addMCPFlags(cmd []string, options *shared.Options) []string {
-	if len(options.McpServers) > 0 {
-		// TODO: Implement MCP configuration file generation
-		// For now, skip MCP servers - this will be added in a subsequent commit
-	}
+	// TODO: Implement MCP configuration file generation when len(options.McpServers) > 0
+	// For now, skip MCP servers - this will be added in a subsequent commit
 	return cmd
 }
 

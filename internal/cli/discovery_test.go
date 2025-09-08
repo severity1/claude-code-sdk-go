@@ -19,10 +19,8 @@ func TestCLIDiscovery(t *testing.T) {
 		errorContains string
 	}{
 		{
-			name: "cli_not_found_error",
-			setupEnv: func(t *testing.T) func() {
-				return setupIsolatedEnvironment(t)
-			},
+			name:          "cli_not_found_error",
+			setupEnv:      setupIsolatedEnvironment,
 			expectError:   true,
 			errorContains: "install",
 		},
@@ -322,7 +320,9 @@ func TestWorkingDirectoryValidation(t *testing.T) {
 			name: "file_not_directory",
 			setup: func(t *testing.T) string {
 				tempFile := filepath.Join(t.TempDir(), "testfile")
-				os.WriteFile(tempFile, []byte("test"), 0644)
+				if err := os.WriteFile(tempFile, []byte("test"), 0o600); err != nil {
+					t.Fatalf("Failed to write test file: %v", err)
+				}
 				return tempFile
 			},
 			expectError:   true,
@@ -356,19 +356,19 @@ func setupIsolatedEnvironment(t *testing.T) func() {
 
 	if runtime.GOOS == "windows" {
 		originalHome = os.Getenv("USERPROFILE")
-		os.Setenv("USERPROFILE", tempHome)
+		_ = os.Setenv("USERPROFILE", tempHome)
 	} else {
-		os.Setenv("HOME", tempHome)
+		_ = os.Setenv("HOME", tempHome)
 	}
-	os.Setenv("PATH", "/nonexistent/path")
+	_ = os.Setenv("PATH", "/nonexistent/path")
 
 	return func() {
 		if runtime.GOOS == "windows" {
-			os.Setenv("USERPROFILE", originalHome)
+			_ = os.Setenv("USERPROFILE", originalHome)
 		} else {
-			os.Setenv("HOME", originalHome)
+			_ = os.Setenv("HOME", originalHome)
 		}
-		os.Setenv("PATH", originalPath)
+		_ = os.Setenv("PATH", originalPath)
 	}
 }
 
@@ -430,7 +430,10 @@ func assertDiscoveryLocations(t *testing.T, locations []string) {
 
 func assertPlatformSpecificPaths(t *testing.T, locations []string) {
 	t.Helper()
-	homeDir, _ := os.UserHomeDir()
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		homeDir = "."
+	}
 	expectedNpmGlobal := filepath.Join(homeDir, ".npm-global", "bin", "claude")
 	if runtime.GOOS == "windows" {
 		expectedNpmGlobal = filepath.Join(homeDir, ".npm-global", "claude.cmd")

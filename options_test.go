@@ -813,6 +813,7 @@ func (m *mockTransportForOptions) Connect(ctx context.Context) error { return ni
 func (m *mockTransportForOptions) SendMessage(ctx context.Context, msg StreamMessage) error {
 	return nil
 }
+
 func (m *mockTransportForOptions) ReceiveMessages(ctx context.Context) (<-chan Message, <-chan error) {
 	return nil, nil
 }

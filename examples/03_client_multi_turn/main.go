@@ -45,7 +45,6 @@ func main() {
 		fmt.Println("Notice: Each question built on previous responses automatically")
 		return nil
 	})
-
 	if err != nil {
 		log.Fatalf("Conversation failed: %v", err)
 	}

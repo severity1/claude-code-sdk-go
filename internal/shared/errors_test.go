@@ -236,7 +236,7 @@ func assertErrorMessage(t *testing.T, err error, expectedSubstring string) {
 // assertSDKErrorInterface verifies SDKError interface compliance
 func assertSDKErrorInterface(t *testing.T, err SDKError) {
 	t.Helper()
-	var sdkErr SDKError = err
+	sdkErr := err
 	if sdkErr.Error() == "" {
 		t.Error("Expected error message from SDKError interface")
 	}
@@ -246,7 +246,7 @@ func assertSDKErrorInterface(t *testing.T, err SDKError) {
 }
 
 // assertErrorWrapping verifies error wrapping behavior
-func assertErrorWrapping(t *testing.T, wrapper error, cause error) {
+func assertErrorWrapping(t *testing.T, wrapper, cause error) {
 	t.Helper()
 	if !errors.Is(wrapper, cause) {
 		t.Error("Expected error to wrap cause with errors.Is() support")

@@ -28,7 +28,7 @@ func TestQueryBasicExecution(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Query failed: %v", err)
 	}
-	defer iter.Close()
+	defer func() { _ = iter.Close() }()
 
 	messages := collectQueryMessages(t, ctx, iter)
 
@@ -60,7 +60,7 @@ func TestQueryWithOptions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Query with options failed: %v", err)
 	}
-	defer iter.Close()
+	defer func() { _ = iter.Close() }()
 
 	messages := collectQueryMessages(t, ctx, iter)
 
@@ -97,7 +97,7 @@ func TestQueryResponseProcessing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Query failed: %v", err)
 	}
-	defer iter.Close()
+	defer func() { _ = iter.Close() }()
 
 	messages := collectQueryMessages(t, ctx, iter)
 
@@ -147,7 +147,7 @@ func TestQueryMultipleMessageTypes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Query failed: %v", err)
 	}
-	defer iter.Close()
+	defer func() { _ = iter.Close() }()
 
 	var assistantMessages []*AssistantMessage
 	var systemMessages []*SystemMessage
@@ -272,7 +272,7 @@ func TestQueryErrorHandling(t *testing.T) {
 				if err != nil {
 					return err
 				}
-				defer iter.Close()
+				defer func() { _ = iter.Close() }()
 				_, err = iter.Next(ctx)
 				return err
 			},
@@ -312,7 +312,7 @@ func TestQueryContextCancellation(t *testing.T) {
 				if err != nil {
 					return err
 				}
-				defer iter.Close()
+				defer func() { _ = iter.Close() }()
 				_, err = iter.Next(ctx)
 				return err
 			},
@@ -339,7 +339,7 @@ func TestQueryContextCancellation(t *testing.T) {
 				if err != nil {
 					return err
 				}
-				defer iter.Close()
+				defer func() { _ = iter.Close() }()
 				_, err = iter.Next(ctx)
 				return err
 			},
@@ -360,7 +360,7 @@ func TestQueryContextCancellation(t *testing.T) {
 				if err != nil {
 					return err
 				}
-				defer iter.Close()
+				defer func() { _ = iter.Close() }()
 				_, err = iter.Next(ctx)
 				return err
 			},
@@ -485,7 +485,7 @@ func TestQueryPublicAPI(t *testing.T) {
 				t.Fatalf("Unexpected error: %v", err)
 			}
 
-			defer iter.Close()
+			defer func() { _ = iter.Close() }()
 
 			if test.validateResults != nil {
 				test.validateResults(t, iter)
@@ -505,13 +505,10 @@ func TestCreateQueryTransport(t *testing.T) {
 		errorMsg    string
 	}{
 		{
-			name:    "cli_not_found_error",
-			prompt:  "test prompt",
-			options: NewOptions(),
-			setupMock: func(t *testing.T) func() {
-				// Isolate PATH to ensure CLI is not found
-				return setupIsolatedEnvironment(t)
-			},
+			name:        "cli_not_found_error",
+			prompt:      "test prompt",
+			options:     NewOptions(),
+			setupMock:   setupIsolatedEnvironment, // Isolate PATH to ensure CLI is not found
 			expectError: true,
 			errorMsg:    "Claude Code requires Node.js", // Should get Node.js not found error
 		},
@@ -522,29 +519,23 @@ func TestCreateQueryTransport(t *testing.T) {
 				WithSystemPrompt("Test system prompt"),
 				WithModel("claude-sonnet-3-5-20241022"),
 			),
-			setupMock: func(t *testing.T) func() {
-				return setupIsolatedEnvironment(t)
-			},
+			setupMock:   setupIsolatedEnvironment,
 			expectError: true,
 			errorMsg:    "Claude Code requires Node.js",
 		},
 		{
-			name:    "empty_prompt_cli_not_found",
-			prompt:  "",
-			options: NewOptions(),
-			setupMock: func(t *testing.T) func() {
-				return setupIsolatedEnvironment(t)
-			},
+			name:        "empty_prompt_cli_not_found",
+			prompt:      "",
+			options:     NewOptions(),
+			setupMock:   setupIsolatedEnvironment,
 			expectError: true,
 			errorMsg:    "Claude Code requires Node.js",
 		},
 		{
-			name:    "nil_options_cli_not_found",
-			prompt:  "test prompt",
-			options: nil,
-			setupMock: func(t *testing.T) func() {
-				return setupIsolatedEnvironment(t)
-			},
+			name:        "nil_options_cli_not_found",
+			prompt:      "test prompt",
+			options:     nil,
+			setupMock:   setupIsolatedEnvironment,
 			expectError: true,
 			errorMsg:    "Claude Code requires Node.js",
 		},
@@ -583,7 +574,7 @@ func TestCreateQueryTransport(t *testing.T) {
 
 			// Clean up transport if created
 			if transport != nil {
-				transport.Close()
+				_ = transport.Close()
 			}
 		})
 	}
@@ -661,7 +652,7 @@ func TestQuery(t *testing.T) {
 				t.Fatalf("Unexpected error: %v", err)
 			}
 
-			defer iter.Close()
+			defer func() { _ = iter.Close() }()
 
 			if test.validateResults != nil {
 				test.validateResults(t, iter)
@@ -817,7 +808,7 @@ func WithQuerySystemMessage(subtype string, data map[string]any) QueryMockOption
 	}
 }
 
-func WithQueryResultMessage(isError bool, durationMs int, numTurns int) QueryMockOption {
+func WithQueryResultMessage(isError bool, durationMs, numTurns int) QueryMockOption {
 	return func(q *queryMockTransport) {
 		resultMsg := &ResultMessage{
 			Subtype:       "success",
@@ -942,7 +933,7 @@ func assertQueryError(t *testing.T, err error, wantErr bool, msgContains string)
 	}
 }
 
-func isQueryContextError(err error, target error) bool {
+func isQueryContextError(err, target error) bool {
 	if err == target {
 		return true
 	}
@@ -961,19 +952,19 @@ func setupIsolatedEnvironment(t *testing.T) func() {
 
 	if runtime.GOOS == "windows" {
 		originalHome = os.Getenv("USERPROFILE")
-		os.Setenv("USERPROFILE", tempHome)
+		_ = os.Setenv("USERPROFILE", tempHome)
 	} else {
-		os.Setenv("HOME", tempHome)
+		_ = os.Setenv("HOME", tempHome)
 	}
-	os.Setenv("PATH", "/nonexistent/path")
+	_ = os.Setenv("PATH", "/nonexistent/path")
 
 	return func() {
 		if runtime.GOOS == "windows" {
-			os.Setenv("USERPROFILE", originalHome)
+			_ = os.Setenv("USERPROFILE", originalHome)
 		} else {
-			os.Setenv("HOME", originalHome)
+			_ = os.Setenv("HOME", originalHome)
 		}
-		os.Setenv("PATH", originalPath)
+		_ = os.Setenv("PATH", originalPath)
 	}
 }
 
@@ -988,12 +979,10 @@ func TestQueryFunction(t *testing.T) {
 		errorMsg    string
 	}{
 		{
-			name:    "query_cli_not_found",
-			prompt:  "What is 2+2?",
-			options: []Option{},
-			setupMock: func(t *testing.T) func() {
-				return setupIsolatedEnvironment(t)
-			},
+			name:        "query_cli_not_found",
+			prompt:      "What is 2+2?",
+			options:     []Option{},
+			setupMock:   setupIsolatedEnvironment,
 			expectError: true,
 			errorMsg:    "failed to create query transport",
 		},
@@ -1004,19 +993,15 @@ func TestQueryFunction(t *testing.T) {
 				WithSystemPrompt("You are helpful"),
 				WithModel("claude-sonnet-3-5-20241022"),
 			},
-			setupMock: func(t *testing.T) func() {
-				return setupIsolatedEnvironment(t)
-			},
+			setupMock:   setupIsolatedEnvironment,
 			expectError: true,
 			errorMsg:    "failed to create query transport",
 		},
 		{
-			name:    "query_empty_prompt_cli_not_found",
-			prompt:  "",
-			options: []Option{},
-			setupMock: func(t *testing.T) func() {
-				return setupIsolatedEnvironment(t)
-			},
+			name:        "query_empty_prompt_cli_not_found",
+			prompt:      "",
+			options:     []Option{},
+			setupMock:   setupIsolatedEnvironment,
 			expectError: true,
 			errorMsg:    "failed to create query transport",
 		},
@@ -1029,9 +1014,7 @@ func TestQueryFunction(t *testing.T) {
 				WithMaxTurns(3),
 				WithPermissionMode(PermissionModeAcceptEdits),
 			},
-			setupMock: func(t *testing.T) func() {
-				return setupIsolatedEnvironment(t)
-			},
+			setupMock:   setupIsolatedEnvironment,
 			expectError: true,
 			errorMsg:    "failed to create query transport",
 		},
@@ -1068,7 +1051,7 @@ func TestQueryFunction(t *testing.T) {
 
 			// Clean up iterator if created
 			if iter != nil {
-				iter.Close()
+				_ = iter.Close()
 			}
 		})
 	}
