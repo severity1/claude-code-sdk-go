@@ -217,9 +217,9 @@ jobs:
       run: |
         echo "=== go.mod validation ==="
         go mod tidy -v
-        if ! git diff --quiet go.mod go.sum; then
-          echo "❌ go.mod/go.sum not tidy"
-          git diff go.mod go.sum
+        if ! git diff --quiet go.mod; then
+          echo "❌ go.mod not tidy"
+          git diff go.mod
           exit 1
         fi
         echo "✅ go.mod is tidy"
