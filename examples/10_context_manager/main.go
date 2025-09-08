@@ -102,7 +102,6 @@ func demonstrateErrorScenarios(ctx context.Context) error {
 	err := claudecode.WithClient(cancelCtx, func(client claudecode.Client) error {
 		return client.Query(cancelCtx, "This will be cancelled")
 	})
-
 	if err != nil {
 		fmt.Printf("✅ WithClient handled cancellation: %v\n", err)
 	}
@@ -111,7 +110,6 @@ func demonstrateErrorScenarios(ctx context.Context) error {
 	err = claudecode.WithClient(ctx, func(client claudecode.Client) error {
 		return fmt.Errorf("simulated application error")
 	})
-
 	if err != nil {
 		fmt.Printf("✅ WithClient propagated error: %v\n", err)
 		fmt.Println("   Connection was still cleaned up automatically")

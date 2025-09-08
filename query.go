@@ -7,7 +7,6 @@ import (
 	"sync"
 
 	"github.com/severity1/claude-code-sdk-go/internal/cli"
-	"github.com/severity1/claude-code-sdk-go/internal/shared"
 	"github.com/severity1/claude-code-sdk-go/internal/subprocess"
 )
 
@@ -31,7 +30,12 @@ func Query(ctx context.Context, prompt string, opts ...Option) (MessageIterator,
 
 // QueryWithTransport executes a query with a custom transport.
 // The transport parameter is required and must not be nil.
-func QueryWithTransport(ctx context.Context, prompt string, transport Transport, opts ...Option) (MessageIterator, error) {
+func QueryWithTransport(
+	ctx context.Context,
+	prompt string,
+	transport Transport,
+	opts ...Option,
+) (MessageIterator, error) {
 	if transport == nil {
 		return nil, fmt.Errorf("transport is required")
 	}
@@ -41,7 +45,12 @@ func QueryWithTransport(ctx context.Context, prompt string, transport Transport,
 }
 
 // Internal helper functions
-func queryWithTransportAndOptions(ctx context.Context, prompt string, transport Transport, options *Options) (MessageIterator, error) {
+func queryWithTransportAndOptions(
+	ctx context.Context,
+	prompt string,
+	transport Transport,
+	options *Options,
+) (MessageIterator, error) {
 	if transport == nil {
 		return nil, fmt.Errorf("transport is required")
 	}
@@ -157,5 +166,5 @@ func createQueryTransport(prompt string, options *Options) (Transport, error) {
 	}
 
 	// Create subprocess transport with prompt as CLI argument
-	return subprocess.NewWithPrompt(cliPath, (*shared.Options)(options), prompt), nil
+	return subprocess.NewWithPrompt(cliPath, options, prompt), nil
 }

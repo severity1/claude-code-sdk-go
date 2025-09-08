@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 	"sync"
 	"syscall"
@@ -17,6 +18,15 @@ import (
 	"github.com/severity1/claude-code-sdk-go/internal/cli"
 	"github.com/severity1/claude-code-sdk-go/internal/parser"
 	"github.com/severity1/claude-code-sdk-go/internal/shared"
+)
+
+const (
+	// channelBufferSize is the buffer size for message and error channels.
+	channelBufferSize = 10
+	// terminationTimeoutSeconds is the timeout for graceful process termination.
+	terminationTimeoutSeconds = 5
+	// windowsOS is the GOOS value for Windows platform.
+	windowsOS = "windows"
 )
 
 // Transport implements the Transport interface using subprocess communication.
@@ -148,8 +158,8 @@ func (t *Transport) Connect(ctx context.Context) error {
 	t.ctx, t.cancel = context.WithCancel(ctx)
 
 	// Initialize channels
-	t.msgChan = make(chan shared.Message, 10)
-	t.errChan = make(chan error, 10)
+	t.msgChan = make(chan shared.Message, channelBufferSize)
+	t.errChan = make(chan error, channelBufferSize)
 
 	// Start I/O handling goroutines
 	t.wg.Add(1)
@@ -199,7 +209,7 @@ func (t *Transport) SendMessage(ctx context.Context, message shared.StreamMessag
 
 	// For one-shot mode, close stdin after sending the message
 	if t.closeStdin {
-		t.stdin.Close()
+		_ = t.stdin.Close()
 		t.stdin = nil
 	}
 
@@ -232,7 +242,12 @@ func (t *Transport) Interrupt(ctx context.Context) error {
 		return fmt.Errorf("process not running")
 	}
 
-	// Send interrupt signal (platform-specific)
+	// Windows doesn't support os.Interrupt signal
+	if runtime.GOOS == windowsOS {
+		return fmt.Errorf("interrupt not supported by windows")
+	}
+
+	// Send interrupt signal (Unix/Linux/macOS)
 	return t.cmd.Process.Signal(os.Interrupt)
 }
 
@@ -254,7 +269,7 @@ func (t *Transport) Close() error {
 
 	// Close stdin if open
 	if t.stdin != nil {
-		t.stdin.Close()
+		_ = t.stdin.Close()
 		t.stdin = nil
 	}
 
@@ -268,7 +283,7 @@ func (t *Transport) Close() error {
 	select {
 	case <-done:
 		// Goroutines finished gracefully
-	case <-time.After(5 * time.Second):
+	case <-time.After(terminationTimeoutSeconds * time.Second):
 		// Timeout: proceed with cleanup anyway
 		// Goroutines should terminate when process is killed
 	}
@@ -345,14 +360,16 @@ func (t *Transport) terminateProcess() error {
 	// Send SIGTERM
 	if err := t.cmd.Process.Signal(syscall.SIGTERM); err != nil {
 		// If SIGTERM fails, try SIGKILL immediately
-		t.cmd.Process.Kill()
+		_ = t.cmd.Process.Kill()
 		return nil // Don't return error for expected termination
 	}
 
 	// Wait exactly 5 seconds
 	done := make(chan error, 1)
+	// Capture cmd while we know it's valid to avoid data race
+	cmd := t.cmd
 	go func() {
-		done <- t.cmd.Wait()
+		done <- cmd.Wait()
 	}()
 
 	select {
@@ -365,7 +382,7 @@ func (t *Transport) terminateProcess() error {
 			}
 		}
 		return err
-	case <-time.After(5 * time.Second):
+	case <-time.After(terminationTimeoutSeconds * time.Second):
 		// Force kill after 5 seconds
 		if killErr := t.cmd.Process.Kill(); killErr != nil {
 			return killErr
@@ -374,7 +391,7 @@ func (t *Transport) terminateProcess() error {
 		<-done
 		return nil
 	case <-t.ctx.Done():
-		// Context cancelled - force kill immediately
+		// Context canceled - force kill immediately
 		if killErr := t.cmd.Process.Kill(); killErr != nil {
 			return killErr
 		}
@@ -388,14 +405,14 @@ func (t *Transport) terminateProcess() error {
 // cleanup cleans up all resources
 func (t *Transport) cleanup() {
 	if t.stdout != nil {
-		t.stdout.Close()
+		_ = t.stdout.Close()
 		t.stdout = nil
 	}
 
 	if t.stderr != nil {
 		// Graceful cleanup matching Python SDK pattern
 		// Python: except Exception: pass
-		t.stderr.Close()
+		_ = t.stderr.Close()
 		_ = os.Remove(t.stderr.Name()) // Ignore cleanup errors
 		t.stderr = nil
 	}

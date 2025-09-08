@@ -1,6 +1,6 @@
 module 08_client_advanced
 
-go 1.21
+go 1.18
 
 require github.com/severity1/claude-code-sdk-go v0.0.0
 

@@ -1,0 +1,49 @@
+codecov:
+  notify:
+    require_ci_to_pass: true
+    after_n_builds: 1
+
+coverage:
+  precision: 2
+  round: down
+  range: "70...95"
+
+  status:
+    project:
+      default:
+        target: 80%
+        threshold: 1%
+        base: auto
+    
+    patch:
+      default:
+        target: 70%
+        threshold: 5%
+
+  ignore:
+    - "examples/**/*"
+    - "testdata/**/*"
+    - "*_test.go"
+    - "**/*_test.go"
+    - "test/**/*"
+
+comment:
+  layout: "reach,diff,flags,tree"
+  behavior: default
+  require_changes: false
+  after_n_builds: 1
+
+flag_management:
+  default_rules:
+    carryforward: true
+    statuses:
+      - type: project
+        target: 80%
+      - type: patch
+        target: 70%
+
+flags:
+  unittests:
+    paths:
+      - "*.go"
+    carryforward: true

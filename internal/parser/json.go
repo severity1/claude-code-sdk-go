@@ -298,67 +298,79 @@ func (p *Parser) parseContentBlock(blockData any) (shared.ContentBlock, error) {
 
 	switch blockType {
 	case shared.ContentBlockTypeText:
-		text, ok := data["text"].(string)
-		if !ok {
-			return nil, shared.NewMessageParseError("text block missing text field", data)
-		}
-		return &shared.TextBlock{Text: text}, nil
-
+		return p.parseTextBlock(data)
 	case shared.ContentBlockTypeThinking:
-		thinking, ok := data["thinking"].(string)
-		if !ok {
-			return nil, shared.NewMessageParseError("thinking block missing thinking field", data)
-		}
-		signature, _ := data["signature"].(string) // Optional field
-		return &shared.ThinkingBlock{
-			Thinking:  thinking,
-			Signature: signature,
-		}, nil
-
+		return p.parseThinkingBlock(data)
 	case shared.ContentBlockTypeToolUse:
-		id, ok := data["id"].(string)
-		if !ok {
-			return nil, shared.NewMessageParseError("tool_use block missing id field", data)
-		}
-		name, ok := data["name"].(string)
-		if !ok {
-			return nil, shared.NewMessageParseError("tool_use block missing name field", data)
-		}
-		input, _ := data["input"].(map[string]any)
-		if input == nil {
-			input = make(map[string]any)
-		}
-		return &shared.ToolUseBlock{
-			ToolUseID: id,
-			Name:      name,
-			Input:     input,
-		}, nil
-
+		return p.parseToolUseBlock(data)
 	case shared.ContentBlockTypeToolResult:
-		toolUseID, ok := data["tool_use_id"].(string)
-		if !ok {
-			return nil, shared.NewMessageParseError("tool_result block missing tool_use_id field", data)
-		}
-
-		var isError *bool
-		if isErrorValue, exists := data["is_error"]; exists {
-			if b, ok := isErrorValue.(bool); ok {
-				isError = &b
-			}
-		}
-
-		return &shared.ToolResultBlock{
-			ToolUseID: toolUseID,
-			Content:   data["content"],
-			IsError:   isError,
-		}, nil
-
+		return p.parseToolResultBlock(data)
 	default:
 		return nil, shared.NewMessageParseError(
 			fmt.Sprintf("unknown content block type: %s", blockType),
 			data,
 		)
 	}
+}
+
+func (p *Parser) parseTextBlock(data map[string]any) (shared.ContentBlock, error) {
+	text, ok := data["text"].(string)
+	if !ok {
+		return nil, shared.NewMessageParseError("text block missing text field", data)
+	}
+	return &shared.TextBlock{Text: text}, nil
+}
+
+func (p *Parser) parseThinkingBlock(data map[string]any) (shared.ContentBlock, error) {
+	thinking, ok := data["thinking"].(string)
+	if !ok {
+		return nil, shared.NewMessageParseError("thinking block missing thinking field", data)
+	}
+	signature, _ := data["signature"].(string) //nolint:errcheck // Optional field - ignoring type assertion result
+	return &shared.ThinkingBlock{
+		Thinking:  thinking,
+		Signature: signature,
+	}, nil
+}
+
+func (p *Parser) parseToolUseBlock(data map[string]any) (shared.ContentBlock, error) {
+	id, ok := data["id"].(string)
+	if !ok {
+		return nil, shared.NewMessageParseError("tool_use block missing id field", data)
+	}
+	name, ok := data["name"].(string)
+	if !ok {
+		return nil, shared.NewMessageParseError("tool_use block missing name field", data)
+	}
+	input, _ := data["input"].(map[string]any) //nolint:errcheck // Optional field - ignoring type assertion result
+	if input == nil {
+		input = make(map[string]any)
+	}
+	return &shared.ToolUseBlock{
+		ToolUseID: id,
+		Name:      name,
+		Input:     input,
+	}, nil
+}
+
+func (p *Parser) parseToolResultBlock(data map[string]any) (shared.ContentBlock, error) {
+	toolUseID, ok := data["tool_use_id"].(string)
+	if !ok {
+		return nil, shared.NewMessageParseError("tool_result block missing tool_use_id field", data)
+	}
+
+	var isError *bool
+	if isErrorValue, exists := data["is_error"]; exists {
+		if b, ok := isErrorValue.(bool); ok {
+			isError = &b
+		}
+	}
+
+	return &shared.ToolResultBlock{
+		ToolUseID: toolUseID,
+		Content:   data["content"],
+		IsError:   isError,
+	}, nil
 }
 
 // ParseMessages is a convenience function to parse multiple JSON lines.

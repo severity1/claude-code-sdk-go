@@ -1,0 +1,131 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.23'
+        cache: true
+
+    - name: Verify tag format
+      run: |
+        if [[ ! "${GITHUB_REF#refs/tags/}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          echo "Invalid tag format: ${GITHUB_REF#refs/tags/}"
+          echo "Expected format: v1.2.3"
+          exit 1
+        fi
+
+    - name: Verify dependencies
+      run: go mod verify
+
+    - name: Run tests
+      run: go test -race ./...
+
+    - name: Run golangci-lint
+      uses: golangci/golangci-lint-action@v3
+      with:
+        version: latest
+        args: --timeout=5m
+
+    - name: Install GoReleaser
+      uses: goreleaser/goreleaser-action@v5
+      with:
+        distribution: goreleaser
+        version: latest
+        install-only: true
+
+    - name: Run GoReleaser
+      run: goreleaser release --clean
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Update pkg.go.dev
+      run: |
+        TAG=${GITHUB_REF#refs/tags/}
+        echo "Triggering pkg.go.dev update for version $TAG"
+        curl -X POST "https://proxy.golang.org/github.com/severity1/claude-code-sdk-go/@v/$TAG.info" || true
+        curl -X POST "https://sum.golang.org/lookup/github.com/severity1/claude-code-sdk-go@$TAG" || true
+
+    - name: Validate release for SDK consumers
+      run: |
+        TAG=${GITHUB_REF#refs/tags/}
+        echo "=== SDK Release Validation ==="
+        
+        # Test that the tag can be fetched as a Go module
+        mkdir -p /tmp/release-test
+        cd /tmp/release-test
+        go mod init release-test
+        
+        echo "Testing module fetch with version $TAG"
+        go get github.com/severity1/claude-code-sdk-go@$TAG || true
+        
+        # Create a simple consumer test
+        cat > consumer_test.go << 'EOF'
+        package main
+        
+        import (
+            "context"
+            "fmt"
+            claudecode "github.com/severity1/claude-code-sdk-go"
+        )
+        
+        func main() {
+            ctx := context.Background()
+            opts := claudecode.NewOptions()
+            fmt.Printf("✅ SDK %s consumer test passed\n", "$TAG")
+            
+            // Test basic API surface
+            _ = claudecode.WithAllowedTools("Read", "Write")
+            _, _ = claudecode.Query(ctx, "test", opts)
+            fmt.Println("✅ API surface validation passed")
+        }
+        EOF
+        
+        echo "Building consumer test..."
+        go mod tidy
+        go build -v consumer_test.go
+        echo "✅ SDK release is consumable"
+
+  notify:
+    name: Notify
+    runs-on: ubuntu-latest
+    needs: release
+    if: always()
+    
+    steps:
+    - name: Get tag name
+      id: tag
+      run: echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+    - name: Notify success
+      if: needs.release.result == 'success'
+      run: |
+        echo "✅ Successfully released ${{ steps.tag.outputs.tag }}"
+        echo "📦 Package available at: https://pkg.go.dev/github.com/severity1/claude-code-sdk-go@${{ steps.tag.outputs.tag }}"
+        echo "🔗 GitHub release: https://github.com/severity1/claude-code-sdk-go/releases/tag/${{ steps.tag.outputs.tag }}"
+
+    - name: Notify failure
+      if: needs.release.result == 'failure'
+      run: |
+        echo "❌ Release failed for ${{ steps.tag.outputs.tag }}"
+        echo "Please check the workflow logs and try again."
+        exit 1

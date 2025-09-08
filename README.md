@@ -4,7 +4,18 @@
   <img src="gopher.png" alt="Go Gopher" width="200"/>
 </div>
 
-Production-ready Go SDK for Claude Code CLI integration. Build applications that leverage Claude's code understanding, file operations, and external tool integrations through a clean, idiomatic Go API.
+<div align="center">
+
+[![CI](https://github.com/severity1/claude-code-sdk-go/actions/workflows/ci.yml/badge.svg)](https://github.com/severity1/claude-code-sdk-go/actions/workflows/ci.yml)
+[![Go Reference](https://pkg.go.dev/badge/github.com/severity1/claude-code-sdk-go.svg)](https://pkg.go.dev/github.com/severity1/claude-code-sdk-go)
+[![Go Report Card](https://goreportcard.com/badge/github.com/severity1/claude-code-sdk-go)](https://goreportcard.com/report/github.com/severity1/claude-code-sdk-go)
+[![codecov](https://codecov.io/gh/severity1/claude-code-sdk-go/branch/main/graph/badge.svg)](https://codecov.io/gh/severity1/claude-code-sdk-go)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/severity1/claude-code-sdk-go/badge)](https://scorecard.dev/viewer/?uri=github.com/severity1/claude-code-sdk-go)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+</div>
+
+Unofficial Go SDK for Claude Code CLI integration. Build applications that leverage Claude's code understanding, file operations, and external tool integrations through a clean, idiomatic Go API.
 
 **🚀 Two powerful APIs for different use cases:**
 - **Query API**: One-shot operations, automation, CI/CD integration  

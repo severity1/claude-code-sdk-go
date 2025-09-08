@@ -2,13 +2,22 @@ package shared
 
 import "fmt"
 
+const (
+	// DefaultMaxThinkingTokens is the default maximum number of thinking tokens.
+	DefaultMaxThinkingTokens = 8000
+)
+
 // PermissionMode represents the different permission handling modes.
 type PermissionMode string
 
 const (
-	PermissionModeDefault           PermissionMode = "default"
-	PermissionModeAcceptEdits       PermissionMode = "acceptEdits"
-	PermissionModePlan              PermissionMode = "plan"
+	// PermissionModeDefault is the standard permission handling mode.
+	PermissionModeDefault PermissionMode = "default"
+	// PermissionModeAcceptEdits automatically accepts all edit permissions.
+	PermissionModeAcceptEdits PermissionMode = "acceptEdits"
+	// PermissionModePlan enables plan mode for task execution.
+	PermissionModePlan PermissionMode = "plan"
+	// PermissionModeBypassPermissions bypasses all permission checks.
 	PermissionModeBypassPermissions PermissionMode = "bypassPermissions"
 )
 
@@ -52,9 +61,12 @@ type Options struct {
 type McpServerType string
 
 const (
+	// McpServerTypeStdio represents a stdio-based MCP server.
 	McpServerTypeStdio McpServerType = "stdio"
-	McpServerTypeSSE   McpServerType = "sse"
-	McpServerTypeHTTP  McpServerType = "http"
+	// McpServerTypeSSE represents a Server-Sent Events MCP server.
+	McpServerTypeSSE McpServerType = "sse"
+	// McpServerTypeHTTP represents an HTTP-based MCP server.
+	McpServerTypeHTTP McpServerType = "http"
 )
 
 // McpServerConfig represents MCP server configuration.
@@ -70,6 +82,7 @@ type McpStdioServerConfig struct {
 	Env     map[string]string `json:"env,omitempty"`
 }
 
+// GetType returns the server type for McpStdioServerConfig.
 func (c *McpStdioServerConfig) GetType() McpServerType {
 	return McpServerTypeStdio
 }
@@ -81,6 +94,7 @@ type McpSSEServerConfig struct {
 	Headers map[string]string `json:"headers,omitempty"`
 }
 
+// GetType returns the server type for McpSSEServerConfig.
 func (c *McpSSEServerConfig) GetType() McpServerType {
 	return McpServerTypeSSE
 }
@@ -92,6 +106,7 @@ type McpHTTPServerConfig struct {
 	Headers map[string]string `json:"headers,omitempty"`
 }
 
+// GetType returns the server type for McpHTTPServerConfig.
 func (c *McpHTTPServerConfig) GetType() McpServerType {
 	return McpServerTypeHTTP
 }
@@ -128,7 +143,7 @@ func NewOptions() *Options {
 	return &Options{
 		AllowedTools:      []string{},
 		DisallowedTools:   []string{},
-		MaxThinkingTokens: 8000,
+		MaxThinkingTokens: DefaultMaxThinkingTokens,
 		AddDirs:           []string{},
 		McpServers:        make(map[string]McpServerConfig),
 		ExtraArgs:         make(map[string]*string),

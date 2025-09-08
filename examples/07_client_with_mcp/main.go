@@ -46,7 +46,6 @@ func main() {
 		"mcp__aws-api-mcp__call_aws",
 		"mcp__aws-api-mcp__suggest_aws_commands"),
 		claudecode.WithSystemPrompt("You are an AWS security expert. Analyze S3 buckets for security risks."))
-
 	if err != nil {
 		log.Fatalf("S3 analysis failed: %v", err)
 	}

@@ -52,7 +52,6 @@ func main() {
 			}
 		}
 	})
-
 	if err != nil {
 		log.Fatalf("Streaming failed: %v", err)
 	}

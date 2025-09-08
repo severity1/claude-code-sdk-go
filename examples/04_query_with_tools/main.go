@@ -125,7 +125,7 @@ func queryWithTools(ctx context.Context, question string, allowedTools []string)
 }
 
 func setupFiles() error {
-	if err := os.MkdirAll("demo", 0755); err != nil {
+	if err := os.MkdirAll("demo", 0o755); err != nil {
 		return err
 	}
 
@@ -162,7 +162,7 @@ Simple HTTP server with configuration management.
 	}
 
 	for path, content := range files {
-		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 			return err
 		}
 	}

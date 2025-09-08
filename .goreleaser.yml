@@ -1,0 +1,109 @@
+version: 2
+
+project_name: claude-code-sdk-go
+
+before:
+  hooks:
+    - go mod tidy
+    - go generate ./...
+
+# This is a Go library/SDK - no binary builds needed
+builds:
+  - skip: true
+
+# No archives needed for a library
+archives:
+  - skip: true
+
+# No checksums needed without binaries
+checksum:
+  disable: true
+
+snapshot:
+  name_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^chore:'
+      - '^ci:'
+      - Merge pull request
+      - Merge branch
+      - go mod tidy
+  groups:
+    - title: Features
+      regexp: "^.*feat[(\\w)]*:+.*$"
+      order: 0
+    - title: 'Bug fixes'
+      regexp: "^.*fix[(\\w)]*:+.*$"
+      order: 1
+    - title: 'Performance'
+      regexp: "^.*perf[(\\w)]*:+.*$"
+      order: 2
+    - title: Others
+      order: 999
+
+release:
+  github:
+    owner: severity1
+    name: claude-code-sdk-go
+  discussion_category_name: General
+  prerelease: auto
+  mode: replace
+  header: |
+    ## Claude Code SDK for Go {{ .Tag }}
+
+    Go library for Claude Code CLI integration with Query and Client APIs.
+
+    ### Installation
+
+    ```bash
+    go get github.com/severity1/claude-code-sdk-go@{{ .Tag }}
+    ```
+
+    ### Usage
+
+    ```go
+    import "github.com/severity1/claude-code-sdk-go"
+
+    // Query API (one-shot)
+    messages, err := claudecode.Query(ctx, "Hello!")
+    
+    // Client API (streaming)
+    err := claudecode.WithClient(ctx, func(client claudecode.Client) error {
+        return client.Query(ctx, "Hello!")
+    })
+    ```
+
+    ### Documentation
+
+    📦 **[View on pkg.go.dev](https://pkg.go.dev/github.com/severity1/claude-code-sdk-go@{{ .Tag }})**
+
+  footer: |
+    ## SDK Release Notes
+
+    This Go SDK provides 100% Python SDK parity with Go-native patterns.
+
+    **Full Changelog**: https://github.com/severity1/claude-code-sdk-go/compare/{{ .PreviousTag }}...{{ .Tag }}
+
+    ### Resources
+    - 📚 [Documentation](https://pkg.go.dev/github.com/severity1/claude-code-sdk-go@{{ .Tag }})
+    - 💻 [Examples](https://github.com/severity1/claude-code-sdk-go/tree/{{ .Tag }}/examples)
+    - 🐛 [Report Issues](https://github.com/severity1/claude-code-sdk-go/issues)
+
+  extra_files:
+    - glob: ./examples/**/*
+      name_template: "examples"
+    - glob: ./README.md
+    - glob: ./LICENSE
+
+announce:
+  skip: true
+
+# No Docker - this is a library
+dockers:
+  - skip: true

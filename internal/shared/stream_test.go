@@ -1,6 +1,7 @@
 package shared
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"testing"
@@ -143,5 +144,5 @@ func deepEqual(a, b any) bool {
 	if aErr != nil || bErr != nil {
 		return false
 	}
-	return string(aJSON) == string(bJSON)
+	return bytes.Equal(aJSON, bJSON)
 }

@@ -199,10 +199,8 @@ func TestClientErrorHandling(t *testing.T) {
 			errorContains: "send failed",
 		},
 		{
-			name: "successful_operation",
-			setupTransport: func() *clientMockTransport {
-				return newClientMockTransport()
-			},
+			name:           "successful_operation",
+			setupTransport: newClientMockTransport,
 			operation: func(c Client) error {
 				connectClientSafely(t, ctx, c)
 				return c.Query(ctx, "test")
@@ -1022,6 +1020,14 @@ type clientMockTransport struct {
 func (c *clientMockTransport) Connect(ctx context.Context) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
+	// Check context cancellation first
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+
 	if c.connectError != nil {
 		return c.connectError
 	}
@@ -1038,6 +1044,14 @@ func (c *clientMockTransport) Connect(ctx context.Context) error {
 func (c *clientMockTransport) SendMessage(ctx context.Context, message StreamMessage) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
+	// Check context cancellation first
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+
 	if c.sendError != nil {
 		return c.sendError
 	}
@@ -1048,7 +1062,7 @@ func (c *clientMockTransport) SendMessage(ctx context.Context, message StreamMes
 	return nil
 }
 
-func (c *clientMockTransport) ReceiveMessages(ctx context.Context) (<-chan Message, <-chan error) {
+func (c *clientMockTransport) ReceiveMessages(ctx context.Context) (msgChan <-chan Message, errChan <-chan error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -1219,9 +1233,9 @@ func setupClientTestContext(t *testing.T, timeout time.Duration) (context.Contex
 	return context.WithTimeout(context.Background(), timeout)
 }
 
-func setupClientForTest(t *testing.T, transport Transport, options ...Option) Client {
+func setupClientForTest(t *testing.T, transport Transport) Client {
 	t.Helper()
-	return NewClientWithTransport(transport, options...)
+	return NewClientWithTransport(transport)
 }
 
 func connectClientSafely(t *testing.T, ctx context.Context, client Client) {
@@ -1541,7 +1555,7 @@ func TestClientContextManager(t *testing.T) {
 	}{
 		{
 			name:           "automatic_resource_management",
-			setupTransport: func() *clientMockTransport { return newClientMockTransport() },
+			setupTransport: newClientMockTransport,
 			operation: func(c Client) error {
 				return c.Query(context.Background(), "test")
 			},
@@ -1565,7 +1579,7 @@ func TestClientContextManager(t *testing.T) {
 		},
 		{
 			name:           "context_cancellation_with_cleanup",
-			setupTransport: func() *clientMockTransport { return newClientMockTransport() },
+			setupTransport: newClientMockTransport,
 			operation: func(c Client) error {
 				ctx, cancel := context.WithCancel(context.Background())
 				cancel() // Cancel immediately
@@ -1635,7 +1649,6 @@ func TestWithClientConcurrentUsage(t *testing.T) {
 				err := WithClientTransport(ctx, transport, func(client Client) error {
 					return client.Query(ctx, fmt.Sprintf("concurrent query %d-%d", id, j))
 				})
-
 				if err != nil {
 					errors <- fmt.Errorf("goroutine %d operation %d: %w", id, j, err)
 				}
@@ -1685,7 +1698,7 @@ func TestWithClientContextCancellation(t *testing.T) {
 		errorMsg     string
 	}{
 		{
-			name: "already_cancelled_context",
+			name: "already_canceled_context",
 			setupContext: func() (context.Context, context.CancelFunc) {
 				ctx, cancel := context.WithCancel(context.Background())
 				cancel() // Cancel immediately
@@ -1697,7 +1710,9 @@ func TestWithClientContextCancellation(t *testing.T) {
 		{
 			name: "timeout_context",
 			setupContext: func() (context.Context, context.CancelFunc) {
-				return context.WithTimeout(context.Background(), 1*time.Nanosecond)
+				// Create a context that has already timed out deterministically
+				ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Hour))
+				return ctx, cancel
 			},
 			wantErr:  true,
 			errorMsg: "context deadline exceeded",

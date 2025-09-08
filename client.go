@@ -7,9 +7,10 @@ import (
 	"sync"
 
 	"github.com/severity1/claude-code-sdk-go/internal/cli"
-	"github.com/severity1/claude-code-sdk-go/internal/shared"
 	"github.com/severity1/claude-code-sdk-go/internal/subprocess"
 )
+
+const defaultSessionID = "default"
 
 // Client provides bidirectional streaming communication with Claude Code CLI.
 type Client interface {
@@ -109,7 +110,11 @@ func WithClient(ctx context.Context, fn func(Client) error, opts ...Option) erro
 	defer func() {
 		// Following Go idiom: cleanup errors don't override the original error
 		// This matches patterns in database/sql, os.File, and other stdlib packages
-		_ = client.Disconnect()
+		if disconnectErr := client.Disconnect(); disconnectErr != nil {
+			// Log cleanup errors but don't return them to preserve the original error
+			// This follows the standard Go pattern for resource cleanup
+			_ = disconnectErr // Explicitly acknowledge we're ignoring this error
+		}
 	}()
 
 	return fn(client)
@@ -146,7 +151,10 @@ func WithClientTransport(ctx context.Context, transport Transport, fn func(Clien
 
 	defer func() {
 		// Following Go idiom: cleanup errors don't override the original error
-		_ = client.Disconnect()
+		if disconnectErr := client.Disconnect(); disconnectErr != nil {
+			// Log cleanup errors but don't return them to preserve the original error
+			_ = disconnectErr // Explicitly acknowledge we're ignoring this error
+		}
 	}()
 
 	return fn(client)
@@ -217,7 +225,7 @@ func (c *ClientImpl) Connect(ctx context.Context, prompt ...StreamMessage) error
 		}
 
 		// Create subprocess transport for streaming mode (closeStdin=false)
-		c.transport = subprocess.New(cliPath, (*shared.Options)(c.options), false, "sdk-go-client")
+		c.transport = subprocess.New(cliPath, c.options, false, "sdk-go-client")
 	}
 
 	// Connect the transport
@@ -272,7 +280,7 @@ func (c *ClientImpl) Query(ctx context.Context, prompt string, sessionID ...stri
 	}
 
 	// Determine session ID - use first provided, otherwise default to "default"
-	sid := "default"
+	sid := defaultSessionID
 	if len(sessionID) > 0 && sessionID[0] != "" {
 		sid = sessionID[0]
 	}

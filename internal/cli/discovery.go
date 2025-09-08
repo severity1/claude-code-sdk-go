@@ -12,6 +12,8 @@ import (
 	"github.com/severity1/claude-code-sdk-go/internal/shared"
 )
 
+const windowsOS = "windows"
+
 // DiscoveryPaths defines the standard search paths for Claude CLI.
 var DiscoveryPaths = []string{
 	// Will be populated with dynamic paths in FindCLI()
@@ -30,8 +32,8 @@ func FindCLI() (string, error) {
 	for _, location := range locations {
 		if info, err := os.Stat(location); err == nil && !info.IsDir() {
 			// Verify it's executable (Unix-like systems)
-			if runtime.GOOS != "windows" {
-				if info.Mode()&0111 == 0 {
+			if runtime.GOOS != windowsOS {
+				if info.Mode()&0o111 == 0 {
 					continue // Not executable
 				}
 			}
@@ -59,12 +61,16 @@ func FindCLI() (string, error) {
 
 // getCommonCLILocations returns platform-specific CLI search locations
 func getCommonCLILocations() []string {
-	homeDir, _ := os.UserHomeDir()
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		// Fallback to current directory if home directory can't be determined
+		homeDir = "."
+	}
 
 	var locations []string
 
 	switch runtime.GOOS {
-	case "windows":
+	case windowsOS:
 		locations = []string{
 			filepath.Join(homeDir, "AppData", "Roaming", "npm", "claude.cmd"),
 			filepath.Join("C:", "Program Files", "nodejs", "claude.cmd"),
@@ -115,10 +121,7 @@ func BuildCommandWithPrompt(cliPath string, options *shared.Options, prompt stri
 	cmd := []string{cliPath}
 
 	// Base arguments - always include these
-	cmd = append(cmd, "--output-format", "stream-json", "--verbose")
-
-	// One-shot mode with prompt as command argument
-	cmd = append(cmd, "--print", prompt)
+	cmd = append(cmd, "--output-format", "stream-json", "--verbose", "--print", prompt)
 
 	// Add all configuration options as CLI flags
 	if options != nil {
@@ -130,15 +133,27 @@ func BuildCommandWithPrompt(cliPath string, options *shared.Options, prompt stri
 
 // addOptionsToCommand adds all Options fields as CLI flags
 func addOptionsToCommand(cmd []string, options *shared.Options) []string {
-	// Tool Control
+	cmd = addToolControlFlags(cmd, options)
+	cmd = addModelAndPromptFlags(cmd, options)
+	cmd = addPermissionFlags(cmd, options)
+	cmd = addSessionFlags(cmd, options)
+	cmd = addFileSystemFlags(cmd, options)
+	cmd = addMCPFlags(cmd, options)
+	cmd = addExtraFlags(cmd, options)
+	return cmd
+}
+
+func addToolControlFlags(cmd []string, options *shared.Options) []string {
 	if len(options.AllowedTools) > 0 {
 		cmd = append(cmd, "--allowed-tools", strings.Join(options.AllowedTools, ","))
 	}
 	if len(options.DisallowedTools) > 0 {
 		cmd = append(cmd, "--disallowed-tools", strings.Join(options.DisallowedTools, ","))
 	}
+	return cmd
+}
 
-	// System Prompts & Model
+func addModelAndPromptFlags(cmd []string, options *shared.Options) []string {
 	if options.SystemPrompt != nil {
 		cmd = append(cmd, "--system-prompt", *options.SystemPrompt)
 	}
@@ -152,16 +167,20 @@ func addOptionsToCommand(cmd []string, options *shared.Options) []string {
 	// if options.MaxThinkingTokens > 0 {
 	//	cmd = append(cmd, "--max-thinking-tokens", fmt.Sprintf("%d", options.MaxThinkingTokens))
 	// }
+	return cmd
+}
 
-	// Permission & Safety System
+func addPermissionFlags(cmd []string, options *shared.Options) []string {
 	if options.PermissionMode != nil {
 		cmd = append(cmd, "--permission-mode", string(*options.PermissionMode))
 	}
 	if options.PermissionPromptToolName != nil {
 		cmd = append(cmd, "--permission-prompt-tool", *options.PermissionPromptToolName)
 	}
+	return cmd
+}
 
-	// Session & State Management
+func addSessionFlags(cmd []string, options *shared.Options) []string {
 	if options.ContinueConversation {
 		cmd = append(cmd, "--continue")
 	}
@@ -174,22 +193,26 @@ func addOptionsToCommand(cmd []string, options *shared.Options) []string {
 	if options.Settings != nil {
 		cmd = append(cmd, "--settings", *options.Settings)
 	}
+	return cmd
+}
 
-	// File System & Context
+func addFileSystemFlags(cmd []string, options *shared.Options) []string {
 	if options.Cwd != nil {
 		cmd = append(cmd, "--cwd", *options.Cwd)
 	}
 	for _, dir := range options.AddDirs {
 		cmd = append(cmd, "--add-dir", dir)
 	}
+	return cmd
+}
 
-	// MCP Integration
-	if len(options.McpServers) > 0 {
-		// TODO: Implement MCP configuration file generation
-		// For now, skip MCP servers - this will be added in a subsequent commit
-	}
+func addMCPFlags(cmd []string, options *shared.Options) []string {
+	// TODO: Implement MCP configuration file generation when len(options.McpServers) > 0
+	// For now, skip MCP servers - this will be added in a subsequent commit
+	return cmd
+}
 
-	// Extensibility - handle ExtraArgs for arbitrary flags
+func addExtraFlags(cmd []string, options *shared.Options) []string {
 	for flag, value := range options.ExtraArgs {
 		if value == nil {
 			// Boolean flag
@@ -199,7 +222,6 @@ func addOptionsToCommand(cmd []string, options *shared.Options) []string {
 			cmd = append(cmd, "--"+flag, *value)
 		}
 	}
-
 	return cmd
 }
 

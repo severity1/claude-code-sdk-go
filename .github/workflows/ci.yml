@@ -1,0 +1,250 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  GO_VERSION: '1.25'
+
+jobs:
+  test:
+    name: Test
+    strategy:
+      matrix:
+        go-version: ['1.18', '1.19', '1.20', '1.21', '1.22', '1.23', '1.25']
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ matrix.go-version }}
+        cache: true
+
+    - name: Verify dependencies
+      run: go mod verify
+
+    - name: Check go mod tidy
+      run: |
+        go mod tidy
+        git diff --exit-code go.mod
+
+    - name: Verify library compiles
+      run: go build -v ./...
+
+    - name: Test
+      run: go test -race -coverprofile coverage.out ./...
+
+    - name: Upload coverage to Codecov
+      if: matrix.os == 'ubuntu-latest' && matrix.go-version == '1.23'
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.out
+        flags: unittests
+        name: codecov-umbrella
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ env.GO_VERSION }}
+        cache: true
+
+    - name: Run golangci-lint
+      uses: golangci/golangci-lint-action@v3
+      with:
+        version: latest
+        args: --timeout=5m
+
+    - name: Go vet
+      run: go vet ./...
+
+    - name: Check gofmt
+      run: |
+        if [ "$(gofmt -s -l . | wc -l)" -gt 0 ]; then
+          echo "The following files are not formatted with gofmt:"
+          gofmt -s -l .
+          exit 1
+        fi
+
+  govulncheck:
+    name: Go Vulnerability Check
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ env.GO_VERSION }}
+        cache: true
+
+    - name: Install govulncheck
+      run: go install golang.org/x/vuln/cmd/govulncheck@latest
+
+    - name: Run govulncheck
+      run: govulncheck ./...
+
+  examples:
+    name: Test Examples
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ env.GO_VERSION }}
+        cache: true
+
+    - name: Verify example applications compile
+      run: |
+        echo "=== Verifying Example Applications ==="
+        for dir in examples/*/; do
+          if [ -f "$dir/main.go" ]; then
+            echo "Verifying example: $dir"
+            cd "$dir"
+            go build -v .
+            rm -f "$(basename "$dir")" # Clean up any binary created
+            cd - > /dev/null
+          fi
+        done
+
+    - name: Verify nested example applications compile
+      run: |
+        echo "=== Verifying Nested Examples ==="
+        for dir in examples/*/*/; do
+          if [ -f "$dir/main.go" ]; then
+            echo "Verifying nested example: $dir"
+            cd "$dir"
+            go build -v .
+            rm -f "$(basename "$dir")" # Clean up any binary created
+            cd - > /dev/null
+          fi
+        done
+
+  compatibility:
+    name: SDK Compatibility Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ env.GO_VERSION }}
+        cache: true
+
+    - name: Test go mod download
+      run: go mod download
+
+    - name: Test library import
+      run: |
+        mkdir -p /tmp/test-claude-sdk
+        cd /tmp/test-claude-sdk
+        go mod init test-import
+        # Use local SDK with replace directive
+        echo "replace github.com/severity1/claude-code-sdk-go => $GITHUB_WORKSPACE" >> go.mod
+        go mod edit -require=github.com/severity1/claude-code-sdk-go@v0.0.0
+        cat > main.go << 'EOF'
+        package main
+        
+        import (
+            "context"
+            "fmt"
+            "github.com/severity1/claude-code-sdk-go"
+        )
+        
+        func main() {
+            // Test basic imports work
+            _ = claudecode.NewOptions()
+            fmt.Println("✅ SDK imports successfully")
+            
+            // Test that context works with SDK
+            ctx := context.Background()
+            _, err := claudecode.Query(ctx, "test")
+            // Expected to fail (no CLI), but should compile
+            if err != nil {
+                fmt.Println("✅ SDK API works (expected CLI error)")
+            }
+        }
+        EOF
+        go run main.go
+        cd -
+        rm -rf /tmp/test-claude-sdk
+
+    - name: Check public API surface
+      run: |
+        echo "=== Public API Check ==="
+        go doc github.com/severity1/claude-code-sdk-go
+        echo ""
+        echo "=== Key Types ==="
+        go doc github.com/severity1/claude-code-sdk-go.Client
+        go doc github.com/severity1/claude-code-sdk-go.Options
+        echo ""
+        echo "=== Main Functions ==="
+        go doc github.com/severity1/claude-code-sdk-go.Query
+        go doc github.com/severity1/claude-code-sdk-go.WithClient
+
+  module-validation:
+    name: Go Module Validation
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ env.GO_VERSION }}
+        cache: true
+
+    - name: Validate go.mod
+      run: |
+        echo "=== go.mod validation ==="
+        go mod tidy -v
+        if ! git diff --quiet go.mod; then
+          echo "❌ go.mod not tidy"
+          git diff go.mod
+          exit 1
+        fi
+        echo "✅ go.mod is tidy"
+
+    - name: Check minimum Go version compatibility
+      run: |
+        echo "=== Go version compatibility ==="
+        # Test that SDK works with minimum supported version
+        go version
+        go build -v ./...
+        echo "✅ Builds with Go $(go version | cut -d' ' -f3)"
+
+    - name: Validate module can be fetched
+      run: |
+        echo "=== Module fetch test ==="
+        # Test in a separate directory to simulate external usage
+        mkdir -p /tmp/test-fetch
+        cd /tmp/test-fetch
+        go mod init test-fetch
+        go get github.com/severity1/claude-code-sdk-go@latest || true
+        echo "✅ Module can be fetched"

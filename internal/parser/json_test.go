@@ -29,8 +29,14 @@ func TestParseValidMessages(t *testing.T) {
 			},
 			expectedType: shared.MessageTypeUser,
 			validate: func(t *testing.T, msg shared.Message) {
-				userMsg := msg.(*shared.UserMessage)
-				blocks := userMsg.Content.([]shared.ContentBlock)
+				userMsg, ok := msg.(*shared.UserMessage)
+				if !ok {
+					t.Fatalf("Expected UserMessage, got %T", msg)
+				}
+				blocks, ok := userMsg.Content.([]shared.ContentBlock)
+				if !ok {
+					t.Fatalf("Expected []ContentBlock, got %T", userMsg.Content)
+				}
 				assertContentBlockCount(t, blocks, 1)
 				assertTextBlockContent(t, blocks[0], "Hello")
 			},
@@ -52,8 +58,14 @@ func TestParseValidMessages(t *testing.T) {
 			},
 			expectedType: shared.MessageTypeUser,
 			validate: func(t *testing.T, msg shared.Message) {
-				userMsg := msg.(*shared.UserMessage)
-				blocks := userMsg.Content.([]shared.ContentBlock)
+				userMsg, ok := msg.(*shared.UserMessage)
+				if !ok {
+					t.Fatalf("Expected UserMessage, got %T", msg)
+				}
+				blocks, ok := userMsg.Content.([]shared.ContentBlock)
+				if !ok {
+					t.Fatalf("Expected []ContentBlock, got %T", userMsg.Content)
+				}
 				assertContentBlockCount(t, blocks, 1)
 				assertToolUseBlock(t, blocks[0], "tool_123", "Read")
 			},
@@ -74,8 +86,14 @@ func TestParseValidMessages(t *testing.T) {
 			},
 			expectedType: shared.MessageTypeUser,
 			validate: func(t *testing.T, msg shared.Message) {
-				userMsg := msg.(*shared.UserMessage)
-				blocks := userMsg.Content.([]shared.ContentBlock)
+				userMsg, ok := msg.(*shared.UserMessage)
+				if !ok {
+					t.Fatalf("Expected UserMessage, got %T", msg)
+				}
+				blocks, ok := userMsg.Content.([]shared.ContentBlock)
+				if !ok {
+					t.Fatalf("Expected []ContentBlock, got %T", userMsg.Content)
+				}
 				assertContentBlockCount(t, blocks, 1)
 				assertToolResultBlock(t, blocks[0], "tool_456", "File content here", false)
 			},
@@ -104,8 +122,14 @@ func TestParseValidMessages(t *testing.T) {
 			},
 			expectedType: shared.MessageTypeUser,
 			validate: func(t *testing.T, msg shared.Message) {
-				userMsg := msg.(*shared.UserMessage)
-				blocks := userMsg.Content.([]shared.ContentBlock)
+				userMsg, ok := msg.(*shared.UserMessage)
+				if !ok {
+					t.Fatalf("Expected UserMessage, got %T", msg)
+				}
+				blocks, ok := userMsg.Content.([]shared.ContentBlock)
+				if !ok {
+					t.Fatalf("Expected []ContentBlock, got %T", userMsg.Content)
+				}
 				assertContentBlockCount(t, blocks, 4)
 				assertMixedContentBlocks(t, blocks)
 			},
@@ -123,7 +147,10 @@ func TestParseValidMessages(t *testing.T) {
 			},
 			expectedType: shared.MessageTypeAssistant,
 			validate: func(t *testing.T, msg shared.Message) {
-				assistantMsg := msg.(*shared.AssistantMessage)
+				assistantMsg, ok := msg.(*shared.AssistantMessage)
+				if !ok {
+					t.Fatalf("Expected AssistantMessage, got %T", msg)
+				}
 				assertContentBlockCount(t, assistantMsg.Content, 1)
 				assertTextBlockContent(t, assistantMsg.Content[0], "I'll help you with that")
 				assertAssistantModel(t, assistantMsg, "claude-3-5-sonnet-20241022")
@@ -147,7 +174,10 @@ func TestParseValidMessages(t *testing.T) {
 			},
 			expectedType: shared.MessageTypeAssistant,
 			validate: func(t *testing.T, msg shared.Message) {
-				assistantMsg := msg.(*shared.AssistantMessage)
+				assistantMsg, ok := msg.(*shared.AssistantMessage)
+				if !ok {
+					t.Fatalf("Expected AssistantMessage, got %T", msg)
+				}
 				assertContentBlockCount(t, assistantMsg.Content, 2)
 				assertThinkingBlock(t, assistantMsg.Content[0], "Let me think about this step by step...")
 			},
@@ -162,7 +192,10 @@ func TestParseValidMessages(t *testing.T) {
 			},
 			expectedType: shared.MessageTypeSystem,
 			validate: func(t *testing.T, msg shared.Message) {
-				systemMsg := msg.(*shared.SystemMessage)
+				systemMsg, ok := msg.(*shared.SystemMessage)
+				if !ok {
+					t.Fatalf("Expected SystemMessage, got %T", msg)
+				}
 				assertSystemSubtype(t, systemMsg, "tool_output")
 				assertSystemData(t, systemMsg, "timestamp", "2024-01-01T12:00:00Z")
 			},
@@ -181,7 +214,10 @@ func TestParseValidMessages(t *testing.T) {
 			},
 			expectedType: shared.MessageTypeResult,
 			validate: func(t *testing.T, msg shared.Message) {
-				resultMsg := msg.(*shared.ResultMessage)
+				resultMsg, ok := msg.(*shared.ResultMessage)
+				if !ok {
+					t.Fatalf("Expected ResultMessage, got %T", msg)
+				}
 				assertResultFields(t, resultMsg, "query_completed", 1500, 800, false, 2, "session_123")
 				assertResultCost(t, resultMsg, 0.05)
 			},
@@ -353,7 +389,10 @@ func TestSpeculativeJSONParsing(t *testing.T) {
 		t.Fatalf("Expected UserMessage, got %T", msg2)
 	}
 
-	blocks := userMsg.Content.([]shared.ContentBlock)
+	blocks, ok := userMsg.Content.([]shared.ContentBlock)
+	if !ok {
+		t.Fatalf("Expected Content to be []ContentBlock, got %T", userMsg.Content)
+	}
 	assertContentBlockCount(t, blocks, 1)
 	assertTextBlockContent(t, blocks[0], "Hello")
 }
@@ -408,8 +447,14 @@ func TestBufferManagement(t *testing.T) {
 		}
 
 		// Verify final message
-		userMsg := finalMessage.(*shared.UserMessage)
-		blocks := userMsg.Content.([]shared.ContentBlock)
+		userMsg, ok := finalMessage.(*shared.UserMessage)
+		if !ok {
+			t.Fatalf("Expected UserMessage, got %T", finalMessage)
+		}
+		blocks, ok := userMsg.Content.([]shared.ContentBlock)
+		if !ok {
+			t.Fatalf("Expected Content to be []ContentBlock, got %T", userMsg.Content)
+		}
 		assertTextBlockContent(t, blocks[0], "Complete")
 	})
 
@@ -448,12 +493,21 @@ func TestMultipleJSONObjects(t *testing.T) {
 	assertMessageCount(t, messages, 2)
 
 	// Verify first message
-	userMsg := messages[0].(*shared.UserMessage)
-	blocks := userMsg.Content.([]shared.ContentBlock)
+	userMsg, ok := messages[0].(*shared.UserMessage)
+	if !ok {
+		t.Fatalf("Expected UserMessage, got %T", messages[0])
+	}
+	blocks, ok := userMsg.Content.([]shared.ContentBlock)
+	if !ok {
+		t.Fatalf("Expected Content to be []ContentBlock, got %T", userMsg.Content)
+	}
 	assertTextBlockContent(t, blocks[0], "First")
 
 	// Verify second message
-	systemMsg := messages[1].(*shared.SystemMessage)
+	systemMsg, ok := messages[1].(*shared.SystemMessage)
+	if !ok {
+		t.Fatalf("Expected SystemMessage, got %T", messages[1])
+	}
 	assertSystemSubtype(t, systemMsg, "status")
 }
 
@@ -489,8 +543,14 @@ func TestUnicodeAndEscapeHandling(t *testing.T) {
 			assertNoParseError(t, err)
 			assertMessageCount(t, messages, 1)
 
-			userMsg := messages[0].(*shared.UserMessage)
-			blocks := userMsg.Content.([]shared.ContentBlock)
+			userMsg, ok := messages[0].(*shared.UserMessage)
+			if !ok {
+				t.Fatalf("Expected UserMessage, got %T", messages[0])
+			}
+			blocks, ok := userMsg.Content.([]shared.ContentBlock)
+			if !ok {
+				t.Fatalf("Expected Content to be []ContentBlock, got %T", userMsg.Content)
+			}
 			assertTextBlockContent(t, blocks[0], test.expectedText)
 		})
 	}
@@ -552,7 +612,7 @@ func TestLargeMessageHandling(t *testing.T) {
 
 	// Test large message under limit (950KB)
 	largeContent := strings.Repeat("X", 950*1024)
-	largeJSON := fmt.Sprintf(`{"type": "user", "message": {"content": [{"type": "text", "text": "%s"}]}}`, largeContent)
+	largeJSON := fmt.Sprintf(`{"type": "user", "message": {"content": [{"type": "text", "text": %q}]}}`, largeContent)
 
 	if len(largeJSON) >= MaxBufferSize {
 		t.Fatalf("Test setup error: large JSON exceeds MaxBufferSize")
@@ -562,9 +622,18 @@ func TestLargeMessageHandling(t *testing.T) {
 	assertNoParseError(t, err)
 	assertMessageExists(t, msg)
 
-	userMsg := msg.(*shared.UserMessage)
-	blocks := userMsg.Content.([]shared.ContentBlock)
-	textBlock := blocks[0].(*shared.TextBlock)
+	userMsg, ok := msg.(*shared.UserMessage)
+	if !ok {
+		t.Fatalf("Expected UserMessage, got %T", msg)
+	}
+	blocks, ok := userMsg.Content.([]shared.ContentBlock)
+	if !ok {
+		t.Fatalf("Expected Content to be []ContentBlock, got %T", userMsg.Content)
+	}
+	textBlock, ok := blocks[0].(*shared.TextBlock)
+	if !ok {
+		t.Fatalf("Expected TextBlock, got %T", blocks[0])
+	}
 
 	if len(textBlock.Text) != len(largeContent) {
 		t.Errorf("Expected text length %d, got %d", len(largeContent), len(textBlock.Text))
