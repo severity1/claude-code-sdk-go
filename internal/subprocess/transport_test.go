@@ -328,6 +328,63 @@ func TestTransportCleanup(t *testing.T) {
 	assertTransportConnected(t, transport, false)
 }
 
+// TestTransportReceiveMessagesNotConnected tests ReceiveMessages behavior on disconnected transport
+// This targets the missing 44.4% coverage in ReceiveMessages function
+func TestTransportReceiveMessagesNotConnected(t *testing.T) {
+	ctx, cancel := setupTransportTestContext(t, 5*time.Second)
+	defer cancel()
+
+	transport := setupTransportForTest(t, newTransportMockCLI())
+
+	// Test ReceiveMessages on disconnected transport
+	msgChan, errChan := transport.ReceiveMessages(ctx)
+
+	// Channels should not be nil
+	if msgChan == nil {
+		t.Error("Expected message channel to be non-nil")
+	}
+	if errChan == nil {
+		t.Error("Expected error channel to be non-nil")
+	}
+
+	// Channels should be closed (for disconnected transport)
+	select {
+	case msg, ok := <-msgChan:
+		if ok {
+			t.Errorf("Expected message channel to be closed, got message: %v", msg)
+		}
+		// Channel is closed, which is expected
+	case <-time.After(100 * time.Millisecond):
+		t.Error("Expected message channel to be closed immediately")
+	}
+
+	select {
+	case err, ok := <-errChan:
+		if ok {
+			t.Errorf("Expected error channel to be closed, got error: %v", err)
+		}
+		// Channel is closed, which is expected
+	case <-time.After(100 * time.Millisecond):
+		t.Error("Expected error channel to be closed immediately")
+	}
+
+	// Test multiple calls return the same behavior
+	msgChan2, errChan2 := transport.ReceiveMessages(ctx)
+	if msgChan2 == nil || errChan2 == nil {
+		t.Error("Multiple calls should return valid channels")
+	}
+
+	// Verify they're different channel instances but behave the same
+	select {
+	case _, ok := <-msgChan2:
+		if ok {
+			t.Error("Expected second message channel to be closed")
+		}
+	case <-time.After(100 * time.Millisecond):
+		t.Error("Expected second message channel to be closed immediately")
+	}
+}
+
 // Mock transport implementation with functional options
 type transportMockOptions struct {
 	longRunning      bool
