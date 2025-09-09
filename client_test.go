@@ -2,6 +2,7 @@ package claudecode
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -207,9 +208,9 @@ func TestClientErrorHandling(t *testing.T) {
 			if test.errorType == "" {
 				transport = newClientMockTransport()
 			} else {
-				transport = newMockTransportWithError(test.errorType, fmt.Errorf(test.errorMsg))
+				transport = newMockTransportWithError(test.errorType, errors.New(test.errorMsg))
 			}
-			
+
 			client := setupClientForTest(t, transport)
 			defer disconnectClientSafely(t, client)
 
@@ -885,9 +886,9 @@ func TestNewClient(t *testing.T) {
 // TestClientIteratorClose tests the clientIterator Close method - consolidated
 func TestClientIteratorClose(t *testing.T) {
 	iteratorTests := map[string]iteratorCloseTest{
-		"close_unused":          {"unused", false, false, false},
-		"close_with_messages":   {"with_messages", true, false, false},
-		"multiple_close_calls":  {"multiple_close", false, false, true},
+		"close_unused":            {"unused", false, false, false},
+		"close_with_messages":     {"with_messages", true, false, false},
+		"multiple_close_calls":    {"multiple_close", false, false, true},
 		"close_after_consumption": {"after_consumption", true, true, false},
 	}
 
@@ -1123,10 +1124,14 @@ func newClientMockTransportWithOptions(options ...ClientMockTransportOption) *cl
 func newMockTransportWithError(errorType string, err error) *clientMockTransport {
 	transport := newClientMockTransport()
 	switch errorType {
-	case "connect": transport.connectError = err
-	case "send": transport.sendError = err
-	case "interrupt": transport.interruptError = err
-	case "async": transport.asyncError = err
+	case "connect":
+		transport.connectError = err
+	case "send":
+		transport.sendError = err
+	case "interrupt":
+		transport.interruptError = err
+	case "async":
+		transport.asyncError = err
 	}
 	return transport
 }
@@ -1231,7 +1236,7 @@ func verifyClientConfiguration(t *testing.T, client Client, transport *clientMoc
 		if config.messageCount > 1 {
 			queryText = fmt.Sprintf("%s %d", config.queryText, i+1)
 		}
-		
+
 		var err error
 		if config.sessionID != "" {
 			err = client.Query(ctx, queryText, config.sessionID)
@@ -1336,13 +1341,13 @@ func verifySessionConfig(t *testing.T, client Client, transport *clientMockTrans
 
 // Iterator verification helper - consolidated from 4 redundant functions
 type iteratorCloseTest struct {
-	name        string
-	needQuery   bool
-	consumeFirst bool
+	name          string
+	needQuery     bool
+	consumeFirst  bool
 	multipleCalls bool
 }
 
-func verifyIteratorClose(t *testing.T, client Client, transport *clientMockTransport, test iteratorCloseTest) {
+func verifyIteratorClose(t *testing.T, client Client, _ *clientMockTransport, test iteratorCloseTest) {
 	t.Helper()
 	ctx, cancel := setupClientTestContext(t, 10*time.Second)
 	defer cancel()
@@ -1376,7 +1381,7 @@ func verifyIteratorClose(t *testing.T, client Client, transport *clientMockTrans
 	if test.multipleCalls {
 		closeCount = 3
 	}
-	
+
 	for i := 1; i <= closeCount; i++ {
 		err := iter.Close()
 		if err != nil {
@@ -1389,7 +1394,7 @@ func verifyIteratorClose(t *testing.T, client Client, transport *clientMockTrans
 	if test.multipleCalls {
 		nextCalls = 3
 	}
-	
+
 	for i := 0; i < nextCalls; i++ {
 		msg, err := iter.Next(ctx)
 		if err != ErrNoMoreMessages {
@@ -1400,7 +1405,6 @@ func verifyIteratorClose(t *testing.T, client Client, transport *clientMockTrans
 		}
 	}
 }
-
 
 // TestClientContextManager tests Go-idiomatic context manager pattern following Python SDK parity
 // Covers the single critical improvement: automatic resource lifecycle management
@@ -1811,7 +1815,7 @@ func TestWithClient(t *testing.T) {
 			// This will attempt to auto-discover CLI, which will fail in test environment
 			// but that's the expected behavior we want to test
 			err := WithClient(ctx, test.fn, test.opts...)
-			
+
 			if test.wantErr {
 				if err == nil {
 					t.Errorf("Expected error, got nil")
@@ -1894,11 +1898,11 @@ func TestClientIteratorNextErrorPaths(t *testing.T) {
 					errChan: errChan,
 					closed:  false,
 				}
-				
+
 				// Send error to error channel
 				expectedErr := fmt.Errorf("transport error")
 				errChan <- expectedErr
-				
+
 				ctx, cancel := setupClientTestContext(t, 5*time.Second)
 				return iter, ctx, cancel
 			},
@@ -1926,10 +1930,10 @@ func TestClientIteratorNextErrorPaths(t *testing.T) {
 					errChan: errChan,
 					closed:  false,
 				}
-				
+
 				// Close the message channel
 				close(msgChan)
-				
+
 				ctx, cancel := setupClientTestContext(t, 5*time.Second)
 				return iter, ctx, cancel
 			},
