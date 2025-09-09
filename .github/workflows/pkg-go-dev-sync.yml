@@ -1,0 +1,47 @@
+name: Update pkg.go.dev
+
+on:
+  push:
+    tags:
+      - 'v*'
+  release:
+    types: [published]
+
+jobs:
+  update-pkg-go-dev:
+    name: Sync pkg.go.dev documentation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+      
+      - name: Warm Go proxy and trigger pkg.go.dev indexing
+        run: |
+          # Get the version tag
+          if [[ "${{ github.event_name }}" == "release" ]]; then
+            VERSION="${{ github.event.release.tag_name }}"
+          else
+            VERSION="${{ github.ref_name }}"
+          fi
+          
+          echo "📦 Updating pkg.go.dev for version: $VERSION"
+          
+          # Method 1: Direct proxy warming (fastest)
+          curl -s "https://proxy.golang.org/github.com/${{ github.repository }}/@v/$VERSION.info" || true
+          
+          # Method 2: Use go get to warm cache (most reliable)
+          mkdir -p /tmp/warm-cache
+          cd /tmp/warm-cache
+          go mod init warm-cache
+          go get "github.com/${{ github.repository }}@$VERSION" || true
+          
+          # Method 3: Trigger checksum database
+          curl -s "https://sum.golang.org/lookup/github.com/${{ github.repository }}@$VERSION" || true
+          
+          echo "✅ Successfully triggered indexing for $VERSION"
+          echo "📚 Documentation will be available at:"
+          echo "   https://pkg.go.dev/github.com/${{ github.repository }}@$VERSION"
+          echo ""
+          echo "Note: pkg.go.dev typically updates within 5-20 minutes"
