@@ -7,7 +7,7 @@ description: Validate implemented TDD task
 - Official Claude Code SDK Python
   - Reference: ../claude-code-sdk-python/
   - Analysis: analysis/
-- Specifications: IDIOMATIC_INTERFACES_ANALYSIS.md
+- Specifications: INTERFACE_SPEC.md
 - TDD Tasks: TDD_IDIOMATIC_INTERFACES.md
 
 ## Your task

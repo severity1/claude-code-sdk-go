@@ -1,38 +1,30 @@
-# Idiomatic Interfaces Analysis: Claude Code Go SDK
+# Interface Design Specification: Claude Code Go SDK
 
-## Executive Summary
+## Specification Overview
 
-This analysis examines the Claude Code Go SDK codebase for adherence to Go idiomatic interface design patterns and identifies opportunities for **aggressive interface improvements** in the `idiomatic-interfaces` branch. Since this is a young project (9 stars), we can make breaking changes to achieve truly idiomatic Go interface design without backward compatibility constraints.
+This document defines the target interface design for the Claude Code Go SDK, establishing requirements for idiomatic Go interface patterns that will be implemented through Test-Driven Development (TDD). The specification enables breaking changes to achieve interface excellence in the `idiomatic-interfaces` branch.
 
-**Overall Assessment**: The codebase has strong foundations but can be dramatically improved by eliminating `interface{}`, standardizing naming, and reorganizing interfaces for maximum Go idiomaticity.
+**Design Goal**: Transform the current interface architecture into exemplary idiomatic Go design through complete type safety, consistent naming, and optimal package organization.
 
-**🚨 BREAKING CHANGES APPROVED**: This analysis assumes we can break backward compatibility to achieve interface excellence.
+**Breaking Changes Policy**: This specification authorizes breaking changes to achieve interface design excellence.
 
-## Interface Design Strengths ✅
+## Current Interface Architecture Assessment
 
-### 1. Excellent Core Interface Architecture
-- **Clean Segregation**: `Message`, `ContentBlock`, `Transport`, and `MessageIterator` interfaces are well-focused
-- **Dependency Injection**: Transport interface enables clean testing and mocking
-- **Polymorphism**: Proper use of interfaces for union types (Message, ContentBlock)
-- **Composition**: Good interface composition patterns throughout
+### Requirements Already Met
+- **Interface Segregation**: `Message`, `ContentBlock`, `Transport`, and `MessageIterator` interfaces demonstrate proper separation of concerns
+- **Dependency Injection**: Transport interface design supports clean testing and mocking patterns
+- **Polymorphic Design**: Union types properly expressed through interface hierarchies
+- **Go-Native Concurrency**: Context-first design with proper `context.Context` usage
+- **Resource Management**: Interface contracts support defer-based cleanup patterns  
+- **Testability**: Interface boundaries enable compile-time verification and easy mocking
 
-### 2. Go-Native Patterns
-- **Context-First**: All blocking operations properly accept `context.Context`
-- **Error Handling**: Interfaces support proper error wrapping and type checking
-- **Resource Management**: Interfaces support defer-based cleanup patterns
+## Interface Design Requirements
 
-### 3. Testing Support
-- **Mockable Interfaces**: Clean interface boundaries enable easy mocking
-- **Compile-Time Verification**: Interface compliance verified at compile time
-- **Clear Contracts**: Interface methods have clear, testable contracts
+### 1. Type Safety Requirement - Zero `interface{}` Usage
 
-## Critical Issues Requiring Immediate Breaking Changes 🔴
+**Specification**: All interface{} usage must be eliminated in favor of strongly-typed interface hierarchies.
 
-### 1. Type Safety Violations - ELIMINATE ALL `interface{}`
-
-**Problem**: Pervasive use of `interface{}` is fundamentally un-idiomatic in modern Go.
-
-**Current Violations**:
+**Current Non-Compliant Code**:
 ```go
 // ❌ COMPLETELY UNACCEPTABLE
 type StreamMessage struct {
@@ -52,7 +44,7 @@ Request  map[string]interface{} `json:"request,omitempty"`
 Response map[string]interface{} `json:"response,omitempty"`
 ```
 
-**BREAKING SOLUTION**: Complete elimination of `interface{}`:
+**Required Implementation**: Sealed interface pattern with typed unions:
 
 ```go
 // ✅ IDIOMATIC REPLACEMENT
@@ -84,15 +76,15 @@ type BlockContent struct {
 func (BlockContent) isUserContent() {}
 ```
 
-**Impact**: This single change will eliminate ~90% of type safety issues and runtime type assertions.
+**Compliance Metric**: Zero interface{} usage in public API (verified by reflection-based testing).
 
-### 2. Interface Method Naming - COMPLETE STANDARDIZATION
+### 2. Method Naming Standardization Requirement
 
-**Problem**: Naming chaos across interfaces violates Go's consistency principles.
+**Specification**: All interfaces must use consistent method naming following Go conventions.
 
-**Current Mess**:
+**Current Non-Compliant Code**:
 ```go
-// ❌ INCONSISTENT DISASTER
+// ❌ NON-STANDARD NAMING
 type Message interface {
     Type() string           // This one is correct
 }
@@ -106,9 +98,9 @@ type McpServerConfig interface {
 }
 ```
 
-**BREAKING SOLUTION**: Ruthless standardization:
+**Required Implementation**: Standardized method naming:
 ```go
-// ✅ CONSISTENT PERFECTION
+// ✅ SPECIFICATION-COMPLIANT
 type Message interface {
     Type() string
 }
@@ -122,16 +114,13 @@ type McpServerConfig interface {
 }
 ```
 
-**Additional Breaking Changes**:
-- Remove ALL "Get" prefixes from interface methods
-- Standardize error interface methods
-- Use consistent parameter naming across interfaces
+**Compliance Metric**: 100% consistent Type() method naming across all interfaces.
 
-### 3. Interface Placement - RADICAL REORGANIZATION
+### 3. Package Organization Requirement
 
-**Problem**: Interface placement is a complete mess with no organizing principle.
+**Specification**: All interfaces must be organized in dedicated `pkg/interfaces/` package with domain-based file structure.
 
-**Current Chaos**:
+**Current Non-Compliant Structure**:
 ```
 types.go                  → Transport (why just this one?)
 internal/shared/message.go → Message, ContentBlock  
@@ -139,10 +128,10 @@ internal/shared/stream.go  → MessageIterator
 internal/shared/errors.go  → SDKError
 ```
 
-**BREAKING SOLUTION**: Complete interface reorganization:
+**Required Implementation**: Domain-based interface organization:
 
 ```
-// ✅ NEW STRUCTURE - LOGICAL AND CLEAN
+// ✅ SPECIFICATION-COMPLIANT STRUCTURE
 pkg/
   interfaces/           ← NEW: All interfaces here
     message.go         → Message, ContentBlock, UserContent, etc.
@@ -154,19 +143,15 @@ pkg/
 types.go → MINIMAL re-exports only
 ```
 
-**Principle**: 
-- **ALL interfaces** in dedicated `pkg/interfaces/` 
-- **Group by domain** not by implementation
-- **Main package** only exports concrete types and constructors
-- **No more** scattered interface definitions
+**Compliance Metric**: All interfaces located in `pkg/interfaces/` with zero scattered definitions.
 
-## Additional Breaking Improvements 🟡
+## Additional Design Requirements
 
-### 4. Re-export Pattern - ELIMINATE THE CHAOS
+### 4. Re-export Pattern Requirement
 
-**Problem**: 42 lines of type aliases is an anti-pattern nightmare.
+**Specification**: Main package must provide clean, minimal re-exports without type alias proliferation.
 
-**Current Disaster** (`types.go`):
+**Current Non-Compliant Code** (`types.go`):
 ```go
 // ❌ 42 LINES OF TYPE ALIAS HELL
 type Message = shared.Message
@@ -184,7 +169,7 @@ type MessageIterator = shared.MessageIterator
 // ... 30 MORE LINES OF THIS NONSENSE
 ```
 
-**BREAKING SOLUTION**: Eliminate type alias hell:
+**Required Implementation**: Clean, minimal re-exports:
 ```go
 // ✅ CLEAN - Only import what users actually need
 package claudecode
@@ -201,13 +186,13 @@ func NewClient(opts ...Option) *ClientImpl { ... }
 func Query(ctx context.Context, prompt string) MessageIterator { ... }
 ```
 
-**Breaking Change**: Users import specific types they need instead of getting everything.
+**Compliance Metric**: Main package exports less than 15 essential types only.
 
-### 5. Interface Granularity - INTERFACE SEGREGATION PRINCIPLE
+### 5. Interface Segregation Requirement
 
-**Problem**: Monolithic interfaces violate SOLID principles and make testing harder.
+**Specification**: Client interface must be decomposed into focused, single-responsibility interfaces following SOLID principles.
 
-**Current Monolith**:
+**Current Non-Compliant Code**:
 ```go
 // ❌ VIOLATES INTERFACE SEGREGATION PRINCIPLE
 type Client interface {
@@ -221,9 +206,9 @@ type Client interface {
 }
 ```
 
-**BREAKING SOLUTION**: Apply interface segregation principle:
+**Required Implementation**: Focused interface composition:
 ```go
-// ✅ FOCUSED, TESTABLE INTERFACES
+// ✅ SPECIFICATION-COMPLIANT INTERFACES
 type ConnectionManager interface {
     Connect(ctx context.Context, prompt ...StreamMessage) error
     Disconnect() error
@@ -654,40 +639,34 @@ func TestClientInterfaceComposition(t *testing.T) {
 - [ ] **Better inlining** through specific interface types
 - [ ] **Faster compilation** through cleaner import graph
 
-## CONCLUSION: TRANSFORM TO INTERFACE EXCELLENCE 🚀
+## Interface Design Specification Summary
 
-**The Claude Code Go SDK has strong foundations but can become an exemplar of idiomatic Go interface design through aggressive breaking changes.**
+**This specification defines the requirements to transform the Claude Code Go SDK into an exemplar of idiomatic Go interface design.**
 
-### Current State: Good but Not Great
-- ✅ Solid architectural patterns
-- ✅ Context-first design
-- ✅ Good resource management
-- ❌ Type safety violations with `interface{}`
-- ❌ Inconsistent naming
-- ❌ Scattered interface organization
+### Current Compliance Status
+- ✅ **Architectural Foundation**: Strong interface segregation and dependency injection patterns
+- ✅ **Go-Native Patterns**: Context-first design and proper resource management
+- ❌ **Type Safety**: Non-compliant interface{} usage throughout
+- ❌ **Naming Consistency**: Non-standard method naming across interfaces
+- ❌ **Package Organization**: Scattered interface definitions violate organization principles
 
-### Transformed State: Interface Excellence
-- ✅ **100% type safety** with zero `interface{}` usage
-- ✅ **Perfect naming consistency** across all interfaces  
-- ✅ **Clean package organization** following Go best practices
-- ✅ **Interface segregation principle** applied throughout
-- ✅ **Compile-time guarantees** instead of runtime type assertions
-- ✅ **Better testing** through focused, mockable interfaces
+### Target Compliance State
+- ✅ **Zero interface{} Usage**: 100% type safety through sealed interface patterns
+- ✅ **Consistent Naming**: All interfaces use standardized Type() method naming
+- ✅ **Organized Structure**: All interfaces located in domain-based `pkg/interfaces/` package
+- ✅ **Interface Segregation**: Client decomposed into focused, single-responsibility interfaces
+- ✅ **Compile-Time Safety**: Elimination of runtime type assertions in favor of static guarantees
+- ✅ **Testing Excellence**: All interfaces optimized for easy mocking and verification
 
-### The Go Community Impact
-By making these breaking changes, we create:
-- **A reference implementation** of idiomatic Go interfaces
-- **Educational value** showing how to do interfaces right
-- **Better user experience** with compile-time safety and clear APIs
-- **Technical excellence** that attracts contributors and users
+### Implementation Authority
+This specification authorizes breaking changes to achieve interface design excellence. The current project maturity provides optimal timing for fundamental interface architecture improvements.
 
-### Implementation Decision: All In
-**Since we're at 9 stars, this is the PERFECT time to make radical improvements that will benefit the project for years to come.**
+### Deliverable Requirements
+1. **Complete Type Safety**: Zero interface{} usage in public API
+2. **Naming Standardization**: 100% consistent interface method naming
+3. **Structural Organization**: Domain-based interface package organization
+4. **Interface Composition**: SOLID-compliant client interface decomposition
+5. **Performance Maintenance**: Equal or better performance than current implementation
+6. **Documentation Excellence**: Comprehensive godoc coverage for all interface contracts
 
-**Next Steps**:
-1. **Start immediately** with the aggressive 2-week timeline
-2. **Document everything** for the community to learn from
-3. **Make it perfect** - we only get one chance at this scale of breaking changes
-4. **Set the standard** for how Go SDKs should design interfaces
-
-**This transformation will make the Claude Code Go SDK a showcase of modern, idiomatic Go interface design.** 🎯
+**This specification establishes the foundation for implementing exemplary Go interface design through Test-Driven Development.**
