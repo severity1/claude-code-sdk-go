@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/severity1/claude-code-sdk-go/internal/shared"
+	"github.com/severity1/claude-code-sdk-go/pkg/interfaces"
 )
 
 // TestTransportLifecycle tests connection lifecycle and state management
@@ -71,7 +72,7 @@ func TestTransportMessageIO(t *testing.T) {
 	connectTransportSafely(t, ctx, transport)
 
 	// Test message sending
-	message := shared.StreamMessage{
+	message := interfaces.StreamMessage{
 		Type:      "user",
 		SessionID: "test-session",
 	}
@@ -172,7 +173,7 @@ func TestTransportErrorHandling(t *testing.T) {
 			},
 			operation: func(tr *Transport) error {
 				// Don't connect - send to disconnected transport
-				message := shared.StreamMessage{Type: "user", SessionID: "test"}
+				message := interfaces.StreamMessage{Type: "user", SessionID: "test"}
 				return tr.SendMessage(ctx, message)
 			},
 			expectError:   true,
@@ -188,7 +189,7 @@ func TestTransportErrorHandling(t *testing.T) {
 				// Use canceled context
 				canceledCtx, cancel := context.WithCancel(ctx)
 				cancel()
-				message := shared.StreamMessage{Type: "user", SessionID: "test"}
+				message := interfaces.StreamMessage{Type: "user", SessionID: "test"}
 				return tr.SendMessage(canceledCtx, message)
 			},
 			expectError:   false, // Context cancellation handling may vary
@@ -238,7 +239,7 @@ func TestTransportConcurrency(t *testing.T) {
 			wg.Add(1)
 			go func(id int) {
 				defer wg.Done()
-				message := shared.StreamMessage{
+				message := interfaces.StreamMessage{
 					Type:      "user",
 					SessionID: fmt.Sprintf("session-%d", id),
 				}
@@ -263,7 +264,7 @@ func TestTransportConcurrency(t *testing.T) {
 	// Test backpressure handling
 	t.Run("backpressure_handling", func(t *testing.T) {
 		for i := 0; i < 10; i++ {
-			message := shared.StreamMessage{
+			message := interfaces.StreamMessage{
 				Type:      "user",
 				SessionID: "backpressure-test",
 			}

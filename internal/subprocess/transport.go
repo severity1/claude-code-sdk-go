@@ -18,6 +18,7 @@ import (
 	"github.com/severity1/claude-code-sdk-go/internal/cli"
 	"github.com/severity1/claude-code-sdk-go/internal/parser"
 	"github.com/severity1/claude-code-sdk-go/internal/shared"
+	"github.com/severity1/claude-code-sdk-go/pkg/interfaces"
 )
 
 const (
@@ -41,6 +42,7 @@ type Transport struct {
 
 	// Connection state
 	connected bool
+	startTime time.Time
 	mu        sync.RWMutex
 
 	// I/O streams
@@ -52,7 +54,7 @@ type Transport struct {
 	parser *parser.Parser
 
 	// Channels for communication
-	msgChan chan shared.Message
+	msgChan chan interfaces.Message
 	errChan chan error
 
 	// Control and cleanup
@@ -158,7 +160,7 @@ func (t *Transport) Connect(ctx context.Context) error {
 	t.ctx, t.cancel = context.WithCancel(ctx)
 
 	// Initialize channels
-	t.msgChan = make(chan shared.Message, channelBufferSize)
+	t.msgChan = make(chan interfaces.Message, channelBufferSize)
 	t.errChan = make(chan error, channelBufferSize)
 
 	// Start I/O handling goroutines
@@ -170,11 +172,12 @@ func (t *Transport) Connect(ctx context.Context) error {
 	// stdin will be closed after sending the message in SendMessage()
 
 	t.connected = true
+	t.startTime = time.Now()
 	return nil
 }
 
 // SendMessage sends a message to the CLI subprocess.
-func (t *Transport) SendMessage(ctx context.Context, message shared.StreamMessage) error {
+func (t *Transport) SendMessage(ctx context.Context, message interfaces.StreamMessage) error {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 
@@ -217,13 +220,13 @@ func (t *Transport) SendMessage(ctx context.Context, message shared.StreamMessag
 }
 
 // ReceiveMessages returns channels for receiving messages and errors.
-func (t *Transport) ReceiveMessages(ctx context.Context) (<-chan shared.Message, <-chan error) {
+func (t *Transport) ReceiveMessages(ctx context.Context) (<-chan interfaces.Message, <-chan error) {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 
 	if !t.connected {
 		// Return closed channels if not connected
-		msgChan := make(chan shared.Message)
+		msgChan := make(chan interfaces.Message)
 		errChan := make(chan error)
 		close(msgChan)
 		close(errChan)
@@ -249,6 +252,26 @@ func (t *Transport) Interrupt(ctx context.Context) error {
 
 	// Send interrupt signal (Unix/Linux/macOS)
 	return t.cmd.Process.Signal(os.Interrupt)
+}
+
+// Status returns the current status of the Claude Code CLI process.
+func (t *Transport) Status() interfaces.ProcessStatus {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+
+	// If not connected or no process, return stopped status
+	if !t.connected || t.cmd == nil || t.cmd.Process == nil {
+		return interfaces.ProcessStatus{
+			Running: false,
+		}
+	}
+
+	// Return running status with process details
+	return interfaces.ProcessStatus{
+		Running:   true,
+		PID:       t.cmd.Process.Pid,
+		StartTime: t.startTime.Format(time.RFC3339),
+	}
 }
 
 // Close terminates the subprocess connection.
