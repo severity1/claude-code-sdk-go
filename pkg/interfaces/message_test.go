@@ -808,3 +808,84 @@ func TestContentBlockFieldAccess(t *testing.T) {
 		t.Errorf("Expected IsError to be false, got %v", toolResultBlock.IsError)
 	}
 }
+
+// TestSystemMessageType verifies SystemMessage.Type() method works correctly.
+func TestSystemMessageType(t *testing.T) {
+	systemMsg := &SystemMessage{
+		MessageType: "system",
+		Subtype:     "prompt",
+		Data:        map[string]any{"key": "value"},
+	}
+
+	expectedType := "system"
+	actualType := systemMsg.Type()
+
+	if actualType != expectedType {
+		t.Errorf("Expected SystemMessage.Type() to return %q, got %q", expectedType, actualType)
+	}
+
+	// Test Message interface implementation
+	var msg Message = systemMsg
+	if msg.Type() != expectedType {
+		t.Errorf("SystemMessage should implement Message interface correctly")
+	}
+}
+
+// TestResultMessageType verifies ResultMessage.Type() method works correctly.
+func TestResultMessageType(t *testing.T) {
+	cost := 0.05
+	usage := map[string]any{"input_tokens": 100, "output_tokens": 50}
+	result := map[string]any{"status": "completed"}
+
+	resultMsg := &ResultMessage{
+		MessageType:   "result",
+		Subtype:       "completion",
+		DurationMs:    1500,
+		DurationAPIMs: 1200,
+		IsError:       false,
+		NumTurns:      3,
+		SessionID:     "session123",
+		TotalCostUSD:  &cost,
+		Usage:         &usage,
+		Result:        &result,
+	}
+
+	expectedType := "result"
+	actualType := resultMsg.Type()
+
+	if actualType != expectedType {
+		t.Errorf("Expected ResultMessage.Type() to return %q, got %q", expectedType, actualType)
+	}
+
+	// Test Message interface implementation
+	var msg Message = resultMsg
+	if msg.Type() != expectedType {
+		t.Errorf("ResultMessage should implement Message interface correctly")
+	}
+
+	// Test field access
+	if resultMsg.MessageType != "result" {
+		t.Errorf("Expected MessageType 'result', got %q", resultMsg.MessageType)
+	}
+	if resultMsg.Subtype != "completion" {
+		t.Errorf("Expected Subtype 'completion', got %q", resultMsg.Subtype)
+	}
+	if resultMsg.DurationMs != 1500 {
+		t.Errorf("Expected DurationMs 1500, got %d", resultMsg.DurationMs)
+	}
+	if resultMsg.DurationAPIMs != 1200 {
+		t.Errorf("Expected DurationAPIMs 1200, got %d", resultMsg.DurationAPIMs)
+	}
+	if resultMsg.IsError != false {
+		t.Errorf("Expected IsError false, got %v", resultMsg.IsError)
+	}
+	if resultMsg.NumTurns != 3 {
+		t.Errorf("Expected NumTurns 3, got %d", resultMsg.NumTurns)
+	}
+	if resultMsg.SessionID != "session123" {
+		t.Errorf("Expected SessionID 'session123', got %q", resultMsg.SessionID)
+	}
+	if resultMsg.TotalCostUSD == nil || *resultMsg.TotalCostUSD != 0.05 {
+		t.Errorf("Expected TotalCostUSD 0.05, got %v", resultMsg.TotalCostUSD)
+	}
+}

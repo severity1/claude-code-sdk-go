@@ -453,3 +453,43 @@ func TestConcreteTypeZeroValues(t *testing.T) {
 		t.Run(tt.name, tt.testFunc)
 	}
 }
+
+// TestSealingMethodsCoverage explicitly calls sealing methods to ensure test coverage.
+func TestSealingMethodsCoverage(t *testing.T) {
+	tests := []struct {
+		name     string
+		testFunc func()
+	}{
+		{
+			name: "TextContent sealing methods coverage",
+			testFunc: func() {
+				var content TextContent
+				content.messageContent()
+				content.userMessageContent()
+			},
+		},
+		{
+			name: "ThinkingContent sealing methods coverage",
+			testFunc: func() {
+				var content ThinkingContent
+				content.messageContent()
+				content.assistantMessageContent()
+			},
+		},
+		{
+			name: "BlockListContent sealing methods coverage",
+			testFunc: func() {
+				var content BlockListContent
+				content.messageContent()
+				content.userMessageContent()
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// If this compiles and runs without panicking, the sealing methods exist and work
+			tt.testFunc()
+		})
+	}
+}
