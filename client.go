@@ -8,6 +8,7 @@ import (
 
 	"github.com/severity1/claude-code-sdk-go/internal/cli"
 	"github.com/severity1/claude-code-sdk-go/internal/subprocess"
+	"github.com/severity1/claude-code-sdk-go/pkg/interfaces"
 )
 
 const defaultSessionID = "default"
@@ -21,6 +22,7 @@ type Client interface {
 	ReceiveMessages(ctx context.Context) <-chan Message
 	ReceiveResponse(ctx context.Context) MessageIterator
 	Interrupt(ctx context.Context) error
+	Status() ProcessStatus
 }
 
 // ClientImpl implements the Client interface.
@@ -225,7 +227,7 @@ func (c *ClientImpl) Connect(ctx context.Context, prompt ...StreamMessage) error
 		}
 
 		// Create subprocess transport for streaming mode (closeStdin=false)
-		c.transport = subprocess.New(cliPath, c.options, false, "sdk-go-client")
+		c.transport = subprocess.New(cliPath, toSharedOptions(c.options), false, "sdk-go-client")
 	}
 
 	// Connect the transport
@@ -285,13 +287,11 @@ func (c *ClientImpl) Query(ctx context.Context, prompt string, sessionID ...stri
 		sid = sessionID[0]
 	}
 
-	// Create user message in Python SDK compatible format
+	// Create user message with strongly-typed content
+	userMsg := &UserMessage{Content: interfaces.TextContent{Text: prompt}}
 	streamMsg := StreamMessage{
-		Type: "user",
-		Message: map[string]interface{}{
-			"role":    "user",
-			"content": prompt,
-		},
+		Type:            "user",
+		Message:         userMsg,
 		ParentToolUseID: nil,
 		SessionID:       sid,
 	}
@@ -390,6 +390,32 @@ func (c *ClientImpl) Interrupt(ctx context.Context) error {
 	}
 
 	return transport.Interrupt(ctx)
+}
+
+// Status returns the current status of the Claude Code CLI process.
+func (c *ClientImpl) Status() ProcessStatus {
+	// Check connection status with read lock
+	c.mu.RLock()
+	connected := c.connected
+	transport := c.transport
+	c.mu.RUnlock()
+
+	// If not connected or no transport, return stopped status
+	if !connected || transport == nil {
+		return ProcessStatus{
+			Running: false,
+		}
+	}
+
+	// Check if transport supports status (interface assertion)
+	if statusProvider, ok := transport.(interface{ Status() ProcessStatus }); ok {
+		return statusProvider.Status()
+	}
+
+	// Fallback: return basic running status
+	return ProcessStatus{
+		Running: true,
+	}
 }
 
 // clientIterator implements MessageIterator for client message reception

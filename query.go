@@ -8,6 +8,7 @@ import (
 
 	"github.com/severity1/claude-code-sdk-go/internal/cli"
 	"github.com/severity1/claude-code-sdk-go/internal/subprocess"
+	"github.com/severity1/claude-code-sdk-go/pkg/interfaces"
 )
 
 // ErrNoMoreMessages indicates the message iterator has no more messages.
@@ -143,7 +144,7 @@ func (qi *queryIterator) start() error {
 	qi.errChan = errChan
 
 	// Send the prompt
-	userMsg := &UserMessage{Content: qi.prompt}
+	userMsg := &UserMessage{Content: interfaces.TextContent{Text: qi.prompt}}
 	streamMsg := StreamMessage{
 		Type:    "request",
 		Message: userMsg,
@@ -166,5 +167,5 @@ func createQueryTransport(prompt string, options *Options) (Transport, error) {
 	}
 
 	// Create subprocess transport with prompt as CLI argument
-	return subprocess.NewWithPrompt(cliPath, options, prompt), nil
+	return subprocess.NewWithPrompt(cliPath, toSharedOptions(options), prompt), nil
 }

@@ -2,38 +2,40 @@ package claudecode
 
 import (
 	"github.com/severity1/claude-code-sdk-go/internal/shared"
+	"github.com/severity1/claude-code-sdk-go/pkg/interfaces"
 )
 
 // Options contains configuration for Claude Code CLI interactions.
-type Options = shared.Options
+type Options = interfaces.Options
 
 // PermissionMode defines the permission handling mode.
-type PermissionMode = shared.PermissionMode
+type PermissionMode = interfaces.PermissionMode
 
 // McpServerType defines the type of MCP server.
-type McpServerType = shared.McpServerType
+type McpServerType = interfaces.McpServerType
 
 // McpServerConfig represents an MCP server configuration.
-type McpServerConfig = shared.McpServerConfig
+type McpServerConfig = interfaces.McpServerConfig
 
 // McpStdioServerConfig represents a stdio MCP server configuration.
-type McpStdioServerConfig = shared.McpStdioServerConfig
+type McpStdioServerConfig = interfaces.McpStdioServerConfig
 
 // McpSSEServerConfig represents an SSE MCP server configuration.
-type McpSSEServerConfig = shared.McpSSEServerConfig
+type McpSSEServerConfig = interfaces.McpSSEServerConfig
 
 // McpHTTPServerConfig represents an HTTP MCP server configuration.
-type McpHTTPServerConfig = shared.McpHTTPServerConfig
+type McpHTTPServerConfig = interfaces.McpHTTPServerConfig
 
 // Re-export constants
 const (
-	PermissionModeDefault           = shared.PermissionModeDefault
-	PermissionModeAcceptEdits       = shared.PermissionModeAcceptEdits
-	PermissionModePlan              = shared.PermissionModePlan
-	PermissionModeBypassPermissions = shared.PermissionModeBypassPermissions
-	McpServerTypeStdio              = shared.McpServerTypeStdio
-	McpServerTypeSSE                = shared.McpServerTypeSSE
-	McpServerTypeHTTP               = shared.McpServerTypeHTTP
+	PermissionModeDefault           = interfaces.PermissionModeDefault
+	PermissionModeAcceptEdits       = interfaces.PermissionModeAcceptEdits
+	PermissionModePlan              = interfaces.PermissionModePlan
+	PermissionModeBypassPermissions = interfaces.PermissionModeBypassPermissions
+	McpServerTypeStdio              = interfaces.McpServerTypeStdio
+	McpServerTypeSSE                = interfaces.McpServerTypeSSE
+	McpServerTypeHTTP               = interfaces.McpServerTypeHTTP
+	DefaultMaxThinkingTokens        = interfaces.DefaultMaxThinkingTokens
 )
 
 // Option configures Options using the functional options pattern.
@@ -175,8 +177,8 @@ func WithTransport(transport Transport) Option {
 
 // NewOptions creates Options with default values using functional options pattern.
 func NewOptions(opts ...Option) *Options {
-	// Create options with defaults from shared package
-	options := shared.NewOptions()
+	// Create options with defaults from interfaces package
+	options := interfaces.NewOptions()
 
 	// Apply functional options
 	for _, opt := range opts {
@@ -184,4 +186,40 @@ func NewOptions(opts ...Option) *Options {
 	}
 
 	return options
+}
+
+// toSharedOptions converts interfaces.Options to shared.Options for subprocess compatibility.
+// This is a temporary bridge function during the migration to new interfaces.
+func toSharedOptions(o *Options) *shared.Options {
+	// Convert interfaces.Options back to shared.Options for subprocess
+	sharedOpts := shared.NewOptions()
+
+	// Copy all fields from interfaces.Options to shared.Options
+	sharedOpts.AllowedTools = o.AllowedTools
+	sharedOpts.DisallowedTools = o.DisallowedTools
+	sharedOpts.SystemPrompt = o.SystemPrompt
+	sharedOpts.AppendSystemPrompt = o.AppendSystemPrompt
+	sharedOpts.Model = o.Model
+	sharedOpts.MaxThinkingTokens = o.MaxThinkingTokens
+
+	// Convert PermissionMode
+	if o.PermissionMode != nil {
+		sharedMode := shared.PermissionMode(*o.PermissionMode)
+		sharedOpts.PermissionMode = &sharedMode
+	}
+
+	sharedOpts.PermissionPromptToolName = o.PermissionPromptToolName
+	sharedOpts.ContinueConversation = o.ContinueConversation
+	sharedOpts.Resume = o.Resume
+	sharedOpts.MaxTurns = o.MaxTurns
+	sharedOpts.Settings = o.Settings
+	sharedOpts.Cwd = o.Cwd
+	sharedOpts.AddDirs = o.AddDirs
+	sharedOpts.ExtraArgs = o.ExtraArgs
+	sharedOpts.CLIPath = o.CLIPath
+
+	// Convert MCP servers - create empty map since subprocess doesn't need them
+	sharedOpts.McpServers = make(map[string]shared.McpServerConfig)
+
+	return sharedOpts
 }
