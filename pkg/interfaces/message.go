@@ -2,6 +2,22 @@ package interfaces
 
 import "encoding/json"
 
+// Message type constants
+const (
+	MessageTypeUser      = "user"
+	MessageTypeAssistant = "assistant"
+	MessageTypeSystem    = "system"
+	MessageTypeResult    = "result"
+)
+
+// Content block type constants
+const (
+	ContentBlockTypeText       = "text"
+	ContentBlockTypeThinking   = "thinking"
+	ContentBlockTypeToolUse    = "tool_use"
+	ContentBlockTypeToolResult = "tool_result"
+)
+
 // Message represents any message type in the Claude Code protocol.
 type Message interface {
 	Type() string
@@ -62,12 +78,13 @@ func (m AssistantMessage) MarshalJSON() ([]byte, error) {
 
 // StreamMessage represents messages sent to the CLI for streaming communication with typed Message field.
 type StreamMessage struct {
-	Type            string  `json:"type"`
-	Message         Message `json:"message,omitempty"`
-	ParentToolUseID *string `json:"parent_tool_use_id,omitempty"`
-	SessionID       string  `json:"session_id,omitempty"`
-	RequestID       string  `json:"request_id,omitempty"`
-	// Note: Request and Response fields will be handled in a future iteration with proper typing
+	Type            string                 `json:"type"`
+	Message         Message                `json:"message,omitempty"`
+	ParentToolUseID *string                `json:"parent_tool_use_id,omitempty"`
+	SessionID       string                 `json:"session_id,omitempty"`
+	RequestID       string                 `json:"request_id,omitempty"`
+	Request         map[string]interface{} `json:"request,omitempty"`
+	Response        map[string]interface{} `json:"response,omitempty"`
 }
 
 // TextBlock represents text content within a message.
@@ -113,4 +130,35 @@ type ToolResultBlock struct {
 // Type returns the content block type for ToolResultBlock.
 func (b ToolResultBlock) Type() string {
 	return "tool_result"
+}
+
+// SystemMessage represents a system prompt message.
+type SystemMessage struct {
+	MessageType string         `json:"type"`
+	Subtype     string         `json:"subtype"`
+	Data        map[string]any `json:"-"`
+}
+
+// Type returns the message type for SystemMessage.
+func (m *SystemMessage) Type() string {
+	return "system"
+}
+
+// ResultMessage represents a result or status message.
+type ResultMessage struct {
+	MessageType   string          `json:"type"`
+	Subtype       string          `json:"subtype"`
+	DurationMs    int             `json:"duration_ms"`
+	DurationAPIMs int             `json:"duration_api_ms"`
+	IsError       bool            `json:"is_error"`
+	NumTurns      int             `json:"num_turns"`
+	SessionID     string          `json:"session_id"`
+	TotalCostUSD  *float64        `json:"total_cost_usd,omitempty"`
+	Usage         *map[string]any `json:"usage,omitempty"`
+	Result        *map[string]any `json:"result,omitempty"`
+}
+
+// Type returns the message type for ResultMessage.
+func (m *ResultMessage) Type() string {
+	return "result"
 }

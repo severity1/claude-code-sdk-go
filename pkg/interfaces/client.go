@@ -24,10 +24,18 @@ type MessageReceiver interface {
 	ReceiveResponse(ctx context.Context) MessageIterator
 }
 
+// ProcessStatus represents the current status of the Claude Code CLI process.
+type ProcessStatus struct {
+	Running   bool   `json:"running"`
+	PID       int    `json:"pid,omitempty"`
+	StartTime string `json:"start_time,omitempty"`
+}
+
 // ProcessController handles process control operations.
 // Focused interface for interruption and control.
 type ProcessController interface {
 	Interrupt(ctx context.Context) error
+	Status() ProcessStatus
 }
 
 // Client represents the full client interface composed of focused interfaces.
