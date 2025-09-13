@@ -19,8 +19,4 @@ type MessageIterator interface {
 	Close() error
 }
 
-// StreamMessage represents messages sent to the CLI for streaming communication.
-// This is a placeholder - will be properly typed in later phases.
-type StreamMessage interface {
-	// Placeholder interface for now
-}
+// StreamMessage is now defined as a concrete type in message.go

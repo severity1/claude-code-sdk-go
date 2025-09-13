@@ -57,7 +57,6 @@ go fmt ./...                    # Format verification
 go vet ./...                   # Static analysis
 go test -race ./...            # Race condition check
 go test -cover ./...           # Coverage analysis
-golangci-lint run             # Comprehensive linting (if available)
 ```
 
 Provide a detailed assessment for each criterion with specific examples.

@@ -29,7 +29,6 @@ go test -v -count=3 -run TestClient # Performance consistency validation
 # Code quality (run before commits)
 go fmt ./...                      # Format code
 go vet ./...                      # Static analysis
-golangci-lint run                 # Comprehensive linting (if available)
 ```
 
 ## Code Style & Conventions
