@@ -76,6 +76,7 @@ func TestClientInterfaceEmbedding(t *testing.T) {
 		"ReceiveMessages": "MessageReceiver",
 		"ReceiveResponse": "MessageReceiver",
 		"Interrupt":       "ProcessController",
+		"Status":          "ProcessController",
 	}
 
 	for methodName, sourceInterface := range expectedMethods {
@@ -205,7 +206,7 @@ func TestInterfaceSegregationPrinciple(t *testing.T) {
 		{"ConnectionManager", reflect.TypeOf((*ConnectionManager)(nil)).Elem(), 3, "connection lifecycle"},
 		{"QueryExecutor", reflect.TypeOf((*QueryExecutor)(nil)).Elem(), 2, "query execution"},
 		{"MessageReceiver", reflect.TypeOf((*MessageReceiver)(nil)).Elem(), 2, "message receiving"},
-		{"ProcessController", reflect.TypeOf((*ProcessController)(nil)).Elem(), 1, "process control"},
+		{"ProcessController", reflect.TypeOf((*ProcessController)(nil)).Elem(), 2, "process control"},
 	}
 
 	for _, tc := range testCases {

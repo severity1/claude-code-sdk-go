@@ -213,20 +213,17 @@ func TestMcpServerConfiguration(t *testing.T) {
 
 	// Create MCP server configurations
 	stdioConfig := &McpStdioServerConfig{
-		Type:    McpServerTypeStdio,
 		Command: "python",
 		Args:    []string{"-m", "my_mcp_server"},
 		Env:     map[string]string{"DEBUG": "1"},
 	}
 
 	sseConfig := &McpSSEServerConfig{
-		Type:    McpServerTypeSSE,
 		URL:     "http://localhost:8080/sse",
 		Headers: map[string]string{"Authorization": "Bearer token123"},
 	}
 
 	httpConfig := &McpHTTPServerConfig{
-		Type:    McpServerTypeHTTP,
 		URL:     "http://localhost:8080/mcp",
 		Headers: map[string]string{"Content-Type": "application/json"},
 	}
@@ -253,8 +250,8 @@ func TestMcpServerConfiguration(t *testing.T) {
 	if !exists {
 		t.Error("Expected stdio_server to exist")
 	}
-	if stdioServer.GetType() != McpServerTypeStdio {
-		t.Errorf("Expected stdio server type = %q, got %q", McpServerTypeStdio, stdioServer.GetType())
+	if stdioServer.Type() != McpServerTypeStdio {
+		t.Errorf("Expected stdio server type = %q, got %q", McpServerTypeStdio, stdioServer.Type())
 	}
 
 	stdioTyped, ok := stdioServer.(*McpStdioServerConfig)
@@ -277,8 +274,8 @@ func TestMcpServerConfiguration(t *testing.T) {
 	if !exists {
 		t.Error("Expected sse_server to exist")
 	}
-	if sseServer.GetType() != McpServerTypeSSE {
-		t.Errorf("Expected SSE server type = %q, got %q", McpServerTypeSSE, sseServer.GetType())
+	if sseServer.Type() != McpServerTypeSSE {
+		t.Errorf("Expected SSE server type = %q, got %q", McpServerTypeSSE, sseServer.Type())
 	}
 
 	sseTyped, ok := sseServer.(*McpSSEServerConfig)
@@ -298,8 +295,8 @@ func TestMcpServerConfiguration(t *testing.T) {
 	if !exists {
 		t.Error("Expected http_server to exist")
 	}
-	if httpServer.GetType() != McpServerTypeHTTP {
-		t.Errorf("Expected HTTP server type = %q, got %q", McpServerTypeHTTP, httpServer.GetType())
+	if httpServer.Type() != McpServerTypeHTTP {
+		t.Errorf("Expected HTTP server type = %q, got %q", McpServerTypeHTTP, httpServer.Type())
 	}
 
 	httpTyped, ok := httpServer.(*McpHTTPServerConfig)

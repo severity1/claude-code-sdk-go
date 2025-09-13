@@ -8,6 +8,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/severity1/claude-code-sdk-go/pkg/interfaces"
 )
 
 // TestClientLifecycleManagement tests connection, resource cleanup, and transport integration
@@ -136,16 +138,22 @@ func TestClientQueryExecution(t *testing.T) {
 		t.Errorf("Expected message type 'user', got '%s'", sentMsg.Type)
 	}
 
-	messageMap, ok := sentMsg.Message.(map[string]interface{})
+	userMsg, ok := sentMsg.Message.(*UserMessage)
 	if !ok {
-		t.Fatalf("Expected map[string]interface{}, got %T", sentMsg.Message)
+		t.Fatalf("Expected *UserMessage, got %T", sentMsg.Message)
 	}
 
-	if role, ok := messageMap["role"]; !ok || role != "user" {
-		t.Errorf("Expected message role 'user', got '%v'", role)
+	if userMsg.Type() != "user" {
+		t.Errorf("Expected message type 'user', got '%s'", userMsg.Type())
 	}
-	if content, ok := messageMap["content"]; !ok || content != "What is 2+2?" {
-		t.Errorf("Expected content 'What is 2+2?', got '%v'", content)
+
+	textContent, ok := userMsg.Content.(interfaces.TextContent)
+	if !ok {
+		t.Fatalf("Expected TextContent, got %T", userMsg.Content)
+	}
+
+	if textContent.Text != "What is 2+2?" {
+		t.Errorf("Expected content 'What is 2+2?', got '%s'", textContent.Text)
 	}
 }
 
@@ -165,13 +173,13 @@ func TestClientStreamQuery(t *testing.T) {
 	messages <- StreamMessage{
 		Type: "request",
 		Message: &UserMessage{
-			Content: "Hello",
+			Content: interfaces.TextContent{Text: "Hello"},
 		},
 	}
 	messages <- StreamMessage{
 		Type: "request",
 		Message: &UserMessage{
-			Content: "How are you?",
+			Content: interfaces.TextContent{Text: "How are you?"},
 		},
 	}
 	close(messages)
@@ -930,6 +938,9 @@ type clientMockTransport struct {
 	interruptError error
 	closeError     error
 	asyncError     error // For async error testing
+
+	// Status behavior for testing
+	statusBehavior func() ProcessStatus
 }
 
 func (c *clientMockTransport) Connect(ctx context.Context) error {
@@ -1015,6 +1026,20 @@ func (c *clientMockTransport) Interrupt(ctx context.Context) error {
 		return c.interruptError
 	}
 	return nil
+}
+
+func (c *clientMockTransport) Status() ProcessStatus {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.statusBehavior != nil {
+		return c.statusBehavior()
+	}
+
+	// Default behavior: return basic running status if connected
+	return ProcessStatus{
+		Running: c.connected,
+	}
 }
 
 func (c *clientMockTransport) Close() error {
@@ -1105,6 +1130,10 @@ func WithClientAsyncError(err error) ClientMockTransportOption {
 
 func WithClientResponseMessages(messages []Message) ClientMockTransportOption {
 	return func(t *clientMockTransport) { t.testMessages = messages }
+}
+
+func withStatusBehavior(behavior func() ProcessStatus) ClientMockTransportOption {
+	return func(t *clientMockTransport) { t.statusBehavior = behavior }
 }
 
 // Factory Functions - streamlined creation methods
@@ -1692,16 +1721,22 @@ func TestClientPythonSDKCompatibility(t *testing.T) {
 		t.Errorf("Expected nil ParentToolUseID, got '%v'", sentMsg.ParentToolUseID)
 	}
 
-	// Verify nested message structure matches Python format
-	messageMap, ok := sentMsg.Message.(map[string]interface{})
+	// Verify nested message structure uses strongly-typed interfaces
+	userMsg, ok := sentMsg.Message.(*UserMessage)
 	if !ok {
-		t.Fatalf("Expected Message to be map[string]interface{}, got %T", sentMsg.Message)
+		t.Fatalf("Expected Message to be *UserMessage, got %T", sentMsg.Message)
 	}
-	if role, ok := messageMap["role"]; !ok || role != "user" {
-		t.Errorf("Expected message role 'user', got '%v'", role)
+	if userMsg.Type() != "user" {
+		t.Errorf("Expected message type 'user', got '%s'", userMsg.Type())
 	}
-	if content, ok := messageMap["content"]; !ok || content != "Test streaming with Python SDK format" {
-		t.Errorf("Expected content to match prompt, got '%v'", content)
+
+	textContent, ok := userMsg.Content.(interfaces.TextContent)
+	if !ok {
+		t.Fatalf("Expected TextContent, got %T", userMsg.Content)
+	}
+
+	if textContent.Text != "Test streaming with Python SDK format" {
+		t.Errorf("Expected content to match prompt, got '%s'", textContent.Text)
 	}
 
 	// Test message receiving functionality
@@ -1960,6 +1995,94 @@ func TestClientIteratorNextErrorPaths(t *testing.T) {
 			// Verify iterator is closed after error conditions
 			if test.name != "next_on_closed_iterator" && !iter.closed {
 				t.Error("Expected iterator to be closed after error condition")
+			}
+		})
+	}
+}
+
+// TestClientStatus tests the Status method functionality.
+func TestClientStatus(t *testing.T) {
+	tests := []struct {
+		name            string
+		setup           func() *clientMockTransport
+		expectConnected bool
+		expectRunning   bool
+		expectPID       bool
+		expectStartTime bool
+	}{
+		{
+			name: "connected_client_with_running_process",
+			setup: func() *clientMockTransport {
+				return newClientMockTransportWithOptions(
+					withStatusBehavior(func() ProcessStatus {
+						return ProcessStatus{
+							Running:   true,
+							PID:       12345,
+							StartTime: "2024-01-15T10:30:45Z",
+						}
+					}),
+				)
+			},
+			expectConnected: true,
+			expectRunning:   true,
+			expectPID:       true,
+			expectStartTime: true,
+		},
+		{
+			name: "disconnected_client",
+			setup: func() *clientMockTransport {
+				return newClientMockTransport()
+			},
+			expectConnected: false,
+			expectRunning:   false,
+			expectPID:       false,
+			expectStartTime: false,
+		},
+		{
+			name: "connected_client_without_status_support",
+			setup: func() *clientMockTransport {
+				// No status behavior - should use fallback
+				return newClientMockTransport()
+			},
+			expectConnected: true,
+			expectRunning:   true,
+			expectPID:       false,
+			expectStartTime: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			transport := tt.setup()
+			client := NewClientWithTransport(transport)
+			ctx, cancel := setupClientTestContext(t, 10*time.Second)
+			defer cancel()
+
+			if tt.expectConnected {
+				if err := client.Connect(ctx); err != nil {
+					t.Fatal(err)
+				}
+				defer client.Disconnect()
+			}
+
+			status := client.Status()
+
+			if status.Running != tt.expectRunning {
+				t.Errorf("Expected Running=%v, got %v", tt.expectRunning, status.Running)
+			}
+
+			if tt.expectPID && status.PID == 0 {
+				t.Error("Expected PID to be set, got 0")
+			}
+			if !tt.expectPID && status.PID != 0 {
+				t.Errorf("Expected PID to be 0, got %d", status.PID)
+			}
+
+			if tt.expectStartTime && status.StartTime == "" {
+				t.Error("Expected StartTime to be set, got empty string")
+			}
+			if !tt.expectStartTime && status.StartTime != "" {
+				t.Errorf("Expected StartTime to be empty, got %s", status.StartTime)
 			}
 		})
 	}
