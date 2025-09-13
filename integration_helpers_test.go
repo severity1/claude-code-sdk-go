@@ -37,7 +37,7 @@ func connectIntegrationClientSafely(t *testing.T, ctx context.Context, client cl
 // disconnectIntegrationClientSafely disconnects a client safely for testing
 func disconnectIntegrationClientSafely(t *testing.T, client claudecode.Client) {
 	t.Helper()
-	if err := client.Disconnect(); err != nil {
+	if err := client.Close(); err != nil {
 		t.Errorf("Client disconnect failed: %v", err)
 	}
 }

@@ -14,13 +14,22 @@ import (
 const defaultSessionID = "default"
 
 // Client provides bidirectional streaming communication with Claude Code CLI.
+// Now uses the segregated interface signatures from pkg/interfaces for clean composition.
 type Client interface {
-	Connect(ctx context.Context, prompt ...StreamMessage) error
-	Disconnect() error
-	Query(ctx context.Context, prompt string, sessionID ...string) error
+	// ConnectionManager interface
+	Connect(ctx context.Context) error // BREAKING: Removed prompt parameter
+	Close() error                      // Renamed from Disconnect()
+	IsConnected() bool
+
+	// QueryExecutor interface
+	Query(ctx context.Context, prompt string) error // BREAKING: Removed sessionID parameter
 	QueryStream(ctx context.Context, messages <-chan StreamMessage) error
+
+	// MessageReceiver interface
 	ReceiveMessages(ctx context.Context) <-chan Message
 	ReceiveResponse(ctx context.Context) MessageIterator
+
+	// ProcessController interface
 	Interrupt(ctx context.Context) error
 	Status() ProcessStatus
 }
@@ -112,10 +121,10 @@ func WithClient(ctx context.Context, fn func(Client) error, opts ...Option) erro
 	defer func() {
 		// Following Go idiom: cleanup errors don't override the original error
 		// This matches patterns in database/sql, os.File, and other stdlib packages
-		if disconnectErr := client.Disconnect(); disconnectErr != nil {
+		if closeErr := client.Close(); closeErr != nil {
 			// Log cleanup errors but don't return them to preserve the original error
 			// This follows the standard Go pattern for resource cleanup
-			_ = disconnectErr // Explicitly acknowledge we're ignoring this error
+			_ = closeErr // Explicitly acknowledge we're ignoring this error
 		}
 	}()
 
@@ -153,9 +162,9 @@ func WithClientTransport(ctx context.Context, transport Transport, fn func(Clien
 
 	defer func() {
 		// Following Go idiom: cleanup errors don't override the original error
-		if disconnectErr := client.Disconnect(); disconnectErr != nil {
+		if closeErr := client.Close(); closeErr != nil {
 			// Log cleanup errors but don't return them to preserve the original error
-			_ = disconnectErr // Explicitly acknowledge we're ignoring this error
+			_ = closeErr // Explicitly acknowledge we're ignoring this error
 		}
 	}()
 
@@ -197,7 +206,8 @@ func (c *ClientImpl) validateOptions() error {
 }
 
 // Connect establishes a connection to the Claude Code CLI.
-func (c *ClientImpl) Connect(ctx context.Context, prompt ...StreamMessage) error {
+// BREAKING CHANGE: Removed prompt parameter to match segregated interfaces.
+func (c *ClientImpl) Connect(ctx context.Context) error {
 	// Check context before acquiring lock
 	if ctx.Err() != nil {
 		return ctx.Err()
@@ -242,8 +252,9 @@ func (c *ClientImpl) Connect(ctx context.Context, prompt ...StreamMessage) error
 	return nil
 }
 
-// Disconnect closes the connection to the Claude Code CLI.
-func (c *ClientImpl) Disconnect() error {
+// Close closes the connection to the Claude Code CLI.
+// BREAKING CHANGE: Renamed from Disconnect() to match segregated interfaces.
+func (c *ClientImpl) Close() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -260,7 +271,8 @@ func (c *ClientImpl) Disconnect() error {
 }
 
 // Query sends a simple text query.
-func (c *ClientImpl) Query(ctx context.Context, prompt string, sessionID ...string) error {
+// BREAKING CHANGE: Removed sessionID parameter to match segregated interfaces.
+func (c *ClientImpl) Query(ctx context.Context, prompt string) error {
 	// Check context before proceeding
 	if ctx.Err() != nil {
 		return ctx.Err()
@@ -281,10 +293,10 @@ func (c *ClientImpl) Query(ctx context.Context, prompt string, sessionID ...stri
 		return ctx.Err()
 	}
 
-	// Determine session ID - use first provided, otherwise default to "default"
+	// Use session ID from options if provided, otherwise default
 	sid := defaultSessionID
-	if len(sessionID) > 0 && sessionID[0] != "" {
-		sid = sessionID[0]
+	if c.options != nil && c.options.Resume != nil && *c.options.Resume != "" {
+		sid = *c.options.Resume
 	}
 
 	// Create user message with strongly-typed content
@@ -416,6 +428,13 @@ func (c *ClientImpl) Status() ProcessStatus {
 	return ProcessStatus{
 		Running: true,
 	}
+}
+
+// IsConnected returns whether the client is currently connected
+func (c *ClientImpl) IsConnected() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.connected
 }
 
 // clientIterator implements MessageIterator for client message reception

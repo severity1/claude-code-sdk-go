@@ -104,7 +104,7 @@ func testTransportIntegration(t *testing.T, ctx context.Context) {
 	}
 
 	// Test disconnect
-	err = client.Disconnect()
+	err = client.Close()
 	assertNoError(t, err)
 	if transport.connected {
 		t.Error("Expected transport to be disconnected via client")
@@ -517,18 +517,18 @@ func TestClientSessionID(t *testing.T) {
 	ctx, cancel := setupClientTestContext(t, 10*time.Second)
 	defer cancel()
 
-	transport := newClientMockTransport()
-	client := setupClientForTest(t, transport)
-	defer disconnectClientSafely(t, client)
+	// Test 1: Client with default session ID
+	transport1 := newClientMockTransport()
+	client1 := setupClientForTest(t, transport1) // No WithResume option
+	defer disconnectClientSafely(t, client1)
 
-	connectClientSafely(t, ctx, client)
+	connectClientSafely(t, ctx, client1)
 
-	// Test query with default session ID
-	err := client.Query(ctx, "test message")
+	err := client1.Query(ctx, "test message")
 	assertNoError(t, err)
 
 	// Verify default session ID was used
-	sentMsg, ok := transport.getSentMessage(0)
+	sentMsg, ok := transport1.getSentMessage(0)
 	if !ok {
 		t.Fatal("Failed to get sent message")
 	}
@@ -536,12 +536,20 @@ func TestClientSessionID(t *testing.T) {
 		t.Errorf("Expected default session ID 'default', got '%s'", sentMsg.SessionID)
 	}
 
-	// Test query with custom session ID
-	err = client.Query(ctx, "test message 2", "custom-session")
+	disconnectClientSafely(t, client1)
+
+	// Test 2: Client with custom session ID
+	transport2 := newClientMockTransport()
+	client2 := NewClientWithTransport(transport2, WithResume("custom-session"))
+	defer disconnectClientSafely(t, client2)
+
+	connectClientSafely(t, ctx, client2)
+
+	err = client2.Query(ctx, "test message 2")
 	assertNoError(t, err)
 
 	// Verify custom session ID was used
-	sentMsg, ok = transport.getSentMessage(1)
+	sentMsg, ok = transport2.getSentMessage(0)
 	if !ok {
 		t.Fatal("Failed to get second sent message")
 	}
@@ -549,21 +557,21 @@ func TestClientSessionID(t *testing.T) {
 		t.Errorf("Expected custom session ID 'custom-session', got '%s'", sentMsg.SessionID)
 	}
 
-	// Test query with empty session ID (should use default)
-	err = client.Query(ctx, "test message 3", "")
+	// Test 3: Multiple queries from same client should use same session
+	err = client2.Query(ctx, "test message 3")
 	assertNoError(t, err)
 
-	// Verify default session ID was used for empty string
-	sentMsg, ok = transport.getSentMessage(2)
+	sentMsg, ok = transport2.getSentMessage(1)
 	if !ok {
 		t.Fatal("Failed to get third sent message")
 	}
-	if sentMsg.SessionID != "default" {
-		t.Errorf("Expected default session ID for empty string, got '%s'", sentMsg.SessionID)
+	if sentMsg.SessionID != "custom-session" {
+		t.Errorf("Expected consistent session ID 'custom-session', got '%s'", sentMsg.SessionID)
 	}
 
-	// Verify total message count
-	assertClientMessageCount(t, transport, 3)
+	// Verify message counts
+	assertClientMessageCount(t, transport1, 1)
+	assertClientMessageCount(t, transport2, 2)
 }
 
 // TestClientMultipleSessions tests concurrent operations with different session IDs
@@ -572,16 +580,21 @@ func TestClientMultipleSessions(t *testing.T) {
 	ctx, cancel := setupClientTestContext(t, 15*time.Second)
 	defer cancel()
 
-	transport := newClientMockTransport()
-	client := setupClientForTest(t, transport)
-	defer disconnectClientSafely(t, client)
-
-	connectClientSafely(t, ctx, client)
-
-	// Test concurrent operations with different session IDs
+	// Test concurrent operations with different session IDs using separate clients
 	const numSessions = 3
 	const queriesPerSession = 2
 	sessionIDs := []string{"session-1", "session-2", "session-3"}
+
+	// Create separate transports and clients for each session
+	transports := make([]*clientMockTransport, numSessions)
+	clients := make([]Client, numSessions)
+
+	for i, sessionID := range sessionIDs {
+		transports[i] = newClientMockTransport()
+		clients[i] = NewClientWithTransport(transports[i], WithResume(sessionID))
+		defer disconnectClientSafely(t, clients[i])
+		connectClientSafely(t, ctx, clients[i])
+	}
 
 	var wg sync.WaitGroup
 	errors := make(chan error, numSessions*queriesPerSession)
@@ -589,10 +602,11 @@ func TestClientMultipleSessions(t *testing.T) {
 	// Launch concurrent operations for different sessions
 	for i, sessionID := range sessionIDs {
 		wg.Add(1)
-		go func(id int, sess string) {
+		go func(clientIndex int, sess string) {
 			defer wg.Done()
+			client := clients[clientIndex]
 			for j := 0; j < queriesPerSession; j++ {
-				err := client.Query(ctx, fmt.Sprintf("query %d-%d", id, j), sess)
+				err := client.Query(ctx, fmt.Sprintf("query %d-%d", clientIndex, j))
 				if err != nil {
 					errors <- fmt.Errorf("session %s query %d failed: %w", sess, j, err)
 				}
@@ -608,45 +622,32 @@ func TestClientMultipleSessions(t *testing.T) {
 		t.Errorf("Concurrent session operation error: %v", err)
 	}
 
-	// Verify all messages were sent
-	expectedMessageCount := numSessions * queriesPerSession
-	assertClientMessageCount(t, transport, expectedMessageCount)
+	// Verify all messages were sent to each transport
+	for i := range transports {
+		assertClientMessageCount(t, transports[i], queriesPerSession)
+	}
 
-	// Verify session IDs were properly propagated
-	sessionCounts := make(map[string]int)
-	for i := 0; i < expectedMessageCount; i++ {
-		sentMsg, ok := transport.getSentMessage(i)
-		if !ok {
-			t.Errorf("Failed to get sent message %d", i)
-			continue
+	// Verify session IDs were properly propagated for each client
+	for i, sessionID := range sessionIDs {
+		transport := transports[i]
+
+		// Check all messages from this transport have the correct session ID
+		for j := 0; j < queriesPerSession; j++ {
+			sentMsg, ok := transport.getSentMessage(j)
+			if !ok {
+				t.Errorf("Transport %d: Failed to get sent message %d", i, j)
+				continue
+			}
+			if sentMsg.SessionID != sessionID {
+				t.Errorf("Transport %d: expected session ID '%s', got '%s'",
+					i, sessionID, sentMsg.SessionID)
+			}
 		}
-		sessionCounts[sentMsg.SessionID]++
-	}
 
-	// Verify each session received the correct number of messages
-	for _, sessionID := range sessionIDs {
-		if sessionCounts[sessionID] != queriesPerSession {
-			t.Errorf("Session %s: expected %d messages, got %d",
-				sessionID, queriesPerSession, sessionCounts[sessionID])
+		// Verify each transport/client maintains consistent state
+		if !transports[i].connected {
+			t.Errorf("Expected client %d to remain connected after operations", i)
 		}
-	}
-
-	// Test state consistency: client should remain connected throughout
-	if !transport.connected {
-		t.Error("Expected client to remain connected after concurrent session operations")
-	}
-
-	// Test session isolation: different sessions should not interfere
-	err := client.Query(ctx, "final test", "session-1")
-	assertNoError(t, err)
-
-	// Verify the final message used correct session ID
-	finalMsg, ok := transport.getSentMessage(expectedMessageCount)
-	if !ok {
-		t.Fatal("Failed to get final sent message")
-	}
-	if finalMsg.SessionID != "session-1" {
-		t.Errorf("Expected final message session ID 'session-1', got '%s'", finalMsg.SessionID)
 	}
 }
 
@@ -1185,7 +1186,7 @@ func connectClientSafely(t *testing.T, ctx context.Context, client Client) {
 
 func disconnectClientSafely(t *testing.T, client Client) {
 	t.Helper()
-	if err := client.Disconnect(); err != nil {
+	if err := client.Close(); err != nil {
 		t.Errorf("Client disconnect failed: %v", err)
 	}
 }
@@ -1268,7 +1269,7 @@ func verifyClientConfiguration(t *testing.T, client Client, transport *clientMoc
 
 		var err error
 		if config.sessionID != "" {
-			err = client.Query(ctx, queryText, config.sessionID)
+			err = client.Query(ctx, queryText)
 		} else {
 			err = client.Query(ctx, queryText)
 		}
@@ -1354,15 +1355,15 @@ func verifySessionConfig(t *testing.T, client Client, transport *clientMockTrans
 	verifyClientConfiguration(t, client, transport, clientConfigTest{
 		name:         "session_configuration",
 		messageCount: 1,
-		sessionID:    "custom-session-456",
+		sessionID:    "test-session-123",
 		queryText:    "session test",
 		validateFn: func(t *testing.T, tr *clientMockTransport) {
 			sentMsg, ok := tr.getSentMessage(0)
 			if !ok {
 				t.Fatal("Expected sent message")
 			}
-			if sentMsg.SessionID != "custom-session-456" {
-				t.Errorf("Expected session ID 'custom-session-456', got %q", sentMsg.SessionID)
+			if sentMsg.SessionID != "test-session-123" {
+				t.Errorf("Expected session ID 'test-session-123', got %q", sentMsg.SessionID)
 			}
 		},
 	})
@@ -1647,10 +1648,11 @@ func TestWithClientOptionsPropagate(t *testing.T) {
 	// Test with various options
 	err := WithClientTransport(ctx, transport, func(client Client) error {
 		// Verify client was created and connected
-		return client.Query(ctx, "options test", "custom-session")
+		return client.Query(ctx, "options test")
 	},
 		WithSystemPrompt("Test system prompt"),
 		WithAllowedTools("Read", "Write"),
+		WithResume("custom-session"),
 	)
 
 	assertNoError(t, err)
@@ -1692,7 +1694,7 @@ func TestClientPythonSDKCompatibility(t *testing.T) {
 	transport := newClientMockTransportWithOptions(
 		WithClientResponseMessages(testMessages),
 	)
-	client := setupClientForTest(t, transport)
+	client := NewClientWithTransport(transport, WithResume("test-session"))
 	defer disconnectClientSafely(t, client)
 
 	// Test complete workflow: Connect → Query → ReceiveMessages
@@ -1700,7 +1702,7 @@ func TestClientPythonSDKCompatibility(t *testing.T) {
 	assertClientConnected(t, transport)
 
 	// Send query using new Python SDK compatible format
-	err := client.Query(ctx, "Test streaming with Python SDK format", "test-session")
+	err := client.Query(ctx, "Test streaming with Python SDK format")
 	assertNoError(t, err)
 
 	// Verify message was sent in correct Python SDK format
@@ -2062,7 +2064,7 @@ func TestClientStatus(t *testing.T) {
 				if err := client.Connect(ctx); err != nil {
 					t.Fatal(err)
 				}
-				defer client.Disconnect()
+				defer client.Close()
 			}
 
 			status := client.Status()

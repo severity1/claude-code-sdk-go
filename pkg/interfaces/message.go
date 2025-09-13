@@ -77,14 +77,14 @@ func (m AssistantMessage) MarshalJSON() ([]byte, error) {
 }
 
 // StreamMessage represents messages sent to the CLI for streaming communication with typed Message field.
+// StreamMessage represents a streaming protocol message.
+// BREAKING CHANGE: Removed Request and Response fields to eliminate interface{} usage.
 type StreamMessage struct {
-	Type            string                 `json:"type"`
-	Message         Message                `json:"message,omitempty"`
-	ParentToolUseID *string                `json:"parent_tool_use_id,omitempty"`
-	SessionID       string                 `json:"session_id,omitempty"`
-	RequestID       string                 `json:"request_id,omitempty"`
-	Request         map[string]interface{} `json:"request,omitempty"`
-	Response        map[string]interface{} `json:"response,omitempty"`
+	Type            string  `json:"type"`
+	Message         Message `json:"message,omitempty"`
+	ParentToolUseID *string `json:"parent_tool_use_id,omitempty"`
+	SessionID       string  `json:"session_id,omitempty"`
+	RequestID       string  `json:"request_id,omitempty"`
 }
 
 // TextBlock represents text content within a message.
