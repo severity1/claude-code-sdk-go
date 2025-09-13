@@ -194,7 +194,6 @@ func setupBenchmarkContext(b *testing.B, timeout time.Duration) (context.Context
 type benchmarkMockTransport struct {
 	connected bool
 	messages  []Message
-	msgIndex  int
 }
 
 // BenchmarkMockTransportOption allows configuration of benchmark mock transport

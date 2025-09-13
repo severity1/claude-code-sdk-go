@@ -142,7 +142,7 @@ func TestMethodSignatureCompatibility(t *testing.T) {
 			t.Errorf("Query failed: %v", err)
 		}
 
-		client.Close()
+		_ = client.Close()
 		t.Log("✅ QueryExecutor method signatures work correctly")
 	})
 }

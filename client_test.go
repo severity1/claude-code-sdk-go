@@ -2064,7 +2064,7 @@ func TestClientStatus(t *testing.T) {
 				if err := client.Connect(ctx); err != nil {
 					t.Fatal(err)
 				}
-				defer client.Close()
+				defer func() { _ = client.Close() }()
 			}
 
 			status := client.Status()

@@ -342,6 +342,7 @@ func TestSealedInterfaceAssignability(t *testing.T) {
 	// Test assignment chain
 	messageContent = userContent // UserMessageContent -> MessageContent
 	_ = messageContent
+	_ = userContent
 
 	// Test ThinkingContent assignability
 	thinkingContent := ThinkingContent{Thinking: "thinking", Signature: "sig"}
@@ -352,6 +353,7 @@ func TestSealedInterfaceAssignability(t *testing.T) {
 	// Test assignment chain
 	messageContent2 = assistantContent // AssistantMessageContent -> MessageContent
 	_ = messageContent2
+	_ = assistantContent
 
 	// Test BlockListContent assignability
 	blockContent := BlockListContent{Blocks: []ContentBlock{}}
