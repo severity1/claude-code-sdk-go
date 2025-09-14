@@ -33,12 +33,13 @@ go get github.com/severity1/claude-code-sdk-go
 
 ## Key Features
 
-**Two APIs for different needs** - Query for automation, Client for interaction  
-**100% Python SDK compatibility** - Same functionality, Go-native design  
-**Automatic resource management** - WithClient provides Go-idiomatic context manager pattern 
-**Built-in tool integration** - File operations, AWS, GitHub, databases, and more  
-**Production ready** - Comprehensive error handling, timeouts, resource cleanup  
-**Security focused** - Granular tool permissions and access controls  
+**Two APIs for different needs** - Query for automation, Client for interaction
+**100% Python SDK compatibility** - Same functionality, Go-native design
+**Automatic resource management** - WithClient provides Go-idiomatic context manager pattern
+**Session management** - Isolated conversation contexts with `Query()` and `QueryWithSession()`
+**Built-in tool integration** - File operations, AWS, GitHub, databases, and more
+**Production ready** - Comprehensive error handling, timeouts, resource cleanup
+**Security focused** - Granular tool permissions and access controls
 **Context-aware** - Maintain conversation state across multiple interactions  
 
 ## Usage
@@ -131,6 +132,7 @@ func main() {
     err := claudecode.WithClient(ctx, func(client claudecode.Client) error {
         fmt.Println("\nConnected! Streaming response:")
 
+        // Simple query uses default session
         if err := client.Query(ctx, question); err != nil {
             return fmt.Errorf("query failed: %w", err)
         }
@@ -169,6 +171,65 @@ func main() {
     }
 
     fmt.Println("\n\nStreaming completed!")
+}
+```
+
+### Session Management
+
+**Maintain conversation context across multiple queries with session management:**
+
+```go
+package main
+
+import (
+    "context"
+    "fmt"
+    "log"
+
+    "github.com/severity1/claude-code-sdk-go"
+)
+
+func main() {
+    fmt.Println("Claude Code SDK - Session Management Example")
+
+    ctx := context.Background()
+
+    err := claudecode.WithClient(ctx, func(client claudecode.Client) error {
+        fmt.Println("\nDemonstrating isolated sessions:")
+
+        // Session A: Math conversation
+        sessionA := "math-session"
+        if err := client.QueryWithSession(ctx, "Remember this: x = 5", sessionA); err != nil {
+            return err
+        }
+
+        // Session B: Programming conversation
+        sessionB := "programming-session"
+        if err := client.QueryWithSession(ctx, "Remember this: language = Go", sessionB); err != nil {
+            return err
+        }
+
+        // Query each session - they maintain separate contexts
+        fmt.Println("\nQuerying math session:")
+        if err := client.QueryWithSession(ctx, "What is x * 2?", sessionA); err != nil {
+            return err
+        }
+
+        fmt.Println("\nQuerying programming session:")
+        if err := client.QueryWithSession(ctx, "What language did I mention?", sessionB); err != nil {
+            return err
+        }
+
+        // Default session query (separate from above)
+        fmt.Println("\nDefault session (no context from above):")
+        return client.Query(ctx, "What did I just ask about?") // Won't know about x or Go
+    })
+
+    if err != nil {
+        log.Fatalf("Session demo failed: %v", err)
+    }
+
+    fmt.Println("Session management demo completed!")
 }
 ```
 
@@ -236,6 +297,7 @@ Comprehensive examples covering every use case:
 - [`examples/02_client_streaming/`](examples/02_client_streaming/) - WithClient streaming basics
 - [`examples/03_client_multi_turn/`](examples/03_client_multi_turn/) - Multi-turn conversations with automatic cleanup
 - [`examples/10_context_manager/`](examples/10_context_manager/) - WithClient vs manual patterns comparison
+- [`examples/11_session_management/`](examples/11_session_management/) - Session isolation and context management
 
 **Tool Integration:**
 - [`examples/04_query_with_tools/`](examples/04_query_with_tools/) - File operations with Query API
