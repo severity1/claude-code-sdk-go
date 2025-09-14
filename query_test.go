@@ -661,6 +661,155 @@ func TestQuery(t *testing.T) {
 	}
 }
 
+// TestQueryIteratorErrorPaths tests missing error paths in queryIterator.Next
+// Targets 84.0% coverage in Next (query.go:81)
+func TestQueryIteratorErrorPaths(t *testing.T) {
+	ctx, cancel := setupQueryTestContext(t, 5*time.Second)
+	defer cancel()
+
+	tests := []struct {
+		name           string
+		setupTransport func() *queryMockTransport
+		testFlow       func(*testing.T, context.Context, MessageIterator)
+	}{
+		{
+			name: "iterator_start_error",
+			setupTransport: func() *queryMockTransport {
+				return newQueryMockTransport(WithQueryConnectError(fmt.Errorf("start failed")))
+			},
+			testFlow: func(t *testing.T, ctx context.Context, iter MessageIterator) {
+				// First call to Next should trigger start() and fail
+				msg, err := iter.Next(ctx)
+				if err == nil {
+					t.Error("Expected error on iterator start failure")
+				}
+				if msg != nil {
+					t.Errorf("Expected nil message on error, got: %v", msg)
+				}
+				// Verify error message
+				if !strings.Contains(err.Error(), "start failed") {
+					t.Errorf("Expected start error, got: %v", err)
+				}
+			},
+		},
+		{
+			name: "iterator_already_closed",
+			setupTransport: func() *queryMockTransport {
+				return newQueryMockTransport(WithQueryAssistantResponse("test"))
+			},
+			testFlow: func(t *testing.T, ctx context.Context, iter MessageIterator) {
+				// Close iterator first
+				err := iter.Close()
+				if err != nil {
+					t.Fatalf("Failed to close iterator: %v", err)
+				}
+
+				// Now try to call Next - should get ErrNoMoreMessages
+				msg, err := iter.Next(ctx)
+				if err != ErrNoMoreMessages {
+					t.Errorf("Expected ErrNoMoreMessages, got: %v", err)
+				}
+				if msg != nil {
+					t.Errorf("Expected nil message after close, got: %v", msg)
+				}
+			},
+		},
+		{
+			name: "error_channel_receives_error",
+			setupTransport: func() *queryMockTransport {
+				// Create transport that will send error on error channel
+				transport := newQueryMockTransport()
+				transport.sendError = fmt.Errorf("transport error during operation")
+				return transport
+			},
+			testFlow: func(t *testing.T, ctx context.Context, iter MessageIterator) {
+				// This should trigger the start and then hit the error channel path
+				msg, err := iter.Next(ctx)
+				// Should get some kind of error (either from start or from error channel)
+				if err == nil {
+					t.Error("Expected error from error channel")
+				}
+				if msg != nil {
+					t.Errorf("Expected nil message on error, got: %v", msg)
+				}
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			transport := test.setupTransport()
+			iter, err := QueryWithTransport(ctx, "test query", transport)
+			if err != nil {
+				t.Fatalf("QueryWithTransport failed: %v", err)
+			}
+			defer func() { _ = iter.Close() }()
+
+			test.testFlow(t, ctx, iter)
+		})
+	}
+}
+
+// TestQueryWithNilOptions tests Query function with nil options
+// Targets coverage in internal option handling paths
+func TestQueryWithNilOptions(t *testing.T) {
+	ctx, cancel := setupQueryTestContext(t, 5*time.Second)
+	defer cancel()
+
+	transport := newQueryMockTransport(WithQueryAssistantResponse("response"))
+
+	// Test QueryWithTransport with no options (nil options internally)
+	iter, err := QueryWithTransport(ctx, "test prompt", transport)
+	if err != nil {
+		t.Fatalf("QueryWithTransport with no options failed: %v", err)
+	}
+	defer func() { _ = iter.Close() }()
+
+	// Should be able to get response normally
+	msg, err := iter.Next(ctx)
+	if err != nil {
+		t.Fatalf("Next() failed: %v", err)
+	}
+	if msg == nil {
+		t.Fatal("Expected message, got nil")
+	}
+
+	// Verify message type
+	assistantMsg, ok := msg.(*AssistantMessage)
+	if !ok {
+		t.Fatalf("Expected AssistantMessage, got %T", msg)
+	}
+
+	assertQueryTextContent(t, assistantMsg, "response")
+}
+
+// TestQueryIteratorContextCancellation tests context cancellation during iteration
+func TestQueryIteratorContextCancellation(t *testing.T) {
+	ctx, cancel := setupQueryTestContext(t, 5*time.Second)
+	defer cancel()
+
+	// Create transport with delay to allow cancellation
+	transport := newQueryMockTransport(WithQueryDelay(100 * time.Millisecond))
+
+	iter, err := QueryWithTransport(ctx, "test query", transport)
+	if err != nil {
+		t.Fatalf("QueryWithTransport failed: %v", err)
+	}
+	defer func() { _ = iter.Close() }()
+
+	// Cancel context before calling Next
+	cancel()
+
+	// This should handle context cancellation
+	msg, err := iter.Next(ctx)
+	if err == nil {
+		t.Error("Expected context cancellation error")
+	}
+	if msg != nil {
+		t.Errorf("Expected nil message on context cancellation, got: %v", msg)
+	}
+}
+
 // Mock Transport Implementation
 type queryMockTransport struct {
 	mu               sync.RWMutex

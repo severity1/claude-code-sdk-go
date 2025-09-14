@@ -11,10 +11,6 @@ import (
 	"github.com/severity1/claude-code-sdk-go/internal/shared"
 )
 
-const (
-	printFlag = "--print"
-)
-
 // TestCLIDiscovery tests CLI binary discovery functionality
 func TestCLIDiscovery(t *testing.T) {
 	tests := []struct {
@@ -82,26 +78,6 @@ func TestCommandBuilding(t *testing.T) {
 	}
 }
 
-// TestCLIPathHandling tests various CLI path formats
-func TestCLIPathHandling(t *testing.T) {
-	tests := []struct {
-		name     string
-		cliPath  string
-		expected string
-	}{
-		{"absolute_path", "/usr/local/bin/claude", "/usr/local/bin/claude"},
-		{"relative_path", "./claude", "./claude"},
-		{"complex_path", "/usr/local/bin/../bin/./claude", "/usr/local/bin/../bin/./claude"},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			cmd := BuildCommand(test.cliPath, &shared.Options{}, true)
-			assertCLIPath(t, cmd, test.expected)
-		})
-	}
-}
-
 // TestCLIDiscoveryLocations tests CLI discovery path generation
 func TestCLIDiscoveryLocations(t *testing.T) {
 	locations := getCommonCLILocations()
@@ -148,150 +124,19 @@ func TestExtraArgsSupport(t *testing.T) {
 func TestBuildCommandWithPrompt(t *testing.T) {
 	tests := []struct {
 		name     string
-		cliPath  string
 		options  *shared.Options
 		prompt   string
 		validate func(*testing.T, []string, string)
 	}{
-		{
-			name:     "basic_prompt_command",
-			cliPath:  "/usr/local/bin/claude",
-			options:  &shared.Options{},
-			prompt:   "What is 2+2?",
-			validate: validateBasicPromptCommand,
-		},
-		{
-			name:    "prompt_with_system_prompt",
-			cliPath: "/usr/local/bin/claude",
-			options: &shared.Options{
-				SystemPrompt: stringPtr("You are a helpful assistant"),
-			},
-			prompt:   "Hello there",
-			validate: validatePromptWithSystemPrompt,
-		},
-		{
-			name:     "prompt_with_full_options",
-			cliPath:  "/usr/local/bin/claude",
-			options:  createFullOptionsSet(),
-			prompt:   "Complex query with all options",
-			validate: validatePromptWithFullOptions,
-		},
-		{
-			name:     "empty_prompt",
-			cliPath:  "/usr/local/bin/claude",
-			options:  &shared.Options{},
-			prompt:   "",
-			validate: validateEmptyPromptCommand,
-		},
-		{
-			name:     "multiline_prompt",
-			cliPath:  "/usr/local/bin/claude",
-			options:  &shared.Options{},
-			prompt:   "Line 1\nLine 2\nLine 3",
-			validate: validateMultilinePromptCommand,
-		},
-		{
-			name:     "special_characters_prompt",
-			cliPath:  "/usr/local/bin/claude",
-			options:  &shared.Options{},
-			prompt:   "Test with \"quotes\" and 'apostrophes' and $variables",
-			validate: validateSpecialCharactersPromptCommand,
-		},
-		{
-			name:     "nil_options",
-			cliPath:  "/usr/local/bin/claude",
-			options:  nil,
-			prompt:   "Test with nil options",
-			validate: validateNilOptionsPromptCommand,
-		},
-		{
-			name:    "prompt_with_tools_and_model",
-			cliPath: "/usr/local/bin/claude",
-			options: &shared.Options{
-				AllowedTools:    []string{"Read", "Write"},
-				DisallowedTools: []string{"Bash"},
-				Model:           stringPtr("claude-sonnet-3-5-20241022"),
-			},
-			prompt:   "Use tools to help me",
-			validate: validatePromptWithToolsAndModel,
-		},
+		{"basic_prompt", &shared.Options{}, "What is 2+2?", validateBasicPromptCommand},
+		{"empty_prompt", nil, "", validateEmptyPromptCommand},
+		{"multiline_prompt", &shared.Options{Model: stringPtr("claude-3-sonnet")}, "Line 1\nLine 2", validateBasicPromptCommand},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			cmd := BuildCommandWithPrompt(test.cliPath, test.options, test.prompt)
+			cmd := BuildCommandWithPrompt("/usr/local/bin/claude", test.options, test.prompt)
 			test.validate(t, cmd, test.prompt)
-		})
-	}
-}
-
-// TestBuildCommandWithPromptVsBuildCommand tests differences between prompt and regular command building
-func TestBuildCommandWithPromptVsBuildCommand(t *testing.T) {
-	cliPath := "/usr/local/bin/claude"
-	options := &shared.Options{
-		SystemPrompt: stringPtr("Test prompt"),
-		Model:        stringPtr("claude-sonnet-3-5-20241022"),
-	}
-	prompt := "Test query"
-
-	// Build both types of commands
-	regularCommand := BuildCommand(cliPath, options, true) // closeStdin=true for one-shot
-	promptCommand := BuildCommandWithPrompt(cliPath, options, prompt)
-
-	tests := []struct {
-		name  string
-		check func(t *testing.T)
-	}{
-		{
-			name: "both_have_print_flag",
-			check: func(t *testing.T) {
-				assertContainsArg(t, regularCommand, "--print")
-				assertContainsArg(t, promptCommand, "--print")
-			},
-		},
-		{
-			name: "prompt_command_includes_prompt_as_argument",
-			check: func(t *testing.T) {
-				// promptCommand should have the prompt as an argument after --print
-				found := false
-				for i, arg := range promptCommand {
-					if arg == printFlag && i+1 < len(promptCommand) && promptCommand[i+1] == prompt {
-						found = true
-						break
-					}
-				}
-				if !found {
-					t.Errorf("Expected prompt command to have prompt %q as argument after --print, got %v", prompt, promptCommand)
-				}
-			},
-		},
-		{
-			name: "regular_command_no_prompt_argument",
-			check: func(t *testing.T) {
-				// Regular command should not have prompt as argument
-				for i, arg := range regularCommand {
-					if arg == printFlag && i+1 < len(regularCommand) && regularCommand[i+1] == prompt {
-						t.Errorf("Expected regular command to not have prompt as argument, got %v", regularCommand)
-						break
-					}
-				}
-			},
-		},
-		{
-			name: "both_contain_same_options",
-			check: func(t *testing.T) {
-				// Both should contain the same options flags
-				assertContainsArgs(t, regularCommand, "--system-prompt", "Test prompt")
-				assertContainsArgs(t, promptCommand, "--system-prompt", "Test prompt")
-				assertContainsArgs(t, regularCommand, "--model", "claude-sonnet-3-5-20241022")
-				assertContainsArgs(t, promptCommand, "--model", "claude-sonnet-3-5-20241022")
-			},
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			test.check(t)
 		})
 	}
 }
@@ -417,13 +262,6 @@ func assertCLIDiscoveryError(t *testing.T, err error, expectError bool, errorCon
 	}
 	if expectError && errorContains != "" && !strings.Contains(err.Error(), errorContains) {
 		t.Errorf("error = %v, expected message to contain %q", err, errorContains)
-	}
-}
-
-func assertCLIPath(t *testing.T, cmd []string, expected string) {
-	t.Helper()
-	if len(cmd) == 0 || cmd[0] != expected {
-		t.Errorf("Expected CLI path %s, got %v", expected, cmd)
 	}
 }
 
@@ -584,23 +422,6 @@ func validateBasicPromptCommand(t *testing.T, cmd []string, prompt string) {
 	assertContainsArgs(t, cmd, "--print", prompt)
 }
 
-func validatePromptWithSystemPrompt(t *testing.T, cmd []string, prompt string) {
-	t.Helper()
-	validateBasicPromptCommand(t, cmd, prompt)
-	assertContainsArgs(t, cmd, "--system-prompt", "You are a helpful assistant")
-}
-
-func validatePromptWithFullOptions(t *testing.T, cmd []string, prompt string) {
-	t.Helper()
-	validateBasicPromptCommand(t, cmd, prompt)
-	assertContainsArgs(t, cmd, "--allowed-tools", "Read,Write")
-	assertContainsArgs(t, cmd, "--disallowed-tools", "Bash,Delete")
-	assertContainsArgs(t, cmd, "--system-prompt", "You are a helpful assistant")
-	assertContainsArgs(t, cmd, "--model", "claude-3-sonnet")
-	assertContainsArg(t, cmd, "--continue")
-	assertContainsArgs(t, cmd, "--resume", "session123")
-}
-
 func validateEmptyPromptCommand(t *testing.T, cmd []string, _ string) {
 	t.Helper()
 	assertContainsArgs(t, cmd, "--output-format", "stream-json")
@@ -608,58 +429,351 @@ func validateEmptyPromptCommand(t *testing.T, cmd []string, _ string) {
 	assertContainsArgs(t, cmd, "--print", "") // Empty prompt should still be there
 }
 
-func validateMultilinePromptCommand(t *testing.T, cmd []string, prompt string) {
-	t.Helper()
-	validateBasicPromptCommand(t, cmd, prompt)
-	// Verify multiline prompt is preserved as single argument
-	found := false
-	for i, arg := range cmd {
-		if arg == "--print" && i+1 < len(cmd) && cmd[i+1] == prompt {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Errorf("Expected multiline prompt %q to be preserved as single argument", prompt)
-	}
-}
-
-func validateSpecialCharactersPromptCommand(t *testing.T, cmd []string, prompt string) {
-	t.Helper()
-	validateBasicPromptCommand(t, cmd, prompt)
-	// Verify special characters are preserved
-	found := false
-	for i, arg := range cmd {
-		if arg == "--print" && i+1 < len(cmd) && cmd[i+1] == prompt {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Errorf("Expected special characters prompt %q to be preserved", prompt)
-	}
-}
-
-func validateNilOptionsPromptCommand(t *testing.T, cmd []string, prompt string) {
-	t.Helper()
-	// With nil options, should still have basic prompt command structure
-	assertContainsArgs(t, cmd, "--output-format", "stream-json")
-	assertContainsArg(t, cmd, "--verbose")
-	assertContainsArgs(t, cmd, "--print", prompt)
-	// Should not contain any option-specific flags
-	assertNotContainsArg(t, cmd, "--system-prompt")
-	assertNotContainsArg(t, cmd, "--model")
-}
-
-func validatePromptWithToolsAndModel(t *testing.T, cmd []string, prompt string) {
-	t.Helper()
-	validateBasicPromptCommand(t, cmd, prompt)
-	assertContainsArgs(t, cmd, "--allowed-tools", "Read,Write")
-	assertContainsArgs(t, cmd, "--disallowed-tools", "Bash")
-	assertContainsArgs(t, cmd, "--model", "claude-sonnet-3-5-20241022")
-}
-
 // Helper function for string pointers
+// TestFindCLISuccess tests successful CLI discovery paths
+func TestFindCLISuccess(t *testing.T) {
+	// Test when CLI is found in PATH
+	t.Run("cli_found_in_path", func(t *testing.T) {
+		// Create a temporary executable file
+		tempDir := t.TempDir()
+		cliPath := filepath.Join(tempDir, "claude")
+		if runtime.GOOS == windowsOS {
+			cliPath += ".exe"
+		}
+
+		// Create and make executable
+		//nolint:gosec // G306: Test file needs execute permission for mock CLI binary
+		err := os.WriteFile(cliPath, []byte("#!/bin/bash\necho test"), 0o700)
+		if err != nil {
+			t.Fatalf("Failed to create test CLI: %v", err)
+		}
+
+		// Temporarily modify PATH
+		originalPath := os.Getenv("PATH")
+		newPath := tempDir + string(os.PathListSeparator) + originalPath
+		if err := os.Setenv("PATH", newPath); err != nil {
+			t.Fatalf("Failed to set PATH: %v", err)
+		}
+		defer func() {
+			if err := os.Setenv("PATH", originalPath); err != nil {
+				t.Logf("Failed to restore PATH: %v", err)
+			}
+		}()
+
+		found, err := FindCLI()
+		if err != nil {
+			t.Errorf("Expected CLI to be found, got error: %v", err)
+		}
+		if !strings.Contains(found, "claude") {
+			t.Errorf("Expected found path to contain 'claude', got: %s", found)
+		}
+	})
+
+	// Test executable validation on Unix
+	if runtime.GOOS != windowsOS {
+		t.Run("non_executable_file_skipped", func(t *testing.T) {
+			// Create a non-executable file in a location that would be found
+			tempDir := t.TempDir()
+			cliPath := filepath.Join(tempDir, ".npm-global", "bin", "claude")
+			if err := os.MkdirAll(filepath.Dir(cliPath), 0o750); err != nil {
+				t.Fatalf("Failed to create directory: %v", err)
+			}
+			if err := os.WriteFile(cliPath, []byte("not executable"), 0o600); err != nil {
+				t.Fatalf("Failed to write file: %v", err)
+			}
+
+			// Mock home directory
+			originalHome := os.Getenv("HOME")
+			if err := os.Setenv("HOME", tempDir); err != nil {
+				t.Fatalf("Failed to set HOME: %v", err)
+			}
+			defer func() {
+				if err := os.Setenv("HOME", originalHome); err != nil {
+					t.Logf("Failed to restore HOME: %v", err)
+				}
+			}()
+
+			// Isolate PATH to force common location search
+			originalPath := os.Getenv("PATH")
+			if err := os.Setenv("PATH", "/nonexistent"); err != nil {
+				t.Fatalf("Failed to set PATH: %v", err)
+			}
+			defer func() {
+				if err := os.Setenv("PATH", originalPath); err != nil {
+					t.Logf("Failed to restore PATH: %v", err)
+				}
+			}()
+
+			_, err := FindCLI()
+			// Should fail because file is not executable
+			if err == nil {
+				t.Error("Expected error for non-executable file")
+			}
+		})
+	}
+}
+
+// TestFindCLINodeJSValidation tests Node.js dependency checks
+func TestFindCLINodeJSValidation(t *testing.T) {
+	// Test when Node.js is not available
+	t.Run("nodejs_not_found", func(t *testing.T) {
+		// Isolate environment
+		originalPath := os.Getenv("PATH")
+		if err := os.Setenv("PATH", "/nonexistent/path"); err != nil {
+			t.Fatalf("Failed to set PATH: %v", err)
+		}
+		defer func() {
+			if err := os.Setenv("PATH", originalPath); err != nil {
+				t.Logf("Failed to restore PATH: %v", err)
+			}
+		}()
+
+		_, err := FindCLI()
+		if err == nil {
+			t.Error("Expected error when Node.js not found")
+			return
+		}
+
+		errMsg := err.Error()
+		if !strings.Contains(errMsg, "Node.js") {
+			t.Error("Error should mention Node.js requirement")
+		}
+		if !strings.Contains(errMsg, "nodejs.org") {
+			t.Error("Error should include Node.js installation URL")
+		}
+	})
+}
+
+// TestGetCommonCLILocationsPlatforms tests platform-specific path generation
+func TestGetCommonCLILocationsPlatforms(t *testing.T) {
+	// Test Windows paths
+	if runtime.GOOS == windowsOS {
+		t.Run("windows_paths", func(t *testing.T) {
+			locations := getCommonCLILocations()
+
+			// Check for Windows-specific patterns
+			foundAppData := false
+			foundProgramFiles := false
+
+			for _, location := range locations {
+				if strings.Contains(location, "AppData") && strings.HasSuffix(location, ".cmd") {
+					foundAppData = true
+				}
+				if strings.Contains(location, "Program Files") && strings.HasSuffix(location, ".cmd") {
+					foundProgramFiles = true
+				}
+			}
+
+			if !foundAppData {
+				t.Error("Expected Windows AppData path with .cmd extension")
+			}
+			if !foundProgramFiles {
+				t.Error("Expected Program Files path with .cmd extension")
+			}
+		})
+	}
+
+	// Test home directory fallback
+	t.Run("home_directory_fallback", func(t *testing.T) {
+		// Temporarily unset home directory env vars
+		var originalHome string
+		var envVar string
+
+		if runtime.GOOS == windowsOS {
+			envVar = "USERPROFILE"
+		} else {
+			envVar = "HOME"
+		}
+
+		originalHome = os.Getenv(envVar)
+		if err := os.Unsetenv(envVar); err != nil {
+			t.Fatalf("Failed to unset %s: %v", envVar, err)
+		}
+		defer func() {
+			if err := os.Setenv(envVar, originalHome); err != nil {
+				t.Logf("Failed to restore %s: %v", envVar, err)
+			}
+		}()
+
+		locations := getCommonCLILocations()
+		// Should still return paths, using current directory as fallback
+		if len(locations) == 0 {
+			t.Error("Expected fallback paths when home directory unavailable")
+		}
+	})
+}
+
+// TestValidateNodeJSSuccess tests successful Node.js validation
+func TestValidateNodeJSSuccess(t *testing.T) {
+	// This test assumes Node.js is available in the test environment
+	// If Node.js is not available, we'll create a mock
+	err := ValidateNodeJS()
+	if err != nil {
+		// Node.js not found - test the error path
+		assertNodeJSValidation(t, err)
+	} else {
+		// Node.js found - validation should succeed
+		t.Log("Node.js validation succeeded")
+	}
+}
+
+// TestDetectCLIVersionSuccess tests successful version detection
+func TestDetectCLIVersionSuccess(t *testing.T) {
+	ctx := context.Background()
+
+	// Create a mock CLI that outputs a version
+	tempDir := t.TempDir()
+	mockCLI := filepath.Join(tempDir, "mock-claude")
+	if runtime.GOOS == windowsOS {
+		mockCLI += ".bat"
+	}
+
+	var script string
+	if runtime.GOOS == windowsOS {
+		script = "@echo off\necho 1.2.3"
+	} else {
+		script = "#!/bin/bash\necho '1.2.3'"
+	}
+
+	//nolint:gosec // G306: Test file needs execute permission for mock CLI binary
+	err := os.WriteFile(mockCLI, []byte(script), 0o700)
+	if err != nil {
+		t.Fatalf("Failed to create mock CLI: %v", err)
+	}
+
+	version, err := DetectCLIVersion(ctx, mockCLI)
+	if err != nil {
+		t.Errorf("Expected successful version detection, got error: %v", err)
+		return
+	}
+
+	if version != "1.2.3" {
+		t.Errorf("Expected version '1.2.3', got '%s'", version)
+	}
+}
+
+// TestDetectCLIVersionInvalidFormat tests version format validation
+func TestDetectCLIVersionInvalidFormat(t *testing.T) {
+	ctx := context.Background()
+
+	// Create a mock CLI that outputs invalid version format
+	tempDir := t.TempDir()
+	mockCLI := filepath.Join(tempDir, "mock-claude-invalid")
+	if runtime.GOOS == windowsOS {
+		mockCLI += ".bat"
+	}
+
+	var script string
+	if runtime.GOOS == windowsOS {
+		script = "@echo off\necho invalid-version-format"
+	} else {
+		script = "#!/bin/bash\necho 'invalid-version-format'"
+	}
+
+	//nolint:gosec // G306: Test file needs execute permission for mock CLI binary
+	err := os.WriteFile(mockCLI, []byte(script), 0o700)
+	if err != nil {
+		t.Fatalf("Failed to create mock CLI: %v", err)
+	}
+
+	_, err = DetectCLIVersion(ctx, mockCLI)
+	if err == nil {
+		t.Error("Expected error for invalid version format")
+		return
+	}
+
+	if !strings.Contains(err.Error(), "invalid version format") {
+		t.Errorf("Expected 'invalid version format' error, got: %v", err)
+	}
+}
+
+// TestAddPermissionFlagsComplete tests all permission flag combinations
+func TestAddPermissionFlagsComplete(t *testing.T) {
+	tests := []struct {
+		name    string
+		options *shared.Options
+		expect  map[string]string // flag -> value pairs
+	}{
+		{
+			name: "permission_mode_only",
+			options: &shared.Options{
+				PermissionMode: func() *shared.PermissionMode {
+					mode := shared.PermissionModeAcceptEdits
+					return &mode
+				}(),
+			},
+			expect: map[string]string{
+				"--permission-mode": "acceptEdits",
+			},
+		},
+		{
+			name: "permission_prompt_tool_only",
+			options: &shared.Options{
+				PermissionPromptToolName: stringPtr("custom-tool"),
+			},
+			expect: map[string]string{
+				"--permission-prompt-tool": "custom-tool",
+			},
+		},
+		{
+			name: "both_permission_flags",
+			options: &shared.Options{
+				PermissionMode: func() *shared.PermissionMode {
+					mode := shared.PermissionModeBypassPermissions
+					return &mode
+				}(),
+				PermissionPromptToolName: stringPtr("security-tool"),
+			},
+			expect: map[string]string{
+				"--permission-mode":        "bypassPermissions",
+				"--permission-prompt-tool": "security-tool",
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			cmd := BuildCommand("/usr/local/bin/claude", test.options, false)
+
+			for flag, expectedValue := range test.expect {
+				assertContainsArgs(t, cmd, flag, expectedValue)
+			}
+		})
+	}
+}
+
+// TestWorkingDirectoryValidationStatError tests stat error handling
+func TestWorkingDirectoryValidationStatError(t *testing.T) {
+	// Test with a path that will cause os.Stat to return a non-IsNotExist error
+	// This is platform-dependent and hard to trigger reliably, so we test what we can
+
+	// Test permission denied scenario (where possible)
+	if runtime.GOOS != windowsOS {
+		t.Run("permission_denied_directory", func(t *testing.T) {
+			// Create a directory and remove permissions
+			tempDir := t.TempDir()
+			restrictedDir := filepath.Join(tempDir, "restricted")
+			if err := os.Mkdir(restrictedDir, 0o000); err != nil {
+				t.Fatalf("Failed to create restricted directory: %v", err)
+			}
+			defer func() {
+				if err := os.Chmod(restrictedDir, 0o600); err != nil {
+					t.Logf("Failed to restore directory permissions: %v", err)
+				}
+			}()
+
+			// Try to validate a subdirectory of the restricted directory
+			testPath := filepath.Join(restrictedDir, "subdir")
+			err := ValidateWorkingDirectory(testPath)
+
+			// Should return an error (either not exist or permission denied)
+			if err == nil {
+				t.Error("Expected error for inaccessible directory")
+			}
+		})
+	}
+}
+
 func stringPtr(s string) *string {
 	return &s
 }

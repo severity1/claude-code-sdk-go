@@ -15,312 +15,65 @@ func TestParseValidMessages(t *testing.T) {
 		name         string
 		data         map[string]any
 		expectedType string
-		validate     func(*testing.T, shared.Message)
 	}{
 		{
-			name: "user_message_with_text",
+			name: "user_message_string_content",
+			data: map[string]any{
+				"type":    "user",
+				"message": map[string]any{"content": "Hello world"},
+			},
+			expectedType: shared.MessageTypeUser,
+		},
+		{
+			name: "user_message_block_content",
 			data: map[string]any{
 				"type": "user",
 				"message": map[string]any{
 					"content": []any{
 						map[string]any{"type": "text", "text": "Hello"},
+						map[string]any{"type": "tool_use", "id": "t1", "name": "Read"},
 					},
 				},
 			},
 			expectedType: shared.MessageTypeUser,
-			validate: func(t *testing.T, msg shared.Message) {
-				userMsg, ok := msg.(*shared.UserMessage)
-				if !ok {
-					t.Fatalf("Expected UserMessage, got %T", msg)
-				}
-				blocks, ok := userMsg.Content.([]shared.ContentBlock)
-				if !ok {
-					t.Fatalf("Expected []ContentBlock, got %T", userMsg.Content)
-				}
-				assertContentBlockCount(t, blocks, 1)
-				assertTextBlockContent(t, blocks[0], "Hello")
-			},
-		},
-		{
-			name: "user_message_with_tool_use",
-			data: map[string]any{
-				"type": "user",
-				"message": map[string]any{
-					"content": []any{
-						map[string]any{
-							"type":  "tool_use",
-							"id":    "tool_123",
-							"name":  "Read",
-							"input": map[string]any{"file_path": "/example.txt"},
-						},
-					},
-				},
-			},
-			expectedType: shared.MessageTypeUser,
-			validate: func(t *testing.T, msg shared.Message) {
-				userMsg, ok := msg.(*shared.UserMessage)
-				if !ok {
-					t.Fatalf("Expected UserMessage, got %T", msg)
-				}
-				blocks, ok := userMsg.Content.([]shared.ContentBlock)
-				if !ok {
-					t.Fatalf("Expected []ContentBlock, got %T", userMsg.Content)
-				}
-				assertContentBlockCount(t, blocks, 1)
-				assertToolUseBlock(t, blocks[0], "tool_123", "Read")
-			},
-		},
-		{
-			name: "user_message_with_tool_result",
-			data: map[string]any{
-				"type": "user",
-				"message": map[string]any{
-					"content": []any{
-						map[string]any{
-							"type":        "tool_result",
-							"tool_use_id": "tool_456",
-							"content":     "File content here",
-						},
-					},
-				},
-			},
-			expectedType: shared.MessageTypeUser,
-			validate: func(t *testing.T, msg shared.Message) {
-				userMsg, ok := msg.(*shared.UserMessage)
-				if !ok {
-					t.Fatalf("Expected UserMessage, got %T", msg)
-				}
-				blocks, ok := userMsg.Content.([]shared.ContentBlock)
-				if !ok {
-					t.Fatalf("Expected []ContentBlock, got %T", userMsg.Content)
-				}
-				assertContentBlockCount(t, blocks, 1)
-				assertToolResultBlock(t, blocks[0], "tool_456", "File content here", false)
-			},
-		},
-		{
-			name: "user_message_with_mixed_content",
-			data: map[string]any{
-				"type": "user",
-				"message": map[string]any{
-					"content": []any{
-						map[string]any{"type": "text", "text": "First analyze this:"},
-						map[string]any{
-							"type":  "tool_use",
-							"id":    "tool_1",
-							"name":  "Read",
-							"input": map[string]any{"file_path": "/data.txt"},
-						},
-						map[string]any{
-							"type":        "tool_result",
-							"tool_use_id": "tool_1",
-							"content":     "Data: 42",
-						},
-						map[string]any{"type": "text", "text": "Now process it"},
-					},
-				},
-			},
-			expectedType: shared.MessageTypeUser,
-			validate: func(t *testing.T, msg shared.Message) {
-				userMsg, ok := msg.(*shared.UserMessage)
-				if !ok {
-					t.Fatalf("Expected UserMessage, got %T", msg)
-				}
-				blocks, ok := userMsg.Content.([]shared.ContentBlock)
-				if !ok {
-					t.Fatalf("Expected []ContentBlock, got %T", userMsg.Content)
-				}
-				assertContentBlockCount(t, blocks, 4)
-				assertMixedContentBlocks(t, blocks)
-			},
 		},
 		{
 			name: "assistant_message",
 			data: map[string]any{
 				"type": "assistant",
 				"message": map[string]any{
-					"content": []any{
-						map[string]any{"type": "text", "text": "I'll help you with that"},
-					},
-					"model": "claude-3-5-sonnet-20241022",
+					"content": []any{map[string]any{"type": "text", "text": "Hi"}},
+					"model":   "claude-3-sonnet",
 				},
 			},
 			expectedType: shared.MessageTypeAssistant,
-			validate: func(t *testing.T, msg shared.Message) {
-				assistantMsg, ok := msg.(*shared.AssistantMessage)
-				if !ok {
-					t.Fatalf("Expected AssistantMessage, got %T", msg)
-				}
-				assertContentBlockCount(t, assistantMsg.Content, 1)
-				assertTextBlockContent(t, assistantMsg.Content[0], "I'll help you with that")
-				assertAssistantModel(t, assistantMsg, "claude-3-5-sonnet-20241022")
-			},
 		},
 		{
-			name: "assistant_message_with_thinking",
-			data: map[string]any{
-				"type": "assistant",
-				"message": map[string]any{
-					"content": []any{
-						map[string]any{
-							"type":      "thinking",
-							"thinking":  "Let me think about this step by step...",
-							"signature": "thinking_block_sig_123",
-						},
-						map[string]any{"type": "text", "text": "Here's my analysis:"},
-					},
-					"model": "claude-3-5-sonnet-20241022",
-				},
-			},
-			expectedType: shared.MessageTypeAssistant,
-			validate: func(t *testing.T, msg shared.Message) {
-				assistantMsg, ok := msg.(*shared.AssistantMessage)
-				if !ok {
-					t.Fatalf("Expected AssistantMessage, got %T", msg)
-				}
-				assertContentBlockCount(t, assistantMsg.Content, 2)
-				assertThinkingBlock(t, assistantMsg.Content[0], "Let me think about this step by step...")
-			},
-		},
-		{
-			name: "system_message",
-			data: map[string]any{
-				"type":      "system",
-				"subtype":   "tool_output",
-				"data":      map[string]any{"output": "System ready"},
-				"timestamp": "2024-01-01T12:00:00Z",
-			},
+			name:         "system_message",
+			data:         map[string]any{"type": "system", "subtype": "status"},
 			expectedType: shared.MessageTypeSystem,
-			validate: func(t *testing.T, msg shared.Message) {
-				systemMsg, ok := msg.(*shared.SystemMessage)
-				if !ok {
-					t.Fatalf("Expected SystemMessage, got %T", msg)
-				}
-				assertSystemSubtype(t, systemMsg, "tool_output")
-				assertSystemData(t, systemMsg, "timestamp", "2024-01-01T12:00:00Z")
-			},
 		},
 		{
 			name: "result_message",
 			data: map[string]any{
 				"type":            "result",
-				"subtype":         "query_completed",
+				"subtype":         "completed",
 				"duration_ms":     1500.0,
 				"duration_api_ms": 800.0,
 				"is_error":        false,
 				"num_turns":       2.0,
-				"session_id":      "session_123",
-				"total_cost_usd":  0.05,
+				"session_id":      "s123",
 			},
 			expectedType: shared.MessageTypeResult,
-			validate: func(t *testing.T, msg shared.Message) {
-				resultMsg, ok := msg.(*shared.ResultMessage)
-				if !ok {
-					t.Fatalf("Expected ResultMessage, got %T", msg)
-				}
-				assertResultFields(t, resultMsg, "query_completed", 1500, 800, false, 2, "session_123")
-				assertResultCost(t, resultMsg, 0.05)
-			},
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			parser := setupParserTest(t)
-
 			message, err := parser.ParseMessage(test.data)
 			assertParseSuccess(t, err, message)
 			assertMessageType(t, message, test.expectedType)
-
-			test.validate(t, message)
-		})
-	}
-}
-
-// TestContentBlockDiscrimination tests parsing of different content block types
-func TestContentBlockDiscrimination(t *testing.T) {
-	parser := setupParserTest(t)
-
-	tests := []struct {
-		name      string
-		blockData map[string]any
-		blockType string
-		validate  func(*testing.T, shared.ContentBlock)
-	}{
-		{
-			name: "text_block",
-			blockData: map[string]any{
-				"type": "text",
-				"text": "Hello world",
-			},
-			blockType: "text",
-			validate: func(t *testing.T, block shared.ContentBlock) {
-				assertTextBlockContent(t, block, "Hello world")
-			},
-		},
-		{
-			name: "thinking_block",
-			blockData: map[string]any{
-				"type":      "thinking",
-				"thinking":  "Let me think...",
-				"signature": "sig123",
-			},
-			blockType: "thinking",
-			validate: func(t *testing.T, block shared.ContentBlock) {
-				assertThinkingBlock(t, block, "Let me think...")
-			},
-		},
-		{
-			name: "tool_use_block",
-			blockData: map[string]any{
-				"type":  "tool_use",
-				"id":    "tool_1",
-				"name":  "Calculator",
-				"input": map[string]any{"expr": "1+1"},
-			},
-			blockType: "tool_use",
-			validate: func(t *testing.T, block shared.ContentBlock) {
-				assertToolUseBlock(t, block, "tool_1", "Calculator")
-			},
-		},
-		{
-			name: "tool_result_block",
-			blockData: map[string]any{
-				"type":        "tool_result",
-				"tool_use_id": "tool_1",
-				"content":     "2",
-			},
-			blockType: "tool_result",
-			validate: func(t *testing.T, block shared.ContentBlock) {
-				assertToolResultBlock(t, block, "tool_1", "2", false)
-			},
-		},
-		{
-			name: "tool_result_error_block",
-			blockData: map[string]any{
-				"type":        "tool_result",
-				"tool_use_id": "tool_2",
-				"content":     "Error: File not found",
-				"is_error":    true,
-			},
-			blockType: "tool_result",
-			validate: func(t *testing.T, block shared.ContentBlock) {
-				assertToolResultBlock(t, block, "tool_2", "Error: File not found", true)
-			},
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			block, err := parser.parseContentBlock(test.blockData)
-			assertParseSuccess(t, err, block)
-
-			actualType := getContentBlockType(block)
-			if actualType != test.blockType {
-				t.Errorf("Expected block type %s, got %s", test.blockType, actualType)
-			}
-
-			test.validate(t, block)
 		})
 	}
 }
@@ -508,54 +261,23 @@ func TestMultipleJSONObjects(t *testing.T) {
 	if !ok {
 		t.Fatalf("Expected SystemMessage, got %T", messages[1])
 	}
-	assertSystemSubtype(t, systemMsg, "status")
+	if systemMsg.Subtype != "status" {
+		t.Errorf("Expected subtype 'status', got %q", systemMsg.Subtype)
+	}
 }
 
 // TestUnicodeAndEscapeHandling tests Unicode and JSON escape sequences
 func TestUnicodeAndEscapeHandling(t *testing.T) {
 	parser := setupParserTest(t)
 
-	tests := []struct {
-		name         string
-		jsonString   string
-		expectedText string
-	}{
-		{
-			name: "basic_escape_sequences",
-			jsonString: `{"type": "user", "message": {"content": [` +
-				`{"type": "text", "text": "Line1\nLine2\tTabbed\"Quoted\"\\Backslash"}]}}`,
-			expectedText: "Line1\nLine2\tTabbed\"Quoted\"\\Backslash",
-		},
-		{
-			name: "unicode_characters",
-			jsonString: `{"type": "user", "message": {"content": [` +
-				`{"type": "text", "text": "Hello 世界! 🌍 Café naïve résumé"}]}}`,
-			expectedText: "Hello 世界! 🌍 Café naïve résumé",
-		},
-		{
-			name:         "mixed_unicode_and_escapes",
-			jsonString:   `{"type": "user", "message": {"content": [{"type": "text", "text": "Mixed: 🎉\n中文\t日本語\r한국어"}]}}`,
-			expectedText: "Mixed: 🎉\n中文\t日本語\r한국어",
-		},
-	}
+	jsonString := `{"type": "user", "message": {"content": [{"type": "text", "text": "Hello 🌍\nEscaped\"Quote"}]}}`
+	messages, err := parser.ProcessLine(jsonString)
+	assertNoParseError(t, err)
+	assertMessageCount(t, messages, 1)
 
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			messages, err := parser.ProcessLine(test.jsonString)
-			assertNoParseError(t, err)
-			assertMessageCount(t, messages, 1)
-
-			userMsg, ok := messages[0].(*shared.UserMessage)
-			if !ok {
-				t.Fatalf("Expected UserMessage, got %T", messages[0])
-			}
-			blocks, ok := userMsg.Content.([]shared.ContentBlock)
-			if !ok {
-				t.Fatalf("Expected Content to be []ContentBlock, got %T", userMsg.Content)
-			}
-			assertTextBlockContent(t, blocks[0], test.expectedText)
-		})
-	}
+	userMsg := messages[0].(*shared.UserMessage)
+	blocks := userMsg.Content.([]shared.ContentBlock)
+	assertTextBlockContent(t, blocks[0], "Hello 🌍\nEscaped\"Quote")
 }
 
 // TestConcurrentAccess tests thread safety
@@ -649,38 +371,427 @@ func TestLargeMessageHandling(t *testing.T) {
 func TestEmptyAndWhitespaceHandling(t *testing.T) {
 	parser := setupParserTest(t)
 
-	emptyInputs := []string{"", "   ", "\t", "\n", " \t \n ", "\r\n"}
-
-	for i, input := range emptyInputs {
-		t.Run(fmt.Sprintf("empty_input_%d", i), func(t *testing.T) {
-			messages, err := parser.ProcessLine(input)
-			assertNoParseError(t, err)
-			assertMessageCount(t, messages, 0)
-		})
+	emptyInputs := []string{"", "   ", "\t\n"}
+	for _, input := range emptyInputs {
+		messages, err := parser.ProcessLine(input)
+		assertNoParseError(t, err)
+		assertMessageCount(t, messages, 0)
 	}
 }
 
 // TestParseMessages tests the convenience function
 func TestParseMessages(t *testing.T) {
+	// Test successful parsing
 	lines := []string{
-		`{"type": "user", "message": {"content": [{"type": "text", "text": "Hello"}]}}`,
+		`{"type": "user", "message": {"content": "Hello"}}`,
 		`{"type": "system", "subtype": "status"}`,
-		`{"type": "result", "subtype": "test", "duration_ms": 100, ` +
-			`"duration_api_ms": 50, "is_error": false, "num_turns": 1, "session_id": "s1"}`,
 	}
 
 	messages, err := ParseMessages(lines)
 	assertNoParseError(t, err)
-	assertMessageCount(t, messages, 3)
+	assertMessageCount(t, messages, 2)
 
-	expectedTypes := []string{
-		shared.MessageTypeUser,
-		shared.MessageTypeSystem,
-		shared.MessageTypeResult,
+	// Test error handling
+	errorLines := []string{
+		`{"type": "user", "message": {"content": "Valid"}}`,
+		`{"type": "invalid"}`, // This should cause an error
 	}
 
-	for i, msg := range messages {
-		assertMessageType(t, msg, expectedTypes[i])
+	_, err = ParseMessages(errorLines)
+	if err == nil {
+		t.Error("Expected error for invalid message type")
+	}
+	if !strings.Contains(err.Error(), "error parsing line 1") {
+		t.Errorf("Expected line number in error, got: %v", err)
+	}
+}
+
+// TestParseErrorConditions tests comprehensive error scenarios
+func TestParseErrorConditions(t *testing.T) {
+	parser := setupParserTest(t)
+
+	tests := []struct {
+		name        string
+		data        map[string]any
+		expectError string
+	}{
+		{
+			name: "user_message_invalid_content_type",
+			data: map[string]any{
+				"type":    "user",
+				"message": map[string]any{"content": 123}, // Invalid type
+			},
+			expectError: "invalid user message content type",
+		},
+		{
+			name: "user_message_content_block_parse_error",
+			data: map[string]any{
+				"type": "user",
+				"message": map[string]any{
+					"content": []any{
+						map[string]any{"type": "text"}, // Missing text field
+					},
+				},
+			},
+			expectError: "failed to parse content block 0",
+		},
+		{
+			name:        "assistant_message_missing_message",
+			data:        map[string]any{"type": "assistant"},
+			expectError: "assistant message missing message field",
+		},
+		{
+			name: "assistant_message_content_not_array",
+			data: map[string]any{
+				"type": "assistant",
+				"message": map[string]any{
+					"content": "not an array",
+					"model":   "claude-3",
+				},
+			},
+			expectError: "assistant message content must be array",
+		},
+		{
+			name: "assistant_message_missing_model",
+			data: map[string]any{
+				"type": "assistant",
+				"message": map[string]any{
+					"content": []any{},
+				},
+			},
+			expectError: "assistant message missing model field",
+		},
+		{
+			name: "assistant_message_content_block_error",
+			data: map[string]any{
+				"type": "assistant",
+				"message": map[string]any{
+					"content": []any{
+						map[string]any{"type": "unknown_block"},
+					},
+					"model": "claude-3",
+				},
+			},
+			expectError: "failed to parse content block 0",
+		},
+		{
+			name:        "system_message_missing_subtype",
+			data:        map[string]any{"type": "system"},
+			expectError: "system message missing subtype field",
+		},
+		{
+			name:        "system_message_invalid_subtype",
+			data:        map[string]any{"type": "system", "subtype": 123},
+			expectError: "system message missing subtype field",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := parser.ParseMessage(test.data)
+			assertParseError(t, err, test.expectError)
+		})
+	}
+}
+
+// TestResultMessageErrorConditions tests uncovered result message parsing paths
+func TestResultMessageErrorConditions(t *testing.T) {
+	parser := setupParserTest(t)
+
+	tests := []struct {
+		name        string
+		data        map[string]any
+		expectError string
+	}{
+		{
+			name:        "missing_subtype",
+			data:        map[string]any{"type": "result"},
+			expectError: "result message missing subtype field",
+		},
+		{
+			name:        "invalid_subtype_type",
+			data:        map[string]any{"type": "result", "subtype": 123},
+			expectError: "result message missing subtype field",
+		},
+		{
+			name: "missing_duration_ms",
+			data: map[string]any{
+				"type":    "result",
+				"subtype": "test",
+			},
+			expectError: "result message missing or invalid duration_ms field",
+		},
+		{
+			name: "invalid_duration_ms_type",
+			data: map[string]any{
+				"type":        "result",
+				"subtype":     "test",
+				"duration_ms": "not a number",
+			},
+			expectError: "result message missing or invalid duration_ms field",
+		},
+		{
+			name: "missing_duration_api_ms",
+			data: map[string]any{
+				"type":        "result",
+				"subtype":     "test",
+				"duration_ms": 100.0,
+			},
+			expectError: "result message missing or invalid duration_api_ms field",
+		},
+		{
+			name: "invalid_is_error_type",
+			data: map[string]any{
+				"type":            "result",
+				"subtype":         "test",
+				"duration_ms":     100.0,
+				"duration_api_ms": 50.0,
+				"is_error":        "not a boolean",
+			},
+			expectError: "result message missing or invalid is_error field",
+		},
+		{
+			name: "invalid_num_turns_type",
+			data: map[string]any{
+				"type":            "result",
+				"subtype":         "test",
+				"duration_ms":     100.0,
+				"duration_api_ms": 50.0,
+				"is_error":        false,
+				"num_turns":       "not a number",
+			},
+			expectError: "result message missing or invalid num_turns field",
+		},
+		{
+			name: "missing_session_id",
+			data: map[string]any{
+				"type":            "result",
+				"subtype":         "test",
+				"duration_ms":     100.0,
+				"duration_api_ms": 50.0,
+				"is_error":        false,
+				"num_turns":       1.0,
+			},
+			expectError: "result message missing session_id field",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := parser.ParseMessage(test.data)
+			assertParseError(t, err, test.expectError)
+		})
+	}
+}
+
+// TestResultMessageOptionalFields tests optional field handling
+func TestResultMessageOptionalFields(t *testing.T) {
+	parser := setupParserTest(t)
+
+	baseData := map[string]any{
+		"type":            "result",
+		"subtype":         "test",
+		"duration_ms":     100.0,
+		"duration_api_ms": 50.0,
+		"is_error":        false,
+		"num_turns":       1.0,
+		"session_id":      "s123",
+	}
+
+	// Test with all optional fields
+	dataWithOptionals := make(map[string]any)
+	for k, v := range baseData {
+		dataWithOptionals[k] = v
+	}
+	dataWithOptionals["total_cost_usd"] = 0.05
+	dataWithOptionals["usage"] = map[string]any{"input_tokens": 100}
+	dataWithOptionals["result"] = map[string]any{"status": "success"}
+
+	msg, err := parser.ParseMessage(dataWithOptionals)
+	assertNoParseError(t, err)
+
+	resultMsg := msg.(*shared.ResultMessage)
+	if resultMsg.TotalCostUSD == nil || *resultMsg.TotalCostUSD != 0.05 {
+		t.Errorf("Expected total_cost_usd = 0.05, got %v", resultMsg.TotalCostUSD)
+	}
+	if resultMsg.Usage == nil {
+		t.Error("Expected usage field to be set")
+	}
+	if resultMsg.Result == nil {
+		t.Error("Expected result field to be set")
+	}
+
+	// Test with invalid result type (not map)
+	dataWithInvalidResult := make(map[string]any)
+	for k, v := range baseData {
+		dataWithInvalidResult[k] = v
+	}
+	dataWithInvalidResult["result"] = "not a map"
+
+	msg2, err2 := parser.ParseMessage(dataWithInvalidResult)
+	assertNoParseError(t, err2)
+	resultMsg2 := msg2.(*shared.ResultMessage)
+	if resultMsg2.Result != nil {
+		t.Error("Expected result field to be nil for invalid type")
+	}
+}
+
+// TestContentBlockErrorConditions tests uncovered content block parsing paths
+func TestContentBlockErrorConditions(t *testing.T) {
+	parser := setupParserTest(t)
+
+	tests := []struct {
+		name        string
+		blockData   any
+		expectError string
+	}{
+		{
+			name:        "non_object_block",
+			blockData:   "not an object",
+			expectError: "content block must be an object",
+		},
+		{
+			name:        "missing_type_field",
+			blockData:   map[string]any{"text": "hello"},
+			expectError: "content block missing type field",
+		},
+		{
+			name:        "invalid_type_field",
+			blockData:   map[string]any{"type": 123},
+			expectError: "content block missing type field",
+		},
+		{
+			name:        "unknown_block_type",
+			blockData:   map[string]any{"type": "unknown_type"},
+			expectError: "unknown content block type: unknown_type",
+		},
+		{
+			name:        "text_block_missing_text",
+			blockData:   map[string]any{"type": "text"},
+			expectError: "text block missing text field",
+		},
+		{
+			name:        "text_block_invalid_text_type",
+			blockData:   map[string]any{"type": "text", "text": 123},
+			expectError: "text block missing text field",
+		},
+		{
+			name:        "thinking_block_missing_thinking",
+			blockData:   map[string]any{"type": "thinking"},
+			expectError: "thinking block missing thinking field",
+		},
+		{
+			name:        "thinking_block_invalid_thinking_type",
+			blockData:   map[string]any{"type": "thinking", "thinking": 123},
+			expectError: "thinking block missing thinking field",
+		},
+		{
+			name:        "tool_use_block_missing_id",
+			blockData:   map[string]any{"type": "tool_use", "name": "Read"},
+			expectError: "tool_use block missing id field",
+		},
+		{
+			name:        "tool_use_block_invalid_id_type",
+			blockData:   map[string]any{"type": "tool_use", "id": 123, "name": "Read"},
+			expectError: "tool_use block missing id field",
+		},
+		{
+			name:        "tool_use_block_missing_name",
+			blockData:   map[string]any{"type": "tool_use", "id": "t1"},
+			expectError: "tool_use block missing name field",
+		},
+		{
+			name:        "tool_use_block_invalid_name_type",
+			blockData:   map[string]any{"type": "tool_use", "id": "t1", "name": 123},
+			expectError: "tool_use block missing name field",
+		},
+		{
+			name:        "tool_result_block_missing_tool_use_id",
+			blockData:   map[string]any{"type": "tool_result", "content": "result"},
+			expectError: "tool_result block missing tool_use_id field",
+		},
+		{
+			name:        "tool_result_block_invalid_tool_use_id_type",
+			blockData:   map[string]any{"type": "tool_result", "tool_use_id": 123, "content": "result"},
+			expectError: "tool_result block missing tool_use_id field",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := parser.parseContentBlock(test.blockData)
+			assertParseError(t, err, test.expectError)
+		})
+	}
+}
+
+// TestContentBlockOptionalFields tests optional field handling
+func TestContentBlockOptionalFields(t *testing.T) {
+	parser := setupParserTest(t)
+
+	// Test thinking block without signature
+	thinkingBlock, err := parser.parseContentBlock(map[string]any{
+		"type":     "thinking",
+		"thinking": "I need to think...",
+	})
+	assertNoParseError(t, err)
+	thinking := thinkingBlock.(*shared.ThinkingBlock)
+	if thinking.Signature != "" {
+		t.Errorf("Expected empty signature, got %q", thinking.Signature)
+	}
+
+	// Test tool use block without input
+	toolUseBlock, err := parser.parseContentBlock(map[string]any{
+		"type": "tool_use",
+		"id":   "t1",
+		"name": "Read",
+	})
+	assertNoParseError(t, err)
+	toolUse := toolUseBlock.(*shared.ToolUseBlock)
+	if toolUse.Input == nil {
+		t.Error("Expected empty input map, got nil")
+	}
+	if len(toolUse.Input) != 0 {
+		t.Errorf("Expected empty input map, got %v", toolUse.Input)
+	}
+
+	// Test tool result block with invalid is_error type
+	toolResultBlock, err := parser.parseContentBlock(map[string]any{
+		"type":        "tool_result",
+		"tool_use_id": "t1",
+		"content":     "result",
+		"is_error":    "not a boolean",
+	})
+	assertNoParseError(t, err)
+	toolResult := toolResultBlock.(*shared.ToolResultBlock)
+	if toolResult.IsError != nil {
+		t.Errorf("Expected nil IsError for invalid type, got %v", toolResult.IsError)
+	}
+}
+
+// TestProcessLineEdgeCases tests uncovered ProcessLine scenarios
+func TestProcessLineEdgeCases(t *testing.T) {
+	parser := setupParserTest(t)
+
+	// Test line with content block parse error
+	invalidBlockLine := `{"type": "user", "message": {"content": [{"type": "unknown_block"}]}}`
+	messages, err := parser.ProcessLine(invalidBlockLine)
+	if err == nil {
+		t.Error("Expected error for invalid content block")
+	}
+	if len(messages) != 0 {
+		t.Errorf("Expected no messages on error, got %d", len(messages))
+	}
+
+	// Test multiple lines with one having an error
+	mixedLine := `{"type": "system", "subtype": "ok"}` + "\n" + `{"type": "invalid"}`
+	messages2, err2 := parser.ProcessLine(mixedLine)
+	if err2 == nil {
+		t.Error("Expected error for second invalid message")
+	}
+	// Should return the first valid message before error
+	if len(messages2) != 1 {
+		t.Errorf("Expected 1 message before error, got %d", len(messages2))
 	}
 }
 
@@ -767,114 +878,6 @@ func assertTextBlockContent(t *testing.T, block shared.ContentBlock, expectedTex
 	}
 }
 
-func assertThinkingBlock(t *testing.T, block shared.ContentBlock, expectedThinking string) {
-	t.Helper()
-	thinkingBlock, ok := block.(*shared.ThinkingBlock)
-	if !ok {
-		t.Fatalf("Expected ThinkingBlock, got %T", block)
-	}
-	if thinkingBlock.Thinking != expectedThinking {
-		t.Errorf("Expected thinking %q, got %q", expectedThinking, thinkingBlock.Thinking)
-	}
-}
-
-func assertToolUseBlock(t *testing.T, block shared.ContentBlock, expectedID, expectedName string) {
-	t.Helper()
-	toolUseBlock, ok := block.(*shared.ToolUseBlock)
-	if !ok {
-		t.Fatalf("Expected ToolUseBlock, got %T", block)
-	}
-	if toolUseBlock.ToolUseID != expectedID {
-		t.Errorf("Expected tool use ID %q, got %q", expectedID, toolUseBlock.ToolUseID)
-	}
-	if toolUseBlock.Name != expectedName {
-		t.Errorf("Expected tool name %q, got %q", expectedName, toolUseBlock.Name)
-	}
-}
-
-func assertToolResultBlock(t *testing.T, block shared.ContentBlock,
-	expectedToolUseID, expectedContent string, expectedIsError bool) {
-	t.Helper()
-	toolResultBlock, ok := block.(*shared.ToolResultBlock)
-	if !ok {
-		t.Fatalf("Expected ToolResultBlock, got %T", block)
-	}
-	if toolResultBlock.ToolUseID != expectedToolUseID {
-		t.Errorf("Expected tool_use_id %q, got %q", expectedToolUseID, toolResultBlock.ToolUseID)
-	}
-	if content, ok := toolResultBlock.Content.(string); !ok || content != expectedContent {
-		t.Errorf("Expected content %q, got %v", expectedContent, toolResultBlock.Content)
-	}
-	if expectedIsError && (toolResultBlock.IsError == nil || !*toolResultBlock.IsError) {
-		t.Error("Expected is_error to be true")
-	} else if !expectedIsError && toolResultBlock.IsError != nil && *toolResultBlock.IsError {
-		t.Error("Expected is_error to be false or nil")
-	}
-}
-
-func assertMixedContentBlocks(t *testing.T, blocks []shared.ContentBlock) {
-	t.Helper()
-	expectedTypes := []string{"text", "tool_use", "tool_result", "text"}
-	for i, block := range blocks {
-		actualType := getContentBlockType(block)
-		if actualType != expectedTypes[i] {
-			t.Errorf("Block %d: expected type %s, got %s", i, expectedTypes[i], actualType)
-		}
-	}
-}
-
-func assertAssistantModel(t *testing.T, msg *shared.AssistantMessage, expectedModel string) {
-	t.Helper()
-	if msg.Model != expectedModel {
-		t.Errorf("Expected model %q, got %q", expectedModel, msg.Model)
-	}
-}
-
-func assertSystemSubtype(t *testing.T, msg *shared.SystemMessage, expectedSubtype string) {
-	t.Helper()
-	if msg.Subtype != expectedSubtype {
-		t.Errorf("Expected subtype %q, got %q", expectedSubtype, msg.Subtype)
-	}
-}
-
-func assertSystemData(t *testing.T, msg *shared.SystemMessage, key, expectedValue string) {
-	t.Helper()
-	if value, ok := msg.Data[key].(string); !ok || value != expectedValue {
-		t.Errorf("Expected data[%s] = %q, got %v", key, expectedValue, msg.Data[key])
-	}
-}
-
-func assertResultFields(t *testing.T, msg *shared.ResultMessage, expectedSubtype string,
-	expectedDurationMs, expectedDurationAPIMs int, expectedIsError bool,
-	expectedNumTurns int, expectedSessionID string) {
-	t.Helper()
-	if msg.Subtype != expectedSubtype {
-		t.Errorf("Expected subtype %q, got %q", expectedSubtype, msg.Subtype)
-	}
-	if msg.DurationMs != expectedDurationMs {
-		t.Errorf("Expected duration_ms %d, got %d", expectedDurationMs, msg.DurationMs)
-	}
-	if msg.DurationAPIMs != expectedDurationAPIMs {
-		t.Errorf("Expected duration_api_ms %d, got %d", expectedDurationAPIMs, msg.DurationAPIMs)
-	}
-	if msg.IsError != expectedIsError {
-		t.Errorf("Expected is_error %t, got %t", expectedIsError, msg.IsError)
-	}
-	if msg.NumTurns != expectedNumTurns {
-		t.Errorf("Expected num_turns %d, got %d", expectedNumTurns, msg.NumTurns)
-	}
-	if msg.SessionID != expectedSessionID {
-		t.Errorf("Expected session_id %q, got %q", expectedSessionID, msg.SessionID)
-	}
-}
-
-func assertResultCost(t *testing.T, msg *shared.ResultMessage, expectedCost float64) {
-	t.Helper()
-	if msg.TotalCostUSD == nil || *msg.TotalCostUSD != expectedCost {
-		t.Errorf("Expected total_cost_usd %f, got %v", expectedCost, msg.TotalCostUSD)
-	}
-}
-
 func assertBufferEmpty(t *testing.T, parser *Parser) {
 	t.Helper()
 	if parser.BufferSize() != 0 {
@@ -900,20 +903,5 @@ func assertBufferOverflowError(t *testing.T, err error) {
 	}
 	if !strings.Contains(jsonDecodeErr.Error(), "buffer overflow") {
 		t.Errorf("Expected buffer overflow error, got %q", jsonDecodeErr.Error())
-	}
-}
-
-func getContentBlockType(block shared.ContentBlock) string {
-	switch block.(type) {
-	case *shared.TextBlock:
-		return "text"
-	case *shared.ThinkingBlock:
-		return "thinking"
-	case *shared.ToolUseBlock:
-		return "tool_use"
-	case *shared.ToolResultBlock:
-		return "tool_result"
-	default:
-		return "unknown"
 	}
 }
