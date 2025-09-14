@@ -201,10 +201,10 @@ func TestClientErrorHandling(t *testing.T) {
 		operation string
 		errorMsg  string
 	}{
-		"connection_error": {"connect", "Connect", "connection failed"},
-		"send_error":       {"send", "Query", "send failed"},
-		"successful_op":    {"", "Query", ""},
-		"interrupt_not_connected": {"", "Interrupt", "client not connected"},
+		"connection_error":           {"connect", "Connect", "connection failed"},
+		"send_error":                 {"send", "Query", "send failed"},
+		"successful_op":              {"", "Query", ""},
+		"interrupt_not_connected":    {"", "Interrupt", "client not connected"},
 		"query_stream_not_connected": {"", "QueryStream", "client not connected"},
 	}
 

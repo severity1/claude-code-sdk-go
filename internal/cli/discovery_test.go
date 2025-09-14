@@ -11,7 +11,6 @@ import (
 	"github.com/severity1/claude-code-sdk-go/internal/shared"
 )
 
-
 // TestCLIDiscovery tests CLI binary discovery functionality
 func TestCLIDiscovery(t *testing.T) {
 	tests := []struct {
@@ -79,7 +78,6 @@ func TestCommandBuilding(t *testing.T) {
 	}
 }
 
-
 // TestCLIDiscoveryLocations tests CLI discovery path generation
 func TestCLIDiscoveryLocations(t *testing.T) {
 	locations := getCommonCLILocations()
@@ -142,7 +140,6 @@ func TestBuildCommandWithPrompt(t *testing.T) {
 		})
 	}
 }
-
 
 // TestWorkingDirectoryValidation tests working directory validation
 func TestWorkingDirectoryValidation(t *testing.T) {
@@ -267,7 +264,6 @@ func assertCLIDiscoveryError(t *testing.T, err error, expectError bool, errorCon
 		t.Errorf("error = %v, expected message to contain %q", err, errorContains)
 	}
 }
-
 
 func assertDiscoveryLocations(t *testing.T, locations []string) {
 	t.Helper()
@@ -426,14 +422,12 @@ func validateBasicPromptCommand(t *testing.T, cmd []string, prompt string) {
 	assertContainsArgs(t, cmd, "--print", prompt)
 }
 
-
 func validateEmptyPromptCommand(t *testing.T, cmd []string, _ string) {
 	t.Helper()
 	assertContainsArgs(t, cmd, "--output-format", "stream-json")
 	assertContainsArg(t, cmd, "--verbose")
 	assertContainsArgs(t, cmd, "--print", "") // Empty prompt should still be there
 }
-
 
 // Helper function for string pointers
 // TestFindCLISuccess tests successful CLI discovery paths
@@ -731,7 +725,7 @@ func TestAddPermissionFlagsComplete(t *testing.T) {
 				PermissionPromptToolName: stringPtr("security-tool"),
 			},
 			expect: map[string]string{
-				"--permission-mode":       "bypassPermissions",
+				"--permission-mode":        "bypassPermissions",
 				"--permission-prompt-tool": "security-tool",
 			},
 		},

@@ -14,7 +14,6 @@ import (
 	"github.com/severity1/claude-code-sdk-go/internal/shared"
 )
 
-
 // TestTransportLifecycle tests connection lifecycle, state management, and reconnection
 func TestTransportLifecycle(t *testing.T) {
 	ctx, cancel := setupTransportTestContext(t, 10*time.Second)
@@ -43,7 +42,6 @@ func TestTransportLifecycle(t *testing.T) {
 	connectTransportSafely(ctx, t, transport)
 	assertTransportConnected(t, transport, true)
 }
-
 
 // TestTransportMessageIO tests basic message sending and receiving
 func TestTransportMessageIO(t *testing.T) {
@@ -289,7 +287,6 @@ func TestTransportEnvironmentSetup(t *testing.T) {
 		assertNoTransportError(t, err)
 	}
 }
-
 
 // TestTransportReceiveMessagesNotConnected tests ReceiveMessages behavior on disconnected transport
 // This targets the missing 44.4% coverage in ReceiveMessages function
@@ -562,8 +559,6 @@ func TestNewWithPrompt(t *testing.T) {
 		})
 	}
 }
-
-
 
 // TestTransportConnectErrorPaths tests uncovered Connect error scenarios
 func TestTransportConnectErrorPaths(t *testing.T) {

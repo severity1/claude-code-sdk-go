@@ -49,8 +49,8 @@ func TestParseValidMessages(t *testing.T) {
 			expectedType: shared.MessageTypeAssistant,
 		},
 		{
-			name: "system_message",
-			data: map[string]any{"type": "system", "subtype": "status"},
+			name:         "system_message",
+			data:         map[string]any{"type": "system", "subtype": "status"},
 			expectedType: shared.MessageTypeSystem,
 		},
 		{
@@ -77,7 +77,6 @@ func TestParseValidMessages(t *testing.T) {
 		})
 	}
 }
-
 
 // TestParseErrors tests various error conditions
 func TestParseErrors(t *testing.T) {
@@ -437,8 +436,8 @@ func TestParseErrorConditions(t *testing.T) {
 			expectError: "failed to parse content block 0",
 		},
 		{
-			name: "assistant_message_missing_message",
-			data: map[string]any{"type": "assistant"},
+			name:        "assistant_message_missing_message",
+			data:        map[string]any{"type": "assistant"},
 			expectError: "assistant message missing message field",
 		},
 		{
@@ -906,4 +905,3 @@ func assertBufferOverflowError(t *testing.T, err error) {
 		t.Errorf("Expected buffer overflow error, got %q", jsonDecodeErr.Error())
 	}
 }
-
