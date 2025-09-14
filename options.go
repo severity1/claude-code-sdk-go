@@ -158,16 +158,17 @@ func WithCLIPath(path string) Option {
 	}
 }
 
+const customTransportMarker = "custom_transport"
+
 // WithTransport sets a custom transport for testing.
 // Since Transport is not part of Options struct, this is handled in client creation.
-func WithTransport(transport Transport) Option {
+func WithTransport(_ Transport) Option {
 	return func(o *Options) {
 		// This will be handled in client implementation
 		// For now, we'll use a special marker in ExtraArgs
 		if o.ExtraArgs == nil {
 			o.ExtraArgs = make(map[string]*string)
 		}
-		const customTransportMarker = "custom_transport"
 		marker := customTransportMarker
 		o.ExtraArgs["__transport_marker__"] = &marker
 	}

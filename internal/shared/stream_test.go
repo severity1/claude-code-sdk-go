@@ -65,7 +65,7 @@ func TestMessageIteratorInterface(t *testing.T) {
 // Simple mock implementation for interface compliance testing
 type mockIterator struct{}
 
-func (m *mockIterator) Next(ctx context.Context) (Message, error) {
+func (m *mockIterator) Next(_ context.Context) (Message, error) {
 	return &UserMessage{Content: "test"}, nil
 }
 

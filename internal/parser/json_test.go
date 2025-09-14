@@ -522,12 +522,14 @@ func TestUnicodeAndEscapeHandling(t *testing.T) {
 	}{
 		{
 			name:         "basic_escape_sequences",
-			jsonString:   `{"type": "user", "message": {"content": [{"type": "text", "text": "Line1\nLine2\tTabbed\"Quoted\"\\Backslash"}]}}`,
+			jsonString: `{"type": "user", "message": {"content": [` +
+				`{"type": "text", "text": "Line1\nLine2\tTabbed\"Quoted\"\\Backslash"}]}}`,
 			expectedText: "Line1\nLine2\tTabbed\"Quoted\"\\Backslash",
 		},
 		{
 			name:         "unicode_characters",
-			jsonString:   `{"type": "user", "message": {"content": [{"type": "text", "text": "Hello 世界! 🌍 Café naïve résumé"}]}}`,
+			jsonString: `{"type": "user", "message": {"content": [` +
+				`{"type": "text", "text": "Hello 世界! 🌍 Café naïve résumé"}]}}`,
 			expectedText: "Hello 世界! 🌍 Café naïve résumé",
 		},
 		{
@@ -591,7 +593,8 @@ func TestConcurrentAccess(t *testing.T) {
 
 				expectedSubtype := fmt.Sprintf("goroutine_%d_msg_%d", goroutineID, j)
 				if systemMsg.Subtype != expectedSubtype {
-					errors <- fmt.Errorf("goroutine %d, message %d: expected %s, got %s", goroutineID, j, expectedSubtype, systemMsg.Subtype)
+					errors <- fmt.Errorf("goroutine %d, message %d: expected %s, got %s",
+						goroutineID, j, expectedSubtype, systemMsg.Subtype)
 					return
 				}
 			}
@@ -662,7 +665,8 @@ func TestParseMessages(t *testing.T) {
 	lines := []string{
 		`{"type": "user", "message": {"content": [{"type": "text", "text": "Hello"}]}}`,
 		`{"type": "system", "subtype": "status"}`,
-		`{"type": "result", "subtype": "test", "duration_ms": 100, "duration_api_ms": 50, "is_error": false, "num_turns": 1, "session_id": "s1"}`,
+		`{"type": "result", "subtype": "test", "duration_ms": 100, ` +
+			`"duration_api_ms": 50, "is_error": false, "num_turns": 1, "session_id": "s1"}`,
 	}
 
 	messages, err := ParseMessages(lines)
@@ -788,7 +792,8 @@ func assertToolUseBlock(t *testing.T, block shared.ContentBlock, expectedID, exp
 	}
 }
 
-func assertToolResultBlock(t *testing.T, block shared.ContentBlock, expectedToolUseID, expectedContent string, expectedIsError bool) {
+func assertToolResultBlock(t *testing.T, block shared.ContentBlock,
+	expectedToolUseID, expectedContent string, expectedIsError bool) {
 	t.Helper()
 	toolResultBlock, ok := block.(*shared.ToolResultBlock)
 	if !ok {
@@ -839,7 +844,9 @@ func assertSystemData(t *testing.T, msg *shared.SystemMessage, key, expectedValu
 	}
 }
 
-func assertResultFields(t *testing.T, msg *shared.ResultMessage, expectedSubtype string, expectedDurationMs, expectedDurationAPIMs int, expectedIsError bool, expectedNumTurns int, expectedSessionID string) {
+func assertResultFields(t *testing.T, msg *shared.ResultMessage, expectedSubtype string,
+	expectedDurationMs, expectedDurationAPIMs int, expectedIsError bool,
+	expectedNumTurns int, expectedSessionID string) {
 	t.Helper()
 	if msg.Subtype != expectedSubtype {
 		t.Errorf("Expected subtype %q, got %q", expectedSubtype, msg.Subtype)

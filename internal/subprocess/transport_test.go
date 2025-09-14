@@ -14,6 +14,10 @@ import (
 	"github.com/severity1/claude-code-sdk-go/internal/shared"
 )
 
+const (
+	sdkGoEntrypoint = "sdk-go"
+)
+
 // TestTransportLifecycle tests connection lifecycle and state management
 func TestTransportLifecycle(t *testing.T) {
 	ctx, cancel := setupTransportTestContext(t, 10*time.Second)
@@ -27,7 +31,7 @@ func TestTransportLifecycle(t *testing.T) {
 	assertTransportConnected(t, transport, false)
 
 	// Connect
-	connectTransportSafely(t, ctx, transport)
+	connectTransportSafely(ctx, t, transport)
 	assertTransportConnected(t, transport, true)
 
 	// Test multiple Close() calls are safe
@@ -48,7 +52,7 @@ func TestTransportReconnection(t *testing.T) {
 	defer disconnectTransportSafely(t, transport)
 
 	// First connection
-	connectTransportSafely(t, ctx, transport)
+	connectTransportSafely(ctx, t, transport)
 	assertTransportConnected(t, transport, true)
 
 	// Disconnect
@@ -56,7 +60,7 @@ func TestTransportReconnection(t *testing.T) {
 	assertTransportConnected(t, transport, false)
 
 	// Reconnect
-	connectTransportSafely(t, ctx, transport)
+	connectTransportSafely(ctx, t, transport)
 	assertTransportConnected(t, transport, true)
 }
 
@@ -68,7 +72,7 @@ func TestTransportMessageIO(t *testing.T) {
 	transport := setupTransportForTest(t, newTransportMockCLI())
 	defer disconnectTransportSafely(t, transport)
 
-	connectTransportSafely(t, ctx, transport)
+	connectTransportSafely(ctx, t, transport)
 
 	// Test message sending
 	message := shared.StreamMessage{
@@ -106,7 +110,7 @@ func TestTransportProcessManagement(t *testing.T) {
 		transport := setupTransportForTest(t, newTransportMockCLIWithOptions(WithLongRunning()))
 		defer disconnectTransportSafely(t, transport)
 
-		connectTransportSafely(t, ctx, transport)
+		connectTransportSafely(ctx, t, transport)
 
 		// Start timing the termination
 		start := time.Now()
@@ -132,7 +136,7 @@ func TestTransportProcessManagement(t *testing.T) {
 		transport := setupTransportForTest(t, newTransportMockCLI())
 		defer disconnectTransportSafely(t, transport)
 
-		connectTransportSafely(t, ctx, transport)
+		connectTransportSafely(ctx, t, transport)
 
 		err := transport.Interrupt(ctx)
 		assertNoTransportError(t, err)
@@ -184,7 +188,7 @@ func TestTransportErrorHandling(t *testing.T) {
 				return setupTransportForTest(t, newTransportMockCLI())
 			},
 			operation: func(tr *Transport) error {
-				connectTransportSafely(t, ctx, tr)
+				connectTransportSafely(ctx, t, tr)
 				// Use canceled context
 				canceledCtx, cancel := context.WithCancel(ctx)
 				cancel()
@@ -226,7 +230,7 @@ func TestTransportConcurrency(t *testing.T) {
 	transport := setupTransportForTest(t, newTransportMockCLI())
 	defer disconnectTransportSafely(t, transport)
 
-	connectTransportSafely(t, ctx, transport)
+	connectTransportSafely(ctx, t, transport)
 
 	// Test concurrent message sending
 	t.Run("concurrent_sending", func(t *testing.T) {
@@ -295,7 +299,7 @@ func TestTransportEnvironmentSetup(t *testing.T) {
 	defer disconnectTransportSafely(t, transport)
 
 	// Connection should succeed with proper environment setup
-	connectTransportSafely(t, ctx, transport)
+	connectTransportSafely(ctx, t, transport)
 	assertTransportConnected(t, transport, true)
 
 	// Test interrupt (platform-specific signals)
@@ -312,7 +316,7 @@ func TestTransportCleanup(t *testing.T) {
 
 	transport := setupTransportForTest(t, newTransportMockCLI())
 
-	connectTransportSafely(t, ctx, transport)
+	connectTransportSafely(ctx, t, transport)
 
 	// Get channels to create resources
 	transport.ReceiveMessages(ctx)
@@ -514,7 +518,7 @@ func setupTransportForTest(t *testing.T, cliPath string) *Transport {
 	return New(cliPath, options, false, "sdk-go")
 }
 
-func connectTransportSafely(t *testing.T, ctx context.Context, transport *Transport) {
+func connectTransportSafely(ctx context.Context, t *testing.T, transport *Transport) {
 	t.Helper()
 	err := transport.Connect(ctx)
 	if err != nil {
@@ -630,7 +634,7 @@ func TestNewWithPrompt(t *testing.T) {
 				t.Errorf("Expected cliPath %q, got %q", test.cliPath, transport.cliPath)
 			}
 
-			if transport.entrypoint != "sdk-go" {
+			if transport.entrypoint != sdkGoEntrypoint {
 				t.Errorf("Expected entrypoint 'sdk-go', got %q", transport.entrypoint)
 			}
 
@@ -684,7 +688,7 @@ func TestNewWithPromptVsNew(t *testing.T) {
 		{
 			name: "entrypoint_configuration",
 			check: func(t *testing.T) {
-				if regularTransport.entrypoint != "sdk-go" {
+				if regularTransport.entrypoint != sdkGoEntrypoint {
 					t.Errorf("Regular transport entrypoint should be 'sdk-go', got %q", regularTransport.entrypoint)
 				}
 				if promptTransport.entrypoint != "sdk-go" {
@@ -727,7 +731,8 @@ func TestNewWithPromptVsNew(t *testing.T) {
 }
 
 // Helper functions for NewWithPrompt tests
-func assertNewWithPromptConfiguration(t *testing.T, transport *Transport, expectedCLIPath string, expectedOptions *shared.Options, expectedPrompt string) {
+func assertNewWithPromptConfiguration(t *testing.T, transport *Transport,
+	expectedCLIPath string, expectedOptions *shared.Options, expectedPrompt string) {
 	t.Helper()
 
 	if transport.cliPath != expectedCLIPath {

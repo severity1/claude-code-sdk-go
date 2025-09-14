@@ -10,6 +10,10 @@ import (
 	"time"
 )
 
+const (
+	userMessageType = "user"
+)
+
 // TestClientLifecycleManagement tests connection, resource cleanup, and transport integration
 // Covers T133: Client Auto Connect Context Manager + resource management + transport integration
 func TestClientLifecycleManagement(t *testing.T) {
@@ -18,7 +22,7 @@ func TestClientLifecycleManagement(t *testing.T) {
 
 	subtests := []struct {
 		name string
-		test func(*testing.T, context.Context)
+		test func(context.Context, *testing.T)
 	}{
 		{"basic_lifecycle", testBasicLifecycle},
 		{"resource_cleanup_cycles", testResourceCleanupCycles},
@@ -27,12 +31,12 @@ func TestClientLifecycleManagement(t *testing.T) {
 
 	for _, subtest := range subtests {
 		t.Run(subtest.name, func(t *testing.T) {
-			subtest.test(t, ctx)
+			subtest.test(ctx, t)
 		})
 	}
 }
 
-func testBasicLifecycle(t *testing.T, ctx context.Context) {
+func testBasicLifecycle(ctx context.Context, t *testing.T) {
 	t.Helper()
 	transport := newClientMockTransport()
 
@@ -40,7 +44,7 @@ func testBasicLifecycle(t *testing.T, ctx context.Context) {
 	func() {
 		client := setupClientForTest(t, transport)
 		defer disconnectClientSafely(t, client)
-		connectClientSafely(t, ctx, client)
+		connectClientSafely(ctx, t, client)
 		assertClientConnected(t, transport)
 		err := client.Query(ctx, "test message")
 		assertNoError(t, err)
@@ -50,20 +54,20 @@ func testBasicLifecycle(t *testing.T, ctx context.Context) {
 
 	// Test manual connection lifecycle
 	client := setupClientForTest(t, transport)
-	connectClientSafely(t, ctx, client)
+	connectClientSafely(ctx, t, client)
 	assertClientConnected(t, transport)
 	disconnectClientSafely(t, client)
 	assertClientDisconnected(t, transport)
 }
 
-func testResourceCleanupCycles(t *testing.T, ctx context.Context) {
+func testResourceCleanupCycles(ctx context.Context, t *testing.T) {
 	t.Helper()
 	transport := newClientMockTransport()
 
 	// Test resource cleanup with multiple connect/disconnect cycles
 	for i := 0; i < 3; i++ {
 		client := setupClientForTest(t, transport)
-		connectClientSafely(t, ctx, client)
+		connectClientSafely(ctx, t, client)
 		assertClientConnected(t, transport)
 		err := client.Query(ctx, fmt.Sprintf("test query %d", i))
 		assertNoError(t, err)
@@ -78,7 +82,7 @@ func testResourceCleanupCycles(t *testing.T, ctx context.Context) {
 	}
 }
 
-func testTransportIntegration(t *testing.T, ctx context.Context) {
+func testTransportIntegration(ctx context.Context, t *testing.T) {
 	t.Helper()
 	transport := newClientMockTransport()
 	client := setupClientForTest(t, transport)
@@ -118,7 +122,7 @@ func TestClientQueryExecution(t *testing.T) {
 	client := setupClientForTest(t, transport)
 	defer disconnectClientSafely(t, client)
 
-	connectClientSafely(t, ctx, client)
+	connectClientSafely(ctx, t, client)
 
 	// Execute query through connected client
 	err := client.Query(ctx, "What is 2+2?")
@@ -132,7 +136,7 @@ func TestClientQueryExecution(t *testing.T) {
 	if !ok {
 		t.Fatal("Failed to get sent message")
 	}
-	if sentMsg.Type != "user" {
+	if sentMsg.Type != userMessageType {
 		t.Errorf("Expected message type 'user', got '%s'", sentMsg.Type)
 	}
 
@@ -158,7 +162,7 @@ func TestClientStreamQuery(t *testing.T) {
 	client := setupClientForTest(t, transport)
 	defer disconnectClientSafely(t, client)
 
-	connectClientSafely(t, ctx, client)
+	connectClientSafely(ctx, t, client)
 
 	// Create message channel
 	messages := make(chan StreamMessage, 3)
@@ -220,7 +224,7 @@ func TestClientErrorHandling(t *testing.T) {
 				err = client.Connect(ctx)
 			case "Query":
 				if test.errorType != "connect" {
-					connectClientSafely(t, ctx, client)
+					connectClientSafely(ctx, t, client)
 				}
 				err = client.Query(ctx, "test")
 			}
@@ -240,7 +244,7 @@ func TestClientConcurrency(t *testing.T) {
 	client := setupClientForTest(t, transport)
 	defer disconnectClientSafely(t, client)
 
-	connectClientSafely(t, ctx, client)
+	connectClientSafely(ctx, t, client)
 
 	// Run concurrent queries
 	const numGoroutines = 10
@@ -283,11 +287,33 @@ func TestClientConfiguration(t *testing.T) {
 		validate func(*testing.T, Client, *clientMockTransport)
 	}{
 		{"default_configuration", []Option{}, verifyDefaultConfiguration},
-		{"system_prompt_configuration", []Option{WithSystemPrompt("You are a test assistant. Always respond with 'TEST_RESPONSE'.")}, verifySystemPromptConfig},
-		{"tools_configuration", []Option{WithAllowedTools("Read", "Write"), WithDisallowedTools("Bash", "WebSearch")}, verifyToolsConfig},
-		{"multiple_options_precedence", []Option{WithSystemPrompt("First prompt"), WithMaxThinkingTokens(5000), WithSystemPrompt("Second prompt"), WithMaxThinkingTokens(10000), WithAllowedTools("Read"), WithAllowedTools("Read", "Write")}, verifyOptionsConfig},
-		{"complex_configuration", []Option{WithSystemPrompt("Complex test system prompt"), WithAllowedTools("Read", "Write", "Edit"), WithDisallowedTools("Bash"), WithContinueConversation(true), WithMaxThinkingTokens(8000), WithPermissionMode(PermissionModeAcceptEdits)}, verifyComplexConfig},
-		{"session_configuration", []Option{WithContinueConversation(true), WithResume("test-session-123")}, verifySessionConfig},
+		{"system_prompt_configuration", []Option{
+			WithSystemPrompt("You are a test assistant. Always respond with 'TEST_RESPONSE'."),
+		}, verifySystemPromptConfig},
+		{"tools_configuration", []Option{
+			WithAllowedTools("Read", "Write"),
+			WithDisallowedTools("Bash", "WebSearch"),
+		}, verifyToolsConfig},
+		{"multiple_options_precedence", []Option{
+			WithSystemPrompt("First prompt"),
+			WithMaxThinkingTokens(5000),
+			WithSystemPrompt("Second prompt"),
+			WithMaxThinkingTokens(10000),
+			WithAllowedTools("Read"),
+			WithAllowedTools("Read", "Write"),
+		}, verifyOptionsConfig},
+		{"complex_configuration", []Option{
+			WithSystemPrompt("Complex test system prompt"),
+			WithAllowedTools("Read", "Write", "Edit"),
+			WithDisallowedTools("Bash"),
+			WithContinueConversation(true),
+			WithMaxThinkingTokens(8000),
+			WithPermissionMode(PermissionModeAcceptEdits),
+		}, verifyComplexConfig},
+		{"session_configuration", []Option{
+			WithContinueConversation(true),
+			WithResume("test-session-123"),
+		}, verifySessionConfig},
 	}
 
 	for _, test := range tests {
@@ -311,7 +337,7 @@ func TestClientReceiveMessages(t *testing.T) {
 	client := setupClientForTest(t, transport)
 	defer disconnectClientSafely(t, client)
 
-	connectClientSafely(t, ctx, client)
+	connectClientSafely(ctx, t, client)
 
 	// Get message channel from client
 	msgChan := client.ReceiveMessages(ctx)
@@ -370,7 +396,7 @@ func TestClientResponseIterator(t *testing.T) {
 	client := setupClientForTest(t, transport)
 	defer disconnectClientSafely(t, client)
 
-	connectClientSafely(t, ctx, client)
+	connectClientSafely(ctx, t, client)
 
 	// Get response iterator from client
 	iter := client.ReceiveResponse(ctx)
@@ -441,7 +467,7 @@ func TestClientInterrupt(t *testing.T) {
 	client := setupClientForTest(t, transport)
 	defer disconnectClientSafely(t, client)
 
-	connectClientSafely(t, ctx, client)
+	connectClientSafely(ctx, t, client)
 
 	// Test interrupt on connected client
 	err := client.Interrupt(ctx)
@@ -457,7 +483,7 @@ func TestClientInterrupt(t *testing.T) {
 	clientWithError := setupClientForTest(t, transportWithError)
 	defer disconnectClientSafely(t, clientWithError)
 
-	connectClientSafely(t, ctx, clientWithError)
+	connectClientSafely(ctx, t, clientWithError)
 
 	err = clientWithError.Interrupt(ctx)
 	assertClientError(t, err, true, "interrupt failed")
@@ -467,7 +493,7 @@ func TestClientInterrupt(t *testing.T) {
 	longRunningClient := setupClientForTest(t, longRunningTransport)
 	defer disconnectClientSafely(t, longRunningClient)
 
-	connectClientSafely(t, ctx, longRunningClient)
+	connectClientSafely(ctx, t, longRunningClient)
 
 	// Use a channel to synchronize the goroutine
 	done := make(chan error, 1)
@@ -513,7 +539,7 @@ func TestClientSessionID(t *testing.T) {
 	client := setupClientForTest(t, transport)
 	defer disconnectClientSafely(t, client)
 
-	connectClientSafely(t, ctx, client)
+	connectClientSafely(ctx, t, client)
 
 	// Test query with default session ID
 	err := client.Query(ctx, "test message")
@@ -524,12 +550,12 @@ func TestClientSessionID(t *testing.T) {
 	if !ok {
 		t.Fatal("Failed to get sent message")
 	}
-	if sentMsg.SessionID != "default" {
+	if sentMsg.SessionID != defaultSessionID {
 		t.Errorf("Expected default session ID 'default', got '%s'", sentMsg.SessionID)
 	}
 
 	// Test query with custom session ID
-	err = client.Query(ctx, "test message 2", "custom-session")
+	err = client.QueryWithSession(ctx, "test message 2", "custom-session")
 	assertNoError(t, err)
 
 	// Verify custom session ID was used
@@ -542,7 +568,7 @@ func TestClientSessionID(t *testing.T) {
 	}
 
 	// Test query with empty session ID (should use default)
-	err = client.Query(ctx, "test message 3", "")
+	err = client.QueryWithSession(ctx, "test message 3", "")
 	assertNoError(t, err)
 
 	// Verify default session ID was used for empty string
@@ -550,7 +576,7 @@ func TestClientSessionID(t *testing.T) {
 	if !ok {
 		t.Fatal("Failed to get third sent message")
 	}
-	if sentMsg.SessionID != "default" {
+	if sentMsg.SessionID != defaultSessionID {
 		t.Errorf("Expected default session ID for empty string, got '%s'", sentMsg.SessionID)
 	}
 
@@ -568,7 +594,7 @@ func TestClientMultipleSessions(t *testing.T) {
 	client := setupClientForTest(t, transport)
 	defer disconnectClientSafely(t, client)
 
-	connectClientSafely(t, ctx, client)
+	connectClientSafely(ctx, t, client)
 
 	// Test concurrent operations with different session IDs
 	const numSessions = 3
@@ -584,7 +610,7 @@ func TestClientMultipleSessions(t *testing.T) {
 		go func(id int, sess string) {
 			defer wg.Done()
 			for j := 0; j < queriesPerSession; j++ {
-				err := client.Query(ctx, fmt.Sprintf("query %d-%d", id, j), sess)
+				err := client.QueryWithSession(ctx, fmt.Sprintf("query %d-%d", id, j), sess)
 				if err != nil {
 					errors <- fmt.Errorf("session %s query %d failed: %w", sess, j, err)
 				}
@@ -629,7 +655,7 @@ func TestClientMultipleSessions(t *testing.T) {
 	}
 
 	// Test session isolation: different sessions should not interfere
-	err := client.Query(ctx, "final test", "session-1")
+	err := client.QueryWithSession(ctx, "final test", "session-1")
 	assertNoError(t, err)
 
 	// Verify the final message used correct session ID
@@ -653,7 +679,7 @@ func TestClientReconnection(t *testing.T) {
 	defer disconnectClientSafely(t, client)
 
 	// Initial connection
-	connectClientSafely(t, ctx, client)
+	connectClientSafely(ctx, t, client)
 	err := client.Query(ctx, "test before disconnect")
 	assertNoError(t, err)
 
@@ -661,7 +687,7 @@ func TestClientReconnection(t *testing.T) {
 	disconnectClientSafely(t, client)
 	assertClientDisconnected(t, transport)
 	transport.reset()
-	connectClientSafely(t, ctx, client)
+	connectClientSafely(ctx, t, client)
 
 	// Test recovery after reconnection
 	err = client.Query(ctx, "test after reconnect")
@@ -681,7 +707,7 @@ func TestClientAsyncErrorHandling(t *testing.T) {
 	client := setupClientForTest(t, transport)
 	defer disconnectClientSafely(t, client)
 
-	connectClientSafely(t, ctx, client)
+	connectClientSafely(ctx, t, client)
 
 	// Get error channel from ReceiveMessages
 	_, errChan := transport.ReceiveMessages(ctx)
@@ -728,7 +754,7 @@ func TestClientResponseSequencing(t *testing.T) {
 	client := setupClientForTest(t, transport)
 	defer disconnectClientSafely(t, client)
 
-	connectClientSafely(t, ctx, client)
+	connectClientSafely(ctx, t, client)
 
 	// Get message channel from ReceiveMessages
 	msgChan, _ := transport.ReceiveMessages(ctx)
@@ -794,7 +820,7 @@ func TestClientGracefulShutdown(t *testing.T) {
 	)
 	defer disconnectClientSafely(t, client)
 
-	connectClientSafely(t, ctx, client)
+	connectClientSafely(ctx, t, client)
 
 	// Test protocol compliance (T163) - messages should be properly formatted
 	err := client.Query(ctx, "test message")
@@ -804,7 +830,7 @@ func TestClientGracefulShutdown(t *testing.T) {
 	if !ok {
 		t.Fatal("Failed to get sent message")
 	}
-	if sentMsg.Type != "user" {
+	if sentMsg.Type != userMessageType {
 		t.Errorf("Expected message type 'user', got '%s'", sentMsg.Type)
 	}
 
@@ -977,7 +1003,7 @@ func (c *clientMockTransport) SendMessage(ctx context.Context, message StreamMes
 	return nil
 }
 
-func (c *clientMockTransport) ReceiveMessages(ctx context.Context) (msgChan <-chan Message, errChan <-chan error) {
+func (c *clientMockTransport) ReceiveMessages(_ context.Context) (msgChan <-chan Message, errChan <-chan error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -1008,7 +1034,7 @@ func (c *clientMockTransport) ReceiveMessages(ctx context.Context) (msgChan <-ch
 	return c.msgChan, c.errChan
 }
 
-func (c *clientMockTransport) Interrupt(ctx context.Context) error {
+func (c *clientMockTransport) Interrupt(_ context.Context) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.interruptError != nil {
@@ -1147,7 +1173,7 @@ func setupClientForTest(t *testing.T, transport Transport) Client {
 	return NewClientWithTransport(transport)
 }
 
-func connectClientSafely(t *testing.T, ctx context.Context, client Client) {
+func connectClientSafely(ctx context.Context, t *testing.T, client Client) {
 	t.Helper()
 	if err := client.Connect(ctx); err != nil {
 		t.Fatalf("Client connect failed: %v", err)
@@ -1228,7 +1254,7 @@ func verifyClientConfiguration(t *testing.T, client Client, transport *clientMoc
 		t.Fatalf("Expected client to be created for %s", config.name)
 	}
 
-	connectClientSafely(t, ctx, client)
+	connectClientSafely(ctx, t, client)
 
 	// Execute queries based on message count
 	for i := 0; i < config.messageCount; i++ {
@@ -1239,7 +1265,7 @@ func verifyClientConfiguration(t *testing.T, client Client, transport *clientMoc
 
 		var err error
 		if config.sessionID != "" {
-			err = client.Query(ctx, queryText, config.sessionID)
+			err = client.QueryWithSession(ctx, queryText, config.sessionID)
 		} else {
 			err = client.Query(ctx, queryText)
 		}
@@ -1266,7 +1292,7 @@ func verifyDefaultConfiguration(t *testing.T, client Client, transport *clientMo
 			if !ok {
 				t.Fatal("Expected sent message")
 			}
-			if sentMsg.SessionID != "default" {
+			if sentMsg.SessionID != defaultSessionID {
 				t.Errorf("Expected default session ID 'default', got %q", sentMsg.SessionID)
 			}
 		},
@@ -1312,7 +1338,7 @@ func verifyComplexConfig(t *testing.T, client Client, transport *clientMockTrans
 				if !ok {
 					t.Fatalf("Expected sent message %d", i)
 				}
-				if sentMsg.Type != "user" {
+				if sentMsg.Type != userMessageType {
 					t.Errorf("Expected message type 'user', got %q", sentMsg.Type)
 				}
 			}
@@ -1352,7 +1378,7 @@ func verifyIteratorClose(t *testing.T, client Client, _ *clientMockTransport, te
 	ctx, cancel := setupClientTestContext(t, 10*time.Second)
 	defer cancel()
 
-	connectClientSafely(t, ctx, client)
+	connectClientSafely(ctx, t, client)
 
 	// Send query if needed for the test scenario
 	if test.needQuery {
@@ -1618,7 +1644,7 @@ func TestWithClientOptionsPropagate(t *testing.T) {
 	// Test with various options
 	err := WithClientTransport(ctx, transport, func(client Client) error {
 		// Verify client was created and connected
-		return client.Query(ctx, "options test", "custom-session")
+		return client.QueryWithSession(ctx, "options test", "custom-session")
 	},
 		WithSystemPrompt("Test system prompt"),
 		WithAllowedTools("Read", "Write"),
@@ -1667,11 +1693,11 @@ func TestClientPythonSDKCompatibility(t *testing.T) {
 	defer disconnectClientSafely(t, client)
 
 	// Test complete workflow: Connect → Query → ReceiveMessages
-	connectClientSafely(t, ctx, client)
+	connectClientSafely(ctx, t, client)
 	assertClientConnected(t, transport)
 
 	// Send query using new Python SDK compatible format
-	err := client.Query(ctx, "Test streaming with Python SDK format", "test-session")
+	err := client.QueryWithSession(ctx, "Test streaming with Python SDK format", "test-session")
 	assertNoError(t, err)
 
 	// Verify message was sent in correct Python SDK format
@@ -1682,7 +1708,7 @@ func TestClientPythonSDKCompatibility(t *testing.T) {
 	}
 
 	// Verify Python SDK compatible message structure
-	if sentMsg.Type != "user" {
+	if sentMsg.Type != userMessageType {
 		t.Errorf("Expected message type 'user', got '%s'", sentMsg.Type)
 	}
 	if sentMsg.SessionID != "test-session" {
@@ -1785,7 +1811,7 @@ func TestWithClient(t *testing.T) {
 				cancel() // Cancel immediately
 				return ctx, cancel
 			},
-			fn: func(client Client) error {
+			fn: func(_ Client) error {
 				return nil // Should not be called
 			},
 			wantErr: true,
@@ -1797,7 +1823,7 @@ func TestWithClient(t *testing.T) {
 				t.Helper()
 				return setupClientTestContext(t, 5*time.Second)
 			},
-			fn: func(client Client) error {
+			fn: func(_ Client) error {
 				// If we get here, connection succeeded
 				return fmt.Errorf("test function error")
 			},
@@ -1962,5 +1988,208 @@ func TestClientIteratorNextErrorPaths(t *testing.T) {
 				t.Error("Expected iterator to be closed after error condition")
 			}
 		})
+	}
+}
+
+// ===== NEW CLEAN API TESTS =====
+// These tests are for the new clean Query API without variadic parameters
+
+func TestClientQueryDefaultSession(t *testing.T) {
+	ctx, cancel := setupClientTestContext(t, 5*time.Second)
+	defer cancel()
+
+	transport := newClientMockTransport()
+	client := setupClientForTest(t, transport)
+	defer disconnectClientSafely(t, client)
+
+	connectClientSafely(ctx, t, client)
+
+	// Test that Query() with no session uses "default"
+	err := client.Query(ctx, "test message")
+	if err != nil {
+		t.Fatalf("Query failed: %v", err)
+	}
+
+	// Verify the sent message used default session
+	sentMsg, ok := transport.getSentMessage(0)
+	if !ok {
+		t.Fatal("Expected a message to be sent")
+	}
+
+	if sentMsg.SessionID != defaultSessionID {
+		t.Errorf("Expected session ID 'default', got %q", sentMsg.SessionID)
+	}
+
+	if sentMsg.Type != userMessageType {
+		t.Errorf("Expected message type 'user', got %q", sentMsg.Type)
+	}
+
+	message, ok := sentMsg.Message.(map[string]interface{})
+	if !ok {
+		t.Fatal("Expected message to be a map")
+	}
+
+	if content, ok := message["content"].(string); !ok || content != "test message" {
+		t.Errorf("Expected message content 'test message', got %v", message["content"])
+	}
+}
+
+func TestClientQueryWithCustomSession(t *testing.T) {
+	ctx, cancel := setupClientTestContext(t, 5*time.Second)
+	defer cancel()
+
+	transport := newClientMockTransport()
+	client := setupClientForTest(t, transport)
+	defer disconnectClientSafely(t, client)
+
+	connectClientSafely(ctx, t, client)
+
+	customSession := "my-custom-session-123"
+
+	// Test that QueryWithSession() uses the provided session
+	err := client.QueryWithSession(ctx, "test message", customSession)
+	if err != nil {
+		t.Fatalf("QueryWithSession failed: %v", err)
+	}
+
+	// Verify the sent message used custom session
+	sentMsg, ok := transport.getSentMessage(0)
+	if !ok {
+		t.Fatal("Expected a message to be sent")
+	}
+
+	if sentMsg.SessionID != customSession {
+		t.Errorf("Expected session ID %q, got %q", customSession, sentMsg.SessionID)
+	}
+
+	if sentMsg.Type != userMessageType {
+		t.Errorf("Expected message type 'user', got %q", sentMsg.Type)
+	}
+
+	message, ok := sentMsg.Message.(map[string]interface{})
+	if !ok {
+		t.Fatal("Expected message to be a map")
+	}
+
+	if content, ok := message["content"].(string); !ok || content != "test message" {
+		t.Errorf("Expected message content 'test message', got %v", message["content"])
+	}
+}
+
+func TestClientQueryWithSessionValidation(t *testing.T) {
+	ctx, cancel := setupClientTestContext(t, 5*time.Second)
+	defer cancel()
+
+	transport := newClientMockTransport()
+	client := setupClientForTest(t, transport)
+	defer disconnectClientSafely(t, client)
+
+	connectClientSafely(ctx, t, client)
+
+	// Test with empty session ID - should use default
+	err := client.QueryWithSession(ctx, "test message", "")
+	if err != nil {
+		t.Fatalf("QueryWithSession with empty session failed: %v", err)
+	}
+
+	// Verify the sent message used default session when empty provided
+	sentMsg, ok := transport.getSentMessage(0)
+	if !ok {
+		t.Fatal("Expected a message to be sent")
+	}
+
+	if sentMsg.SessionID != defaultSessionID {
+		t.Errorf("Expected session ID 'default' when empty provided, got %q", sentMsg.SessionID)
+	}
+}
+
+func TestClientQuerySessionBehaviorParity(t *testing.T) {
+	// This test ensures our Go implementation matches Python SDK behavior
+	tests := []struct {
+		name           string
+		useDefault     bool
+		sessionID      string
+		expectedResult string
+	}{
+		{
+			name:           "default_session_behavior",
+			useDefault:     true,
+			expectedResult: "default",
+		},
+		{
+			name:           "custom_session_behavior",
+			useDefault:     false,
+			sessionID:      "python-parity-test",
+			expectedResult: "python-parity-test",
+		},
+		{
+			name:           "empty_session_falls_back_to_default",
+			useDefault:     false,
+			sessionID:      "",
+			expectedResult: "default",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			ctx, cancel := setupClientTestContext(t, 5*time.Second)
+			defer cancel()
+
+			transport := newClientMockTransport()
+			client := setupClientForTest(t, transport)
+			defer disconnectClientSafely(t, client)
+
+			connectClientSafely(ctx, t, client)
+
+			var err error
+			if test.useDefault {
+				err = client.Query(ctx, "parity test")
+			} else {
+				err = client.QueryWithSession(ctx, "parity test", test.sessionID)
+			}
+
+			if err != nil {
+				t.Fatalf("Query failed: %v", err)
+			}
+
+			// Verify session behavior matches expected
+			sentMsg, ok := transport.getSentMessage(0)
+			if !ok {
+				t.Fatal("Expected a message to be sent")
+			}
+
+			if sentMsg.SessionID != test.expectedResult {
+				t.Errorf("Expected session ID %q, got %q", test.expectedResult, sentMsg.SessionID)
+			}
+		})
+	}
+}
+
+func TestClientQueryNotConnectedError(t *testing.T) {
+	ctx, cancel := setupClientTestContext(t, 5*time.Second)
+	defer cancel()
+
+	transport := newClientMockTransport()
+	client := setupClientForTest(t, transport)
+	defer disconnectClientSafely(t, client)
+
+	// Note: We don't call connectClientSafely() here - client should be disconnected
+
+	// Test Query() when not connected
+	err := client.Query(ctx, "test message")
+	if err == nil {
+		t.Fatal("Expected error when not connected")
+	}
+	if !strings.Contains(err.Error(), "not connected") {
+		t.Errorf("Expected 'not connected' error, got: %v", err)
+	}
+
+	// Test QueryWithSession() when not connected
+	err = client.QueryWithSession(ctx, "test message", "custom")
+	if err == nil {
+		t.Fatal("Expected error when not connected")
+	}
+	if !strings.Contains(err.Error(), "not connected") {
+		t.Errorf("Expected 'not connected' error, got: %v", err)
 	}
 }

@@ -109,6 +109,7 @@ func (t *Transport) Connect(ctx context.Context) error {
 		// Streaming mode or regular one-shot
 		args = cli.BuildCommand(t.cliPath, t.options, t.closeStdin)
 	}
+	//nolint:gosec // G204: This is the core CLI SDK functionality - subprocess execution is required
 	t.cmd = exec.CommandContext(ctx, args[0], args[1:]...)
 
 	// Set up environment
@@ -217,7 +218,7 @@ func (t *Transport) SendMessage(ctx context.Context, message shared.StreamMessag
 }
 
 // ReceiveMessages returns channels for receiving messages and errors.
-func (t *Transport) ReceiveMessages(ctx context.Context) (<-chan shared.Message, <-chan error) {
+func (t *Transport) ReceiveMessages(_ context.Context) (<-chan shared.Message, <-chan error) {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 
@@ -234,7 +235,7 @@ func (t *Transport) ReceiveMessages(ctx context.Context) (<-chan shared.Message,
 }
 
 // Interrupt sends an interrupt signal to the subprocess.
-func (t *Transport) Interrupt(ctx context.Context) error {
+func (t *Transport) Interrupt(_ context.Context) error {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 
