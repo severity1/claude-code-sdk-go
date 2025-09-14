@@ -204,6 +204,8 @@ func TestClientErrorHandling(t *testing.T) {
 		"connection_error": {"connect", "Connect", "connection failed"},
 		"send_error":       {"send", "Query", "send failed"},
 		"successful_op":    {"", "Query", ""},
+		"interrupt_not_connected": {"", "Interrupt", "client not connected"},
+		"query_stream_not_connected": {"", "QueryStream", "client not connected"},
 	}
 
 	for name, test := range errorTests {
@@ -227,6 +229,14 @@ func TestClientErrorHandling(t *testing.T) {
 					connectClientSafely(ctx, t, client)
 				}
 				err = client.Query(ctx, "test")
+			case "Interrupt":
+				// Don't connect for interrupt_not_connected test
+				err = client.Interrupt(ctx)
+			case "QueryStream":
+				// Don't connect for query_stream_not_connected test
+				messages := make(chan StreamMessage)
+				close(messages)
+				err = client.QueryStream(ctx, messages)
 			}
 
 			wantErr := test.errorMsg != ""
@@ -314,6 +324,12 @@ func TestClientConfiguration(t *testing.T) {
 			WithContinueConversation(true),
 			WithResume("test-session-123"),
 		}, verifySessionConfig},
+		{"validation_error_negative_max_turns", []Option{
+			WithMaxTurns(-1),
+		}, verifyValidationError},
+		{"validation_error_invalid_cwd", []Option{
+			WithCwd("/nonexistent/test/directory"),
+		}, verifyValidationError},
 	}
 
 	for _, test := range tests {
@@ -383,6 +399,22 @@ func TestClientReceiveMessages(t *testing.T) {
 
 	case <-time.After(1 * time.Second):
 		t.Error("Timeout waiting for message from client channel")
+	}
+
+	// Test ReceiveMessages when not connected - covers missing branch
+	disconnectedClient := setupClientForTest(t, newClientMockTransport())
+	defer disconnectClientSafely(t, disconnectedClient)
+	// Note: Don't call connectClientSafely here
+
+	disconnectedMsgChan := disconnectedClient.ReceiveMessages(ctx)
+	select {
+	case msg, ok := <-disconnectedMsgChan:
+		if ok {
+			t.Errorf("Expected closed channel from disconnected client, but received: %v", msg)
+		}
+		// Channel should be closed immediately
+	case <-time.After(50 * time.Millisecond):
+		t.Error("Expected immediate closed channel from disconnected client")
 	}
 }
 
@@ -1363,6 +1395,26 @@ func verifySessionConfig(t *testing.T, client Client, transport *clientMockTrans
 			}
 		},
 	})
+}
+
+// verifyValidationError verifies that client creation fails due to validation errors
+func verifyValidationError(t *testing.T, client Client, transport *clientMockTransport) {
+	t.Helper()
+	ctx, cancel := setupClientTestContext(t, 5*time.Second)
+	defer cancel()
+
+	// Connection should fail due to validation error
+	err := client.Connect(ctx)
+	if err == nil {
+		t.Error("Expected validation error to prevent connection")
+	} else {
+		// Verify it's a validation error (contains expected validation messages)
+		errStr := err.Error()
+		if !strings.Contains(errStr, "max_turns must be non-negative") &&
+			!strings.Contains(errStr, "working directory does not exist") {
+			t.Errorf("Expected validation error, got: %v", err)
+		}
+	}
 }
 
 // Iterator verification helper - consolidated from 4 redundant functions
