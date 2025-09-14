@@ -326,7 +326,7 @@ func (p *Parser) parseThinkingBlock(data map[string]any) (shared.ContentBlock, e
 	if !ok {
 		return nil, shared.NewMessageParseError("thinking block missing thinking field", data)
 	}
-	signature, _ := data["signature"].(string) //nolint:errcheck // Optional field - ignoring type assertion result
+	signature, _ := data["signature"].(string) // Optional field
 	return &shared.ThinkingBlock{
 		Thinking:  thinking,
 		Signature: signature,
@@ -342,7 +342,7 @@ func (p *Parser) parseToolUseBlock(data map[string]any) (shared.ContentBlock, er
 	if !ok {
 		return nil, shared.NewMessageParseError("tool_use block missing name field", data)
 	}
-	input, _ := data["input"].(map[string]any) //nolint:errcheck // Optional field - ignoring type assertion result
+	input, _ := data["input"].(map[string]any) // Optional field
 	if input == nil {
 		input = make(map[string]any)
 	}

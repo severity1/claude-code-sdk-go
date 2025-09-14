@@ -30,7 +30,7 @@ func TestQueryBasicExecution(t *testing.T) {
 	}
 	defer func() { _ = iter.Close() }()
 
-	messages := collectQueryMessages(t, ctx, iter)
+	messages := collectQueryMessages(ctx, t, iter)
 
 	if len(messages) != 1 {
 		t.Fatalf("Expected 1 message, got %d", len(messages))
@@ -62,7 +62,7 @@ func TestQueryWithOptions(t *testing.T) {
 	}
 	defer func() { _ = iter.Close() }()
 
-	messages := collectQueryMessages(t, ctx, iter)
+	messages := collectQueryMessages(ctx, t, iter)
 
 	if len(messages) != 1 {
 		t.Fatalf("Expected 1 message, got %d", len(messages))
@@ -99,7 +99,7 @@ func TestQueryResponseProcessing(t *testing.T) {
 	}
 	defer func() { _ = iter.Close() }()
 
-	messages := collectQueryMessages(t, ctx, iter)
+	messages := collectQueryMessages(ctx, t, iter)
 
 	if len(messages) != 1 {
 		t.Fatalf("Expected 1 message, got %d", len(messages))
@@ -255,7 +255,7 @@ func TestQueryErrorHandling(t *testing.T) {
 			setupTransport: func() *queryMockTransport {
 				return nil
 			},
-			operation: func(ctx context.Context, transport *queryMockTransport) error {
+			operation: func(ctx context.Context, _ *queryMockTransport) error {
 				_, err := QueryWithTransport(ctx, "test", nil)
 				return err
 			},
@@ -416,7 +416,7 @@ func TestQueryPublicAPI(t *testing.T) {
 			expectError: false,
 			validateResults: func(t *testing.T, iter MessageIterator) {
 				t.Helper()
-				messages := collectQueryMessages(t, ctx, iter)
+				messages := collectQueryMessages(ctx, t, iter)
 				if len(messages) != 1 {
 					t.Fatalf("Expected 1 message, got %d", len(messages))
 				}
@@ -437,7 +437,7 @@ func TestQueryPublicAPI(t *testing.T) {
 			expectError: false,
 			validateResults: func(t *testing.T, iter MessageIterator) {
 				t.Helper()
-				messages := collectQueryMessages(t, ctx, iter)
+				messages := collectQueryMessages(ctx, t, iter)
 				if len(messages) != 1 {
 					t.Fatalf("Expected 1 message, got %d", len(messages))
 				}
@@ -454,7 +454,7 @@ func TestQueryPublicAPI(t *testing.T) {
 			expectError: false,
 			validateResults: func(t *testing.T, iter MessageIterator) {
 				t.Helper()
-				messages := collectQueryMessages(t, ctx, iter)
+				messages := collectQueryMessages(ctx, t, iter)
 				if len(messages) != 1 {
 					t.Fatalf("Expected 1 message, got %d", len(messages))
 				}
@@ -604,7 +604,7 @@ func TestQuery(t *testing.T) {
 			expectError: false,
 			validateResults: func(t *testing.T, iter MessageIterator) {
 				t.Helper()
-				messages := collectQueryMessages(t, ctx, iter)
+				messages := collectQueryMessages(ctx, t, iter)
 				if len(messages) != 1 {
 					t.Fatalf("Expected 1 message, got %d", len(messages))
 				}
@@ -622,7 +622,7 @@ func TestQuery(t *testing.T) {
 			expectError: false,
 			validateResults: func(t *testing.T, iter MessageIterator) {
 				t.Helper()
-				messages := collectQueryMessages(t, ctx, iter)
+				messages := collectQueryMessages(ctx, t, iter)
 				if len(messages) != 1 {
 					t.Fatalf("Expected 1 message, got %d", len(messages))
 				}
@@ -727,7 +727,7 @@ func (q *queryMockTransport) Connect(ctx context.Context) error {
 	return nil
 }
 
-func (q *queryMockTransport) SendMessage(ctx context.Context, message StreamMessage) error {
+func (q *queryMockTransport) SendMessage(_ context.Context, message StreamMessage) error {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 
@@ -743,13 +743,13 @@ func (q *queryMockTransport) SendMessage(ctx context.Context, message StreamMess
 	return nil
 }
 
-func (q *queryMockTransport) ReceiveMessages(ctx context.Context) (<-chan Message, <-chan error) {
+func (q *queryMockTransport) ReceiveMessages(_ context.Context) (<-chan Message, <-chan error) {
 	q.mu.RLock()
 	defer q.mu.RUnlock()
 	return q.msgChan, q.errChan
 }
 
-func (q *queryMockTransport) Interrupt(ctx context.Context) error {
+func (q *queryMockTransport) Interrupt(_ context.Context) error {
 	return nil
 }
 
@@ -860,7 +860,7 @@ func setupQueryTestContext(t *testing.T, timeout time.Duration) (context.Context
 	return context.WithTimeout(context.Background(), timeout)
 }
 
-func collectQueryMessages(t *testing.T, ctx context.Context, iter MessageIterator) []Message {
+func collectQueryMessages(ctx context.Context, t *testing.T, iter MessageIterator) []Message {
 	t.Helper()
 	var messages []Message
 	for {

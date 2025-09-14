@@ -78,7 +78,7 @@ type queryIterator struct {
 	closeOnce sync.Once
 }
 
-func (qi *queryIterator) Next(ctx context.Context) (Message, error) {
+func (qi *queryIterator) Next(_ context.Context) (Message, error) {
 	qi.mu.Lock()
 	if qi.closed {
 		qi.mu.Unlock()

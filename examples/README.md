@@ -70,6 +70,10 @@ go run main.go
 # 10 - WithClient pattern for automatic resource management
 cd examples/10_context_manager
 go run main.go
+
+# 11 - Session management with clean Query API
+cd examples/11_session_management
+go run main.go
 ```
 
 ## Quick Test Example
@@ -227,6 +231,26 @@ client.Query(ctx, "What is dependency injection?")
 client.Query(ctx, "Show me a Go example")
 // Process response...
 ```
+
+### Session Management - Clean API
+
+**New Clean Query API (Recommended):**
+```go
+// Default session
+client.Query(ctx, "What is dependency injection?")
+
+// Custom session
+client.QueryWithSession(ctx, "Remember this context", "my-session")
+
+// Sessions are isolated from each other
+client.Query(ctx, "What did I just say?") // Won't remember "my-session" context
+```
+
+**Benefits of New API:**
+- ✅ **Clear intent**: `Query()` vs `QueryWithSession()`
+- ✅ **Type safety**: No variadic parameter confusion
+- ✅ **Python parity**: Matches Python SDK `client.query(session_id="...")`
+- ✅ **Go idioms**: Follows stdlib patterns like `WithContext()`, `WithTimeout()`
 
 ### MCP Tools - Cloud Integration
 ```go

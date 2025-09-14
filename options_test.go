@@ -547,7 +547,7 @@ func TestWithTransport(t *testing.T) {
 			t.Error("Expected transport marker to be set in ExtraArgs")
 		}
 
-		if marker == nil || *marker != "custom_transport" {
+		if marker == nil || *marker != customTransportMarker {
 			t.Errorf("Expected transport marker value 'custom_transport', got %v", marker)
 		}
 	})
@@ -570,7 +570,7 @@ func TestWithTransport(t *testing.T) {
 
 		// Check transport marker is added
 		marker, exists := options.ExtraArgs["__transport_marker__"]
-		if !exists || marker == nil || *marker != "custom_transport" {
+		if !exists || marker == nil || *marker != customTransportMarker {
 			t.Error("Expected transport marker to be added to existing ExtraArgs")
 		}
 	})
@@ -587,7 +587,7 @@ func TestWithTransport(t *testing.T) {
 		}
 
 		marker, exists := options.ExtraArgs["__transport_marker__"]
-		if !exists || marker == nil || *marker != "custom_transport" {
+		if !exists || marker == nil || *marker != customTransportMarker {
 			t.Error("Expected transport marker to be set when ExtraArgs was nil")
 		}
 	})
@@ -602,7 +602,7 @@ func TestWithTransport(t *testing.T) {
 
 		// Should only have one transport marker (last one wins)
 		marker, exists := options.ExtraArgs["__transport_marker__"]
-		if !exists || marker == nil || *marker != "custom_transport" {
+		if !exists || marker == nil || *marker != customTransportMarker {
 			t.Error("Expected last transport to set the marker")
 		}
 	})
@@ -809,13 +809,13 @@ func stringPtr(s string) *string {
 // mockTransportForOptions is a minimal mock transport for testing options
 type mockTransportForOptions struct{}
 
-func (m *mockTransportForOptions) Connect(ctx context.Context) error { return nil }
-func (m *mockTransportForOptions) SendMessage(ctx context.Context, msg StreamMessage) error {
+func (m *mockTransportForOptions) Connect(_ context.Context) error { return nil }
+func (m *mockTransportForOptions) SendMessage(_ context.Context, _ StreamMessage) error {
 	return nil
 }
 
-func (m *mockTransportForOptions) ReceiveMessages(ctx context.Context) (<-chan Message, <-chan error) {
+func (m *mockTransportForOptions) ReceiveMessages(_ context.Context) (<-chan Message, <-chan error) {
 	return nil, nil
 }
-func (m *mockTransportForOptions) Interrupt(ctx context.Context) error { return nil }
-func (m *mockTransportForOptions) Close() error                        { return nil }
+func (m *mockTransportForOptions) Interrupt(_ context.Context) error { return nil }
+func (m *mockTransportForOptions) Close() error                      { return nil }

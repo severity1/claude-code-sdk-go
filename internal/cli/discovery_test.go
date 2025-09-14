@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -8,6 +9,10 @@ import (
 	"testing"
 
 	"github.com/severity1/claude-code-sdk-go/internal/shared"
+)
+
+const (
+	printFlag = "--print"
 )
 
 // TestCLIDiscovery tests CLI binary discovery functionality
@@ -250,7 +255,7 @@ func TestBuildCommandWithPromptVsBuildCommand(t *testing.T) {
 				// promptCommand should have the prompt as an argument after --print
 				found := false
 				for i, arg := range promptCommand {
-					if arg == "--print" && i+1 < len(promptCommand) && promptCommand[i+1] == prompt {
+					if arg == printFlag && i+1 < len(promptCommand) && promptCommand[i+1] == prompt {
 						found = true
 						break
 					}
@@ -265,7 +270,7 @@ func TestBuildCommandWithPromptVsBuildCommand(t *testing.T) {
 			check: func(t *testing.T) {
 				// Regular command should not have prompt as argument
 				for i, arg := range regularCommand {
-					if arg == "--print" && i+1 < len(regularCommand) && regularCommand[i+1] == prompt {
+					if arg == printFlag && i+1 < len(regularCommand) && regularCommand[i+1] == prompt {
 						t.Errorf("Expected regular command to not have prompt as argument, got %v", regularCommand)
 						break
 					}
@@ -306,7 +311,7 @@ func TestWorkingDirectoryValidation(t *testing.T) {
 		},
 		{
 			name:        "empty_path",
-			setup:       func(t *testing.T) string { return "" },
+			setup:       func(_ *testing.T) string { return "" },
 			expectError: false,
 		},
 		{
@@ -342,7 +347,8 @@ func TestWorkingDirectoryValidation(t *testing.T) {
 // TestCLIVersionDetection tests CLI version detection
 func TestCLIVersionDetection(t *testing.T) {
 	nonExistentPath := "/this/path/does/not/exist/claude"
-	_, err := DetectCLIVersion(nonExistentPath)
+	ctx := context.Background()
+	_, err := DetectCLIVersion(ctx, nonExistentPath)
 	assertVersionDetectionError(t, err)
 }
 
@@ -354,7 +360,7 @@ func setupIsolatedEnvironment(t *testing.T) func() {
 	originalHome := os.Getenv("HOME")
 	originalPath := os.Getenv("PATH")
 
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == windowsOS {
 		originalHome = os.Getenv("USERPROFILE")
 		_ = os.Setenv("USERPROFILE", tempHome)
 	} else {
@@ -363,7 +369,7 @@ func setupIsolatedEnvironment(t *testing.T) func() {
 	_ = os.Setenv("PATH", "/nonexistent/path")
 
 	return func() {
-		if runtime.GOOS == "windows" {
+		if runtime.GOOS == windowsOS {
 			_ = os.Setenv("USERPROFILE", originalHome)
 		} else {
 			_ = os.Setenv("HOME", originalHome)
@@ -435,7 +441,7 @@ func assertPlatformSpecificPaths(t *testing.T, locations []string) {
 		homeDir = "."
 	}
 	expectedNpmGlobal := filepath.Join(homeDir, ".npm-global", "bin", "claude")
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == windowsOS {
 		expectedNpmGlobal = filepath.Join(homeDir, ".npm-global", "claude.cmd")
 	}
 
@@ -595,7 +601,7 @@ func validatePromptWithFullOptions(t *testing.T, cmd []string, prompt string) {
 	assertContainsArgs(t, cmd, "--resume", "session123")
 }
 
-func validateEmptyPromptCommand(t *testing.T, cmd []string, prompt string) {
+func validateEmptyPromptCommand(t *testing.T, cmd []string, _ string) {
 	t.Helper()
 	assertContainsArgs(t, cmd, "--output-format", "stream-json")
 	assertContainsArg(t, cmd, "--verbose")

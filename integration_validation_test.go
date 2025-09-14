@@ -209,7 +209,7 @@ func validateSessionContinuation(t *testing.T, ctx context.Context, client claud
 	t.Logf("Starting session continuation validation")
 
 	// Send query to continue session
-	err := client.Query(ctx, "Continue our previous conversation", "session-continuation-123")
+	err := client.QueryWithSession(ctx, "Continue our previous conversation", "session-continuation-123")
 	assertIntegrationError(t, err, false, "")
 	t.Logf("Query sent successfully")
 

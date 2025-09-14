@@ -198,7 +198,8 @@ func assertTypesTransportInterface(t *testing.T, transport Transport) {
 }
 
 // assertTypesStreamMessage tests that StreamMessage re-export maintains field access
-func assertTypesStreamMessage(t *testing.T, msg *StreamMessage, expectedType, expectedMessage, expectedSessionID string) {
+func assertTypesStreamMessage(t *testing.T, msg *StreamMessage,
+	expectedType, expectedMessage, expectedSessionID string) {
 	t.Helper()
 	if msg == nil {
 		t.Fatal("StreamMessage should not be nil")

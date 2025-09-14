@@ -16,7 +16,8 @@ const defaultSessionID = "default"
 type Client interface {
 	Connect(ctx context.Context, prompt ...StreamMessage) error
 	Disconnect() error
-	Query(ctx context.Context, prompt string, sessionID ...string) error
+	Query(ctx context.Context, prompt string) error
+	QueryWithSession(ctx context.Context, prompt string, sessionID string) error
 	QueryStream(ctx context.Context, messages <-chan StreamMessage) error
 	ReceiveMessages(ctx context.Context) <-chan Message
 	ReceiveResponse(ctx context.Context) MessageIterator
@@ -195,7 +196,7 @@ func (c *ClientImpl) validateOptions() error {
 }
 
 // Connect establishes a connection to the Claude Code CLI.
-func (c *ClientImpl) Connect(ctx context.Context, prompt ...StreamMessage) error {
+func (c *ClientImpl) Connect(ctx context.Context, _ ...StreamMessage) error {
 	// Check context before acquiring lock
 	if ctx.Err() != nil {
 		return ctx.Err()
@@ -257,8 +258,37 @@ func (c *ClientImpl) Disconnect() error {
 	return nil
 }
 
-// Query sends a simple text query.
-func (c *ClientImpl) Query(ctx context.Context, prompt string, sessionID ...string) error {
+// Query sends a simple text query using the default session.
+// This is equivalent to QueryWithSession(ctx, prompt, "default").
+//
+// Example:
+//
+//	client.Query(ctx, "What is Go?")
+func (c *ClientImpl) Query(ctx context.Context, prompt string) error {
+	return c.queryWithSession(ctx, prompt, defaultSessionID)
+}
+
+// QueryWithSession sends a simple text query using the specified session ID.
+// Each session maintains its own conversation context, allowing for isolated
+// conversations within the same client connection.
+//
+// If sessionID is empty, it defaults to "default".
+//
+// Example:
+//
+//	client.QueryWithSession(ctx, "Remember this", "my-session")
+//	client.QueryWithSession(ctx, "What did I just say?", "my-session") // Remembers context
+//	client.Query(ctx, "What did I just say?")                          // Won't remember, different session
+func (c *ClientImpl) QueryWithSession(ctx context.Context, prompt string, sessionID string) error {
+	// Use default session if empty session ID provided
+	if sessionID == "" {
+		sessionID = defaultSessionID
+	}
+	return c.queryWithSession(ctx, prompt, sessionID)
+}
+
+// queryWithSession is the internal implementation for sending queries with session management.
+func (c *ClientImpl) queryWithSession(ctx context.Context, prompt string, sessionID string) error {
 	// Check context before proceeding
 	if ctx.Err() != nil {
 		return ctx.Err()
@@ -279,12 +309,6 @@ func (c *ClientImpl) Query(ctx context.Context, prompt string, sessionID ...stri
 		return ctx.Err()
 	}
 
-	// Determine session ID - use first provided, otherwise default to "default"
-	sid := defaultSessionID
-	if len(sessionID) > 0 && sessionID[0] != "" {
-		sid = sessionID[0]
-	}
-
 	// Create user message in Python SDK compatible format
 	streamMsg := StreamMessage{
 		Type: "user",
@@ -293,7 +317,7 @@ func (c *ClientImpl) Query(ctx context.Context, prompt string, sessionID ...stri
 			"content": prompt,
 		},
 		ParentToolUseID: nil,
-		SessionID:       sid,
+		SessionID:       sessionID,
 	}
 
 	// Send message via transport (without holding mutex to avoid blocking other operations)
@@ -334,7 +358,7 @@ func (c *ClientImpl) QueryStream(ctx context.Context, messages <-chan StreamMess
 }
 
 // ReceiveMessages returns a channel of incoming messages.
-func (c *ClientImpl) ReceiveMessages(ctx context.Context) <-chan Message {
+func (c *ClientImpl) ReceiveMessages(_ context.Context) <-chan Message {
 	// Check connection status with read lock
 	c.mu.RLock()
 	connected := c.connected
@@ -353,7 +377,7 @@ func (c *ClientImpl) ReceiveMessages(ctx context.Context) <-chan Message {
 }
 
 // ReceiveResponse returns an iterator for the response messages.
-func (c *ClientImpl) ReceiveResponse(ctx context.Context) MessageIterator {
+func (c *ClientImpl) ReceiveResponse(_ context.Context) MessageIterator {
 	// Check connection status with read lock
 	c.mu.RLock()
 	connected := c.connected

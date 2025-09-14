@@ -1,3 +1,4 @@
+// Package shared provides shared types and interfaces used across internal packages.
 package shared
 
 import "fmt"

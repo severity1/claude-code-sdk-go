@@ -2,6 +2,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -206,7 +207,7 @@ func addFileSystemFlags(cmd []string, options *shared.Options) []string {
 	return cmd
 }
 
-func addMCPFlags(cmd []string, options *shared.Options) []string {
+func addMCPFlags(cmd []string, _ *shared.Options) []string {
 	// TODO: Implement MCP configuration file generation when len(options.McpServers) > 0
 	// For now, skip MCP servers - this will be added in a subsequent commit
 	return cmd
@@ -265,8 +266,8 @@ func ValidateWorkingDirectory(cwd string) error {
 }
 
 // DetectCLIVersion detects the Claude CLI version for compatibility checks.
-func DetectCLIVersion(cliPath string) (string, error) {
-	cmd := exec.Command(cliPath, "--version")
+func DetectCLIVersion(ctx context.Context, cliPath string) (string, error) {
+	cmd := exec.CommandContext(ctx, cliPath, "--version")
 	output, err := cmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("failed to get CLI version: %w", err)
