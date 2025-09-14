@@ -302,12 +302,109 @@ func (c *ClientImpl) ReceiveResponse(ctx context.Context) MessageIterator {
 - Prevention of subtle bugs
 - Improved developer experience
 
+## Additional Issues Discovered During Review
+
+### Issue 4: Context Cancellation Not Respected in QueryStream
+
+#### Current Implementation Problem
+```go
+// client.go:316-333
+go func() {
+    for msg := range messages {  // Doesn't check ctx.Done()
+        transport.SendMessage(ctx, msg)
+    }
+}()
+```
+
+The goroutine doesn't properly respect context cancellation, potentially continuing after the context is cancelled.
+
+#### Proposed Fix
+```go
+go func() {
+    for {
+        select {
+        case msg, ok := <-messages:
+            if !ok {
+                return
+            }
+            if err := transport.SendMessage(ctx, msg); err != nil {
+                // Handle error appropriately
+                return
+            }
+        case <-ctx.Done():
+            return  // Properly exit on context cancellation
+        }
+    }
+}()
+```
+
+### Issue 5: No Connection State Management API
+
+#### Current Gap
+The SDK lacks methods to check connection state before operations, leading to potential runtime failures.
+
+#### Proposed Addition
+```go
+// Add connection state methods
+func (c *ClientImpl) IsConnected() bool
+func (c *ClientImpl) WaitForReady(ctx context.Context) error
+func (c *ClientImpl) ConnectionState() ConnectionState
+```
+
+### Issue 6: Goroutine Lifecycle Management
+
+#### Current Problem
+The `QueryStream` spawns goroutines without tracking, creating potential for:
+- Goroutine leaks
+- Resource cleanup issues
+- Inability to gracefully shutdown
+
+#### Proposed Solution
+```go
+type ClientImpl struct {
+    // ... existing fields
+    streamWg sync.WaitGroup  // Track active streams
+}
+
+func (c *ClientImpl) Close() error {
+    // Signal shutdown
+    // Wait for goroutines
+    c.streamWg.Wait()
+    // Clean up resources
+}
+```
+
+## Revised Implementation Priority
+
+### Critical (P1 - Bug Fix)
+1. **Fix variadic sessionID** - Data loss risk from silent parameter dropping
+2. **Fix context cancellation** - Resource leak and shutdown issues
+
+### High Priority (P2 - Before v1.0)
+1. **Rename QueryStream** - Prevent API misuse
+2. **Add goroutine lifecycle management** - Prevent resource leaks
+3. **Add connection state API** - Improve reliability
+
+### Medium Priority (P3 - Quality of Life)
+1. **Deprecate ReceiveResponse** - Reduce API surface
+2. **Add backpressure controls** - Prevent overload scenarios
+
+## Risk Assessment Update
+
+- **Issue #1 (Variadic)**: **CRITICAL** - Silent data loss in production
+- **Issue #4 (Context)**: **HIGH** - Resource leaks, shutdown failures
+- **Issue #6 (Goroutines)**: **HIGH** - Memory leaks over time
+- **Issue #2 (Naming)**: **MEDIUM** - API confusion but functional
+- **Issue #3 (Iterator)**: **LOW** - Redundant but harmless
+- **Issue #5 (State)**: **MEDIUM** - Runtime failures without checks
+
 ## Conclusion
 
-While the current API is functional and well-designed overall, these minor improvements would:
-1. Eliminate ambiguity in the API contract
-2. Better follow Go stdlib patterns
-3. Reduce redundancy
-4. Prevent potential bugs (parameter dropping, goroutine leaks)
+While initially categorized as "minor improvements," several of these issues represent **production-impacting bugs**:
+1. Silent parameter dropping (data loss)
+2. Context cancellation ignored (resource leaks)
+3. Untracked goroutines (memory leaks)
 
-The changes are minor but would significantly improve the clarity and idiomaticity of the SDK's public API.
+These should be addressed immediately as bug fixes rather than API improvements. The remaining issues improve API clarity and should be resolved before v1.0 release to avoid breaking changes later.
+
+The analysis demonstrates excellent API design understanding, but the severity classification should be updated to reflect the production impact of these issues.
