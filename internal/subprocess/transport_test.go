@@ -14,9 +14,6 @@ import (
 	"github.com/severity1/claude-code-sdk-go/internal/shared"
 )
 
-const (
-	sdkGoEntrypoint = "sdk-go"
-)
 
 // TestTransportLifecycle tests connection lifecycle, state management, and reconnection
 func TestTransportLifecycle(t *testing.T) {
@@ -708,15 +705,16 @@ func TestTransportTerminateProcessPaths(t *testing.T) {
 
 	// Test context cancellation during termination
 	t.Run("context_cancelled_during_termination", func(t *testing.T) {
-		transport := setupTransportForTest(t, newTransportMockCLI())
-		connectTransportSafely(ctx, t, transport)
-
-		// Cancel context immediately to test cancellation path
+		// Create a context that we can cancel
 		shortCtx, shortCancel := context.WithCancel(ctx)
-		shortCancel()
 
-		// Replace the transport context to simulate cancellation during termination
-		transport.ctx = shortCtx
+		transport := setupTransportForTest(t, newTransportMockCLI())
+
+		// Connect with the cancellable context
+		connectTransportSafely(shortCtx, t, transport)
+
+		// Cancel the context to simulate cancellation during termination
+		shortCancel()
 
 		err := transport.Close()
 		// Should not error even with cancelled context

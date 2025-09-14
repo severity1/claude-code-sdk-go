@@ -11,9 +11,6 @@ import (
 	"github.com/severity1/claude-code-sdk-go/internal/shared"
 )
 
-const (
-	printFlag = "--print"
-)
 
 // TestCLIDiscovery tests CLI binary discovery functionality
 func TestCLIDiscovery(t *testing.T) {
@@ -451,7 +448,8 @@ func TestFindCLISuccess(t *testing.T) {
 		}
 
 		// Create and make executable
-		err := os.WriteFile(cliPath, []byte("#!/bin/bash\necho test"), 0o755)
+		//nolint:gosec // G306: Test file needs execute permission for mock CLI binary
+		err := os.WriteFile(cliPath, []byte("#!/bin/bash\necho test"), 0o700)
 		if err != nil {
 			t.Fatalf("Failed to create test CLI: %v", err)
 		}
@@ -459,8 +457,14 @@ func TestFindCLISuccess(t *testing.T) {
 		// Temporarily modify PATH
 		originalPath := os.Getenv("PATH")
 		newPath := tempDir + string(os.PathListSeparator) + originalPath
-		os.Setenv("PATH", newPath)
-		defer os.Setenv("PATH", originalPath)
+		if err := os.Setenv("PATH", newPath); err != nil {
+			t.Fatalf("Failed to set PATH: %v", err)
+		}
+		defer func() {
+			if err := os.Setenv("PATH", originalPath); err != nil {
+				t.Logf("Failed to restore PATH: %v", err)
+			}
+		}()
 
 		found, err := FindCLI()
 		if err != nil {
@@ -477,18 +481,34 @@ func TestFindCLISuccess(t *testing.T) {
 			// Create a non-executable file in a location that would be found
 			tempDir := t.TempDir()
 			cliPath := filepath.Join(tempDir, ".npm-global", "bin", "claude")
-			os.MkdirAll(filepath.Dir(cliPath), 0o755)
-			os.WriteFile(cliPath, []byte("not executable"), 0o644) // No execute permissions
+			if err := os.MkdirAll(filepath.Dir(cliPath), 0o750); err != nil {
+				t.Fatalf("Failed to create directory: %v", err)
+			}
+			if err := os.WriteFile(cliPath, []byte("not executable"), 0o600); err != nil {
+				t.Fatalf("Failed to write file: %v", err)
+			}
 
 			// Mock home directory
 			originalHome := os.Getenv("HOME")
-			os.Setenv("HOME", tempDir)
-			defer os.Setenv("HOME", originalHome)
+			if err := os.Setenv("HOME", tempDir); err != nil {
+				t.Fatalf("Failed to set HOME: %v", err)
+			}
+			defer func() {
+				if err := os.Setenv("HOME", originalHome); err != nil {
+					t.Logf("Failed to restore HOME: %v", err)
+				}
+			}()
 
 			// Isolate PATH to force common location search
 			originalPath := os.Getenv("PATH")
-			os.Setenv("PATH", "/nonexistent")
-			defer os.Setenv("PATH", originalPath)
+			if err := os.Setenv("PATH", "/nonexistent"); err != nil {
+				t.Fatalf("Failed to set PATH: %v", err)
+			}
+			defer func() {
+				if err := os.Setenv("PATH", originalPath); err != nil {
+					t.Logf("Failed to restore PATH: %v", err)
+				}
+			}()
 
 			_, err := FindCLI()
 			// Should fail because file is not executable
@@ -505,8 +525,14 @@ func TestFindCLINodeJSValidation(t *testing.T) {
 	t.Run("nodejs_not_found", func(t *testing.T) {
 		// Isolate environment
 		originalPath := os.Getenv("PATH")
-		os.Setenv("PATH", "/nonexistent/path")
-		defer os.Setenv("PATH", originalPath)
+		if err := os.Setenv("PATH", "/nonexistent/path"); err != nil {
+			t.Fatalf("Failed to set PATH: %v", err)
+		}
+		defer func() {
+			if err := os.Setenv("PATH", originalPath); err != nil {
+				t.Logf("Failed to restore PATH: %v", err)
+			}
+		}()
 
 		_, err := FindCLI()
 		if err == nil {
@@ -566,8 +592,14 @@ func TestGetCommonCLILocationsPlatforms(t *testing.T) {
 		}
 
 		originalHome = os.Getenv(envVar)
-		os.Unsetenv(envVar)
-		defer os.Setenv(envVar, originalHome)
+		if err := os.Unsetenv(envVar); err != nil {
+			t.Fatalf("Failed to unset %s: %v", envVar, err)
+		}
+		defer func() {
+			if err := os.Setenv(envVar, originalHome); err != nil {
+				t.Logf("Failed to restore %s: %v", envVar, err)
+			}
+		}()
 
 		locations := getCommonCLILocations()
 		// Should still return paths, using current directory as fallback
@@ -609,7 +641,8 @@ func TestDetectCLIVersionSuccess(t *testing.T) {
 		script = "#!/bin/bash\necho '1.2.3'"
 	}
 
-	err := os.WriteFile(mockCLI, []byte(script), 0o755)
+	//nolint:gosec // G306: Test file needs execute permission for mock CLI binary
+	err := os.WriteFile(mockCLI, []byte(script), 0o700)
 	if err != nil {
 		t.Fatalf("Failed to create mock CLI: %v", err)
 	}
@@ -643,7 +676,8 @@ func TestDetectCLIVersionInvalidFormat(t *testing.T) {
 		script = "#!/bin/bash\necho 'invalid-version-format'"
 	}
 
-	err := os.WriteFile(mockCLI, []byte(script), 0o755)
+	//nolint:gosec // G306: Test file needs execute permission for mock CLI binary
+	err := os.WriteFile(mockCLI, []byte(script), 0o700)
 	if err != nil {
 		t.Fatalf("Failed to create mock CLI: %v", err)
 	}
@@ -725,8 +759,14 @@ func TestWorkingDirectoryValidationStatError(t *testing.T) {
 			// Create a directory and remove permissions
 			tempDir := t.TempDir()
 			restrictedDir := filepath.Join(tempDir, "restricted")
-			os.Mkdir(restrictedDir, 0o000) // No permissions
-			defer os.Chmod(restrictedDir, 0o755) // Restore for cleanup
+			if err := os.Mkdir(restrictedDir, 0o000); err != nil {
+				t.Fatalf("Failed to create restricted directory: %v", err)
+			}
+			defer func() {
+				if err := os.Chmod(restrictedDir, 0o600); err != nil {
+					t.Logf("Failed to restore directory permissions: %v", err)
+				}
+			}()
 
 			// Try to validate a subdirectory of the restricted directory
 			testPath := filepath.Join(restrictedDir, "subdir")

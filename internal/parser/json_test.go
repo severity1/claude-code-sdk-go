@@ -879,55 +879,6 @@ func assertTextBlockContent(t *testing.T, block shared.ContentBlock, expectedTex
 	}
 }
 
-func assertThinkingBlock(t *testing.T, block shared.ContentBlock, expectedThinking string) {
-	t.Helper()
-	thinkingBlock, ok := block.(*shared.ThinkingBlock)
-	if !ok {
-		t.Fatalf("Expected ThinkingBlock, got %T", block)
-	}
-	if thinkingBlock.Thinking != expectedThinking {
-		t.Errorf("Expected thinking %q, got %q", expectedThinking, thinkingBlock.Thinking)
-	}
-}
-
-func assertToolUseBlock(t *testing.T, block shared.ContentBlock, expectedID, expectedName string) {
-	t.Helper()
-	toolUseBlock, ok := block.(*shared.ToolUseBlock)
-	if !ok {
-		t.Fatalf("Expected ToolUseBlock, got %T", block)
-	}
-	if toolUseBlock.ToolUseID != expectedID {
-		t.Errorf("Expected tool use ID %q, got %q", expectedID, toolUseBlock.ToolUseID)
-	}
-	if toolUseBlock.Name != expectedName {
-		t.Errorf("Expected tool name %q, got %q", expectedName, toolUseBlock.Name)
-	}
-}
-
-func assertToolResultBlock(t *testing.T, block shared.ContentBlock,
-	expectedToolUseID, expectedContent string, expectedIsError bool) {
-	t.Helper()
-	toolResultBlock, ok := block.(*shared.ToolResultBlock)
-	if !ok {
-		t.Fatalf("Expected ToolResultBlock, got %T", block)
-	}
-	if toolResultBlock.ToolUseID != expectedToolUseID {
-		t.Errorf("Expected tool_use_id %q, got %q", expectedToolUseID, toolResultBlock.ToolUseID)
-	}
-	if content, ok := toolResultBlock.Content.(string); !ok || content != expectedContent {
-		t.Errorf("Expected content %q, got %v", expectedContent, toolResultBlock.Content)
-	}
-	if expectedIsError && (toolResultBlock.IsError == nil || !*toolResultBlock.IsError) {
-		t.Error("Expected is_error to be true")
-	} else if !expectedIsError && toolResultBlock.IsError != nil && *toolResultBlock.IsError {
-		t.Error("Expected is_error to be false or nil")
-	}
-}
-
-
-
-
-
 func assertBufferEmpty(t *testing.T, parser *Parser) {
 	t.Helper()
 	if parser.BufferSize() != 0 {
@@ -956,17 +907,3 @@ func assertBufferOverflowError(t *testing.T, err error) {
 	}
 }
 
-func getContentBlockType(block shared.ContentBlock) string {
-	switch block.(type) {
-	case *shared.TextBlock:
-		return "text"
-	case *shared.ThinkingBlock:
-		return "thinking"
-	case *shared.ToolUseBlock:
-		return "tool_use"
-	case *shared.ToolResultBlock:
-		return "tool_result"
-	default:
-		return "unknown"
-	}
-}

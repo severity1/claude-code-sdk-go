@@ -1398,7 +1398,7 @@ func verifySessionConfig(t *testing.T, client Client, transport *clientMockTrans
 }
 
 // verifyValidationError verifies that client creation fails due to validation errors
-func verifyValidationError(t *testing.T, client Client, transport *clientMockTransport) {
+func verifyValidationError(t *testing.T, client Client, _ *clientMockTransport) {
 	t.Helper()
 	ctx, cancel := setupClientTestContext(t, 5*time.Second)
 	defer cancel()
