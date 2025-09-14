@@ -521,13 +521,13 @@ func TestUnicodeAndEscapeHandling(t *testing.T) {
 		expectedText string
 	}{
 		{
-			name:         "basic_escape_sequences",
+			name: "basic_escape_sequences",
 			jsonString: `{"type": "user", "message": {"content": [` +
 				`{"type": "text", "text": "Line1\nLine2\tTabbed\"Quoted\"\\Backslash"}]}}`,
 			expectedText: "Line1\nLine2\tTabbed\"Quoted\"\\Backslash",
 		},
 		{
-			name:         "unicode_characters",
+			name: "unicode_characters",
 			jsonString: `{"type": "user", "message": {"content": [` +
 				`{"type": "text", "text": "Hello 世界! 🌍 Café naïve résumé"}]}}`,
 			expectedText: "Hello 世界! 🌍 Café naïve résumé",

@@ -818,4 +818,4 @@ func (m *mockTransportForOptions) ReceiveMessages(_ context.Context) (<-chan Mes
 	return nil, nil
 }
 func (m *mockTransportForOptions) Interrupt(_ context.Context) error { return nil }
-func (m *mockTransportForOptions) Close() error                        { return nil }
+func (m *mockTransportForOptions) Close() error                      { return nil }

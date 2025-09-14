@@ -262,7 +262,8 @@ func (c *ClientImpl) Disconnect() error {
 // This is equivalent to QueryWithSession(ctx, prompt, "default").
 //
 // Example:
-//   client.Query(ctx, "What is Go?")
+//
+//	client.Query(ctx, "What is Go?")
 func (c *ClientImpl) Query(ctx context.Context, prompt string) error {
 	return c.queryWithSession(ctx, prompt, defaultSessionID)
 }
@@ -274,9 +275,10 @@ func (c *ClientImpl) Query(ctx context.Context, prompt string) error {
 // If sessionID is empty, it defaults to "default".
 //
 // Example:
-//   client.QueryWithSession(ctx, "Remember this", "my-session")
-//   client.QueryWithSession(ctx, "What did I just say?", "my-session") // Remembers context
-//   client.Query(ctx, "What did I just say?")                          // Won't remember, different session
+//
+//	client.QueryWithSession(ctx, "Remember this", "my-session")
+//	client.QueryWithSession(ctx, "What did I just say?", "my-session") // Remembers context
+//	client.Query(ctx, "What did I just say?")                          // Won't remember, different session
 func (c *ClientImpl) QueryWithSession(ctx context.Context, prompt string, sessionID string) error {
 	// Use default session if empty session ID provided
 	if sessionID == "" {
