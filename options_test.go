@@ -819,3 +819,166 @@ func (m *mockTransportForOptions) ReceiveMessages(_ context.Context) (<-chan Mes
 }
 func (m *mockTransportForOptions) Interrupt(_ context.Context) error { return nil }
 func (m *mockTransportForOptions) Close() error                      { return nil }
+
+// TestWithEnvOptions tests environment variable functional options following table-driven pattern
+func TestWithEnvOptions(t *testing.T) {
+	tests := []struct {
+		name      string
+		setup     func() *Options
+		expected  map[string]string
+		wantPanic bool
+	}{
+		{
+			name: "single_env_var",
+			setup: func() *Options {
+				return NewOptions(WithEnvVar("DEBUG", "1"))
+			},
+			expected: map[string]string{"DEBUG": "1"},
+		},
+		{
+			name: "multiple_env_vars",
+			setup: func() *Options {
+				return NewOptions(WithEnv(map[string]string{
+					"HTTP_PROXY": "http://proxy:8080",
+					"CUSTOM_VAR": "value",
+				}))
+			},
+			expected: map[string]string{
+				"HTTP_PROXY": "http://proxy:8080",
+				"CUSTOM_VAR": "value",
+			},
+		},
+		{
+			name: "merge_with_env_and_envvar",
+			setup: func() *Options {
+				return NewOptions(
+					WithEnv(map[string]string{"VAR1": "val1"}),
+					WithEnvVar("VAR2", "val2"),
+				)
+			},
+			expected: map[string]string{
+				"VAR1": "val1",
+				"VAR2": "val2",
+			},
+		},
+		{
+			name: "override_existing",
+			setup: func() *Options {
+				return NewOptions(
+					WithEnvVar("KEY", "original"),
+					WithEnvVar("KEY", "updated"),
+				)
+			},
+			expected: map[string]string{"KEY": "updated"},
+		},
+		{
+			name: "empty_env_map",
+			setup: func() *Options {
+				return NewOptions(WithEnv(map[string]string{}))
+			},
+			expected: map[string]string{},
+		},
+		{
+			name: "nil_env_map_initializes",
+			setup: func() *Options {
+				opts := &Options{} // ExtraEnv is nil
+				WithEnvVar("TEST", "value")(opts)
+				return opts
+			},
+			expected: map[string]string{"TEST": "value"},
+		},
+		{
+			name: "proxy_configuration_example",
+			setup: func() *Options {
+				return NewOptions(
+					WithEnv(map[string]string{
+						"HTTP_PROXY":  "http://proxy.example.com:8080",
+						"HTTPS_PROXY": "http://proxy.example.com:8080",
+						"NO_PROXY":    "localhost,127.0.0.1",
+					}),
+				)
+			},
+			expected: map[string]string{
+				"HTTP_PROXY":  "http://proxy.example.com:8080",
+				"HTTPS_PROXY": "http://proxy.example.com:8080",
+				"NO_PROXY":    "localhost,127.0.0.1",
+			},
+		},
+		{
+			name: "path_override_example",
+			setup: func() *Options {
+				return NewOptions(
+					WithEnvVar("PATH", "/custom/bin:/usr/bin"),
+				)
+			},
+			expected: map[string]string{
+				"PATH": "/custom/bin:/usr/bin",
+			},
+		},
+		{
+			name: "nil_env_map_to_WithEnv",
+			setup: func() *Options {
+				opts := &Options{} // ExtraEnv is nil
+				WithEnv(map[string]string{"TEST": "value"})(opts)
+				return opts
+			},
+			expected: map[string]string{"TEST": "value"},
+		},
+		{
+			name: "nil_map_passed_to_WithEnv",
+			setup: func() *Options {
+				return NewOptions(WithEnv(nil))
+			},
+			expected: map[string]string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			options := tt.setup()
+			assertEnvVars(t, options.ExtraEnv, tt.expected)
+		})
+	}
+}
+
+// TestWithEnvIntegration tests environment variable options integration with other options
+func TestWithEnvIntegration(t *testing.T) {
+	options := NewOptions(
+		WithSystemPrompt("You are a helpful assistant"),
+		WithEnvVar("DEBUG", "1"),
+		WithModel("claude-3-5-sonnet-20241022"),
+		WithEnv(map[string]string{
+			"HTTP_PROXY": "http://proxy:8080",
+			"CUSTOM":     "value",
+		}),
+		WithEnvVar("OVERRIDE", "final"),
+	)
+
+	// Test that env vars are correctly set
+	expected := map[string]string{
+		"DEBUG":      "1",
+		"HTTP_PROXY": "http://proxy:8080",
+		"CUSTOM":     "value",
+		"OVERRIDE":   "final",
+	}
+	assertEnvVars(t, options.ExtraEnv, expected)
+
+	// Test that other options are preserved
+	assertOptionsSystemPrompt(t, options, "You are a helpful assistant")
+	assertOptionsModel(t, options, "claude-3-5-sonnet-20241022")
+}
+
+// Helper function following client_test.go patterns
+func assertEnvVars(t *testing.T, actual, expected map[string]string) {
+	t.Helper()
+	if len(actual) != len(expected) {
+		t.Errorf("Expected %d env vars, got %d. Expected: %v, Actual: %v",
+			len(expected), len(actual), expected, actual)
+		return
+	}
+	for k, v := range expected {
+		if actual[k] != v {
+			t.Errorf("Expected %s=%s, got %s=%s", k, v, k, actual[k])
+		}
+	}
+}

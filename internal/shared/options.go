@@ -53,6 +53,10 @@ type Options struct {
 	// Extensibility
 	ExtraArgs map[string]*string `json:"extra_args,omitempty"`
 
+	// ExtraEnv specifies additional environment variables for the subprocess.
+	// These are merged with the system environment variables.
+	ExtraEnv map[string]string `json:"extra_env,omitempty"`
+
 	// CLI Path (for testing and custom installations)
 	CLIPath *string `json:"cli_path,omitempty"`
 }
@@ -147,5 +151,6 @@ func NewOptions() *Options {
 		AddDirs:           []string{},
 		McpServers:        make(map[string]McpServerConfig),
 		ExtraArgs:         make(map[string]*string),
+		ExtraEnv:          make(map[string]string),
 	}
 }

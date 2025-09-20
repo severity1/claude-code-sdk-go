@@ -26,6 +26,8 @@ func TestOptionsDefaults(t *testing.T) {
 		{"McpServers_empty", len(options.McpServers), 0},
 		{"ExtraArgs_initialized", options.ExtraArgs == nil, false},
 		{"ExtraArgs_empty", len(options.ExtraArgs), 0},
+		{"ExtraEnv_initialized", options.ExtraEnv == nil, false},
+		{"ExtraEnv_empty", len(options.ExtraEnv), 0},
 	}
 
 	for _, test := range tests {
