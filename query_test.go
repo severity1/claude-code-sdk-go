@@ -353,7 +353,8 @@ func TestQueryContextCancellation(t *testing.T) {
 				return ctx, cancel
 			},
 			setupTransport: func() *queryMockTransport {
-				return newQueryMockTransport()
+				// Add a message to ensure we're testing context cancellation, not empty channel race
+				return newQueryMockTransport(WithQueryAssistantResponse("test response"))
 			},
 			operation: func(ctx context.Context, transport *queryMockTransport) error {
 				iter, err := QueryWithTransport(ctx, "test", transport)
@@ -718,7 +719,8 @@ func TestQueryIteratorErrorPaths(t *testing.T) {
 			name: "error_channel_receives_error",
 			setupTransport: func() *queryMockTransport {
 				// Create transport that will send error on error channel
-				transport := newQueryMockTransport()
+				// Add a message to ensure we're testing error channel, not empty channel race
+				transport := newQueryMockTransport(WithQueryAssistantResponse("test response"))
 				transport.sendError = fmt.Errorf("transport error during operation")
 				return transport
 			},
