@@ -353,7 +353,8 @@ func TestQueryContextCancellation(t *testing.T) {
 				return ctx, cancel
 			},
 			setupTransport: func() *queryMockTransport {
-				return newQueryMockTransport()
+				// Add a message to ensure we're testing context cancellation, not empty channel race
+				return newQueryMockTransport(WithQueryAssistantResponse("test response"))
 			},
 			operation: func(ctx context.Context, transport *queryMockTransport) error {
 				iter, err := QueryWithTransport(ctx, "test", transport)
@@ -718,7 +719,8 @@ func TestQueryIteratorErrorPaths(t *testing.T) {
 			name: "error_channel_receives_error",
 			setupTransport: func() *queryMockTransport {
 				// Create transport that will send error on error channel
-				transport := newQueryMockTransport()
+				// Add a message to ensure we're testing error channel, not empty channel race
+				transport := newQueryMockTransport(WithQueryAssistantResponse("test response"))
 				transport.sendError = fmt.Errorf("transport error during operation")
 				return transport
 			},
@@ -830,6 +832,13 @@ func (q *queryMockTransport) Connect(ctx context.Context) error {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 
+	// Check context cancellation first, like real transport would
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+
 	if q.connectError != nil {
 		return q.connectError
 	}
@@ -876,9 +885,16 @@ func (q *queryMockTransport) Connect(ctx context.Context) error {
 	return nil
 }
 
-func (q *queryMockTransport) SendMessage(_ context.Context, message StreamMessage) error {
+func (q *queryMockTransport) SendMessage(ctx context.Context, message StreamMessage) error {
 	q.mu.Lock()
 	defer q.mu.Unlock()
+
+	// Check context cancellation first, like real transport would
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
 
 	if q.sendError != nil {
 		return q.sendError
