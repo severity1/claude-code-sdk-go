@@ -352,6 +352,19 @@ func (t *Transport) handleStdout() {
 	}
 }
 
+// isProcessAlreadyFinishedError checks if an error indicates the process has already terminated.
+// This follows the Python SDK pattern of suppressing "process not found" type errors.
+func isProcessAlreadyFinishedError(err error) bool {
+	if err == nil {
+		return false
+	}
+	errStr := err.Error()
+	return strings.Contains(errStr, "process already finished") ||
+		strings.Contains(errStr, "process already released") ||
+		strings.Contains(errStr, "no child processes") ||
+		strings.Contains(errStr, "signal: killed")
+}
+
 // terminateProcess implements the 5-second SIGTERM → SIGKILL sequence
 func (t *Transport) terminateProcess() error {
 	if t.cmd == nil || t.cmd.Process == nil {
@@ -360,8 +373,15 @@ func (t *Transport) terminateProcess() error {
 
 	// Send SIGTERM
 	if err := t.cmd.Process.Signal(syscall.SIGTERM); err != nil {
-		// If SIGTERM fails, try SIGKILL immediately
-		_ = t.cmd.Process.Kill()
+		// If process is already finished, that's success
+		if isProcessAlreadyFinishedError(err) {
+			return nil
+		}
+		// If SIGTERM fails for other reasons, try SIGKILL immediately
+		killErr := t.cmd.Process.Kill()
+		if killErr != nil && !isProcessAlreadyFinishedError(killErr) {
+			return killErr
+		}
 		return nil // Don't return error for expected termination
 	}
 
@@ -385,7 +405,7 @@ func (t *Transport) terminateProcess() error {
 		return err
 	case <-time.After(terminationTimeoutSeconds * time.Second):
 		// Force kill after 5 seconds
-		if killErr := t.cmd.Process.Kill(); killErr != nil {
+		if killErr := t.cmd.Process.Kill(); killErr != nil && !isProcessAlreadyFinishedError(killErr) {
 			return killErr
 		}
 		// Wait for process to exit after kill
@@ -393,7 +413,7 @@ func (t *Transport) terminateProcess() error {
 		return nil
 	case <-t.ctx.Done():
 		// Context canceled - force kill immediately
-		if killErr := t.cmd.Process.Kill(); killErr != nil {
+		if killErr := t.cmd.Process.Kill(); killErr != nil && !isProcessAlreadyFinishedError(killErr) {
 			return killErr
 		}
 		// Wait for process to exit after kill, but don't return context error
