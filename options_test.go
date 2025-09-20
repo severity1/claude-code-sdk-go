@@ -915,6 +915,22 @@ func TestWithEnvOptions(t *testing.T) {
 				"PATH": "/custom/bin:/usr/bin",
 			},
 		},
+		{
+			name: "nil_env_map_to_WithEnv",
+			setup: func() *Options {
+				opts := &Options{} // ExtraEnv is nil
+				WithEnv(map[string]string{"TEST": "value"})(opts)
+				return opts
+			},
+			expected: map[string]string{"TEST": "value"},
+		},
+		{
+			name: "nil_map_passed_to_WithEnv",
+			setup: func() *Options {
+				return NewOptions(WithEnv(nil))
+			},
+			expected: map[string]string{},
+		},
 	}
 
 	for _, tt := range tests {
