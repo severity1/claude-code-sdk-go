@@ -832,6 +832,13 @@ func (q *queryMockTransport) Connect(ctx context.Context) error {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 
+	// Check context cancellation first, like real transport would
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+
 	if q.connectError != nil {
 		return q.connectError
 	}
@@ -878,9 +885,16 @@ func (q *queryMockTransport) Connect(ctx context.Context) error {
 	return nil
 }
 
-func (q *queryMockTransport) SendMessage(_ context.Context, message StreamMessage) error {
+func (q *queryMockTransport) SendMessage(ctx context.Context, message StreamMessage) error {
 	q.mu.Lock()
 	defer q.mu.Unlock()
+
+	// Check context cancellation first, like real transport would
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
 
 	if q.sendError != nil {
 		return q.sendError
