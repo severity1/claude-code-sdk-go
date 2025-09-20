@@ -112,8 +112,22 @@ func (t *Transport) Connect(ctx context.Context) error {
 	//nolint:gosec // G204: This is the core CLI SDK functionality - subprocess execution is required
 	t.cmd = exec.CommandContext(ctx, args[0], args[1:]...)
 
-	// Set up environment
-	t.cmd.Env = append(os.Environ(), "CLAUDE_CODE_ENTRYPOINT="+t.entrypoint)
+	// Set up environment - idiomatic Go: start with system env
+	env := os.Environ()
+
+	// Add SDK identifier (required)
+	env = append(env, "CLAUDE_CODE_ENTRYPOINT="+t.entrypoint)
+
+	// Merge custom environment variables
+	if t.options != nil && t.options.ExtraEnv != nil {
+		for key, value := range t.options.ExtraEnv {
+			// Use fmt.Sprintf for clarity and consistency
+			env = append(env, fmt.Sprintf("%s=%s", key, value))
+		}
+	}
+
+	// Apply environment to command
+	t.cmd.Env = env
 
 	// Set working directory if specified
 	if t.options != nil && t.options.Cwd != nil {

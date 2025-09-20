@@ -831,6 +831,122 @@ func TestTransportInterruptErrorPaths(t *testing.T) {
 	}
 }
 
+// TestSubprocessEnvironmentVariables tests environment variable passing to subprocess
+func TestSubprocessEnvironmentVariables(t *testing.T) {
+	// Following client_test.go patterns for test organization
+	setupSubprocessTestContext := func(t *testing.T) (context.Context, context.CancelFunc) {
+		t.Helper()
+		return context.WithTimeout(context.Background(), 5*time.Second)
+	}
+
+	tests := []struct {
+		name     string
+		options  *shared.Options
+		validate func(t *testing.T, env []string)
+	}{
+		{
+			name: "custom_env_vars_passed",
+			options: &shared.Options{
+				ExtraEnv: map[string]string{
+					"TEST_VAR": "test_value",
+					"DEBUG":    "1",
+				},
+			},
+			validate: func(t *testing.T, env []string) {
+				assertEnvContains(t, env, "TEST_VAR=test_value")
+				assertEnvContains(t, env, "DEBUG=1")
+				assertEnvContains(t, env, "CLAUDE_CODE_ENTRYPOINT=sdk-go")
+			},
+		},
+		{
+			name: "system_env_preserved",
+			options: &shared.Options{
+				ExtraEnv: map[string]string{"CUSTOM": "value"},
+			},
+			validate: func(t *testing.T, env []string) {
+				// Verify PATH is preserved from system
+				systemPath := os.Getenv("PATH")
+				if systemPath != "" {
+					assertEnvContains(t, env, "PATH="+systemPath)
+				}
+				assertEnvContains(t, env, "CUSTOM=value")
+				assertEnvContains(t, env, "CLAUDE_CODE_ENTRYPOINT=sdk-go")
+			},
+		},
+		{
+			name: "nil_extra_env_works",
+			options: &shared.Options{
+				ExtraEnv: nil,
+			},
+			validate: func(t *testing.T, env []string) {
+				assertEnvContains(t, env, "CLAUDE_CODE_ENTRYPOINT=sdk-go")
+			},
+		},
+		{
+			name: "empty_extra_env_works",
+			options: &shared.Options{
+				ExtraEnv: map[string]string{},
+			},
+			validate: func(t *testing.T, env []string) {
+				assertEnvContains(t, env, "CLAUDE_CODE_ENTRYPOINT=sdk-go")
+			},
+		},
+		{
+			name: "proxy_configuration_example",
+			options: &shared.Options{
+				ExtraEnv: map[string]string{
+					"HTTP_PROXY":  "http://proxy.example.com:8080",
+					"HTTPS_PROXY": "http://proxy.example.com:8080",
+					"NO_PROXY":    "localhost,127.0.0.1",
+				},
+			},
+			validate: func(t *testing.T, env []string) {
+				assertEnvContains(t, env, "HTTP_PROXY=http://proxy.example.com:8080")
+				assertEnvContains(t, env, "HTTPS_PROXY=http://proxy.example.com:8080")
+				assertEnvContains(t, env, "NO_PROXY=localhost,127.0.0.1")
+				assertEnvContains(t, env, "CLAUDE_CODE_ENTRYPOINT=sdk-go")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, cancel := setupSubprocessTestContext(t)
+			defer cancel()
+
+			// Create transport with test options
+			transport := New("echo", tt.options, true, "sdk-go")
+			defer func() {
+				if transport.IsConnected() {
+					_ = transport.Close()
+				}
+			}()
+
+			// Connect to build command with environment
+			err := transport.Connect(ctx)
+			assertNoTransportError(t, err)
+
+			// Validate environment variables were set correctly
+			if transport.cmd != nil && transport.cmd.Env != nil {
+				tt.validate(t, transport.cmd.Env)
+			} else {
+				t.Error("Expected command environment to be set")
+			}
+		})
+	}
+}
+
+// assertEnvContains checks if environment slice contains a key=value pair
+func assertEnvContains(t *testing.T, env []string, expected string) {
+	t.Helper()
+	for _, e := range env {
+		if e == expected {
+			return
+		}
+	}
+	t.Errorf("Environment missing %s. Available: %v", expected, env)
+}
+
 func stringPtr(s string) *string {
 	return &s
 }
