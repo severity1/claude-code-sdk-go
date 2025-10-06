@@ -6,9 +6,6 @@ description: Validate implemented TDD task
 
 - Official Claude Code SDK Python
   - Reference: ../claude-code-sdk-python/
-  - Analysis: analysis/
-- Specifications: SPECIFICATIONS.md
-- TDD Tasks: TDD_IMPLEMENTATION_TASKS.md
 
 ## Your task
 

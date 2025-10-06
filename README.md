@@ -267,9 +267,64 @@ claudecode.Query(ctx, "Read all Go files and create API documentation",
 **MCP Tools** (external service integrations):
 ```go
 // AWS infrastructure automation
-claudecode.Query(ctx, "List my S3 buckets and analyze their security settings", 
+claudecode.Query(ctx, "List my S3 buckets and analyze their security settings",
     claudecode.WithAllowedTools("mcp__aws-api-mcp__call_aws", "mcp__aws-api-mcp__suggest_aws_commands", "Write"))
 ```
+
+## Configuration Options
+
+Customize Claude's behavior with functional options:
+
+**Tool & Permission Control:**
+```go
+claudecode.Query(ctx, prompt,
+    claudecode.WithAllowedTools("Read", "Write"),
+    claudecode.WithPermissionMode(claudecode.PermissionModeAcceptEdits))
+```
+
+**System Behavior:**
+```go
+claudecode.Query(ctx, prompt,
+    claudecode.WithSystemPrompt("You are a senior Go developer"),
+    claudecode.WithModel("claude-sonnet-4-5"),
+    claudecode.WithMaxTurns(10))
+```
+
+**Environment Variables** (new in v0.2.5):
+```go
+// Proxy configuration
+claudecode.NewClient(
+    claudecode.WithEnv(map[string]string{
+        "HTTP_PROXY":  "http://proxy.example.com:8080",
+        "HTTPS_PROXY": "http://proxy.example.com:8080",
+    }))
+
+// Individual variables
+claudecode.NewClient(
+    claudecode.WithEnvVar("DEBUG", "1"),
+    claudecode.WithEnvVar("CUSTOM_PATH", "/usr/local/bin"))
+```
+
+**Context & Working Directory:**
+```go
+claudecode.Query(ctx, prompt,
+    claudecode.WithCwd("/path/to/project"),
+    claudecode.WithAddDirs("src", "docs"))
+```
+
+**Session Management** (Client API):
+```go
+// WithClient provides isolated session contexts
+err := claudecode.WithClient(ctx, func(client claudecode.Client) error {
+    // Default session
+    client.Query(ctx, "Remember: x = 5")
+
+    // Named session (isolated context)
+    return client.QueryWithSession(ctx, "What is x?", "math-session")
+})
+```
+
+See [pkg.go.dev](https://pkg.go.dev/github.com/severity1/claude-code-sdk-go) for complete API reference.
 
 ## When to Use Which API
 
