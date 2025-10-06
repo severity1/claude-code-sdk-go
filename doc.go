@@ -9,7 +9,7 @@
 //
 // Example usage:
 //
-//	import "github.com/jrpospos/claude-code-sdk-go"
+//	import "github.com/severity1/claude-code-sdk-go"
 //
 //	// One-shot query
 //	messages, err := claudecode.Query(ctx, "Hello, Claude!")

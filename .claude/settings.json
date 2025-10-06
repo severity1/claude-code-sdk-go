@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(go fmt:*)",
+      "Bash(go vet:*)",
+      "Bash(go test:*)",
+      "Bash(golangci-lint run:*)",
+      "Bash(gh run list:*)",
+      "Bash(curl:*)",
+      "Bash(gh run view:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(gh run watch:*)",
+      "WebFetch(domain:github.com)",
+      "Bash(git add:*)",
+      "Bash(gh issue view:*)",
+      "Bash(gh issue list:*)",
+      "Bash(gh pr create:*)",
+      "Bash(go tool cover:*)",
+      "Bash(go build:*)",
+      "Bash(timeout:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
