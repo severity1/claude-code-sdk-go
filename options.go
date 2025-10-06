@@ -158,6 +158,32 @@ func WithCLIPath(path string) Option {
 	}
 }
 
+// WithEnv sets environment variables for the subprocess.
+// Multiple calls to WithEnv or WithEnvVar merge the values.
+// Later calls override earlier ones for the same key.
+func WithEnv(env map[string]string) Option {
+	return func(o *Options) {
+		if o.ExtraEnv == nil {
+			o.ExtraEnv = make(map[string]string)
+		}
+		// Merge pattern - idiomatic Go
+		for k, v := range env {
+			o.ExtraEnv[k] = v
+		}
+	}
+}
+
+// WithEnvVar sets a single environment variable for the subprocess.
+// This is a convenience method for setting individual variables.
+func WithEnvVar(key, value string) Option {
+	return func(o *Options) {
+		if o.ExtraEnv == nil {
+			o.ExtraEnv = make(map[string]string)
+		}
+		o.ExtraEnv[key] = value
+	}
+}
+
 const customTransportMarker = "custom_transport"
 
 // WithTransport sets a custom transport for testing.
