@@ -198,9 +198,7 @@ func addSessionFlags(cmd []string, options *shared.Options) []string {
 }
 
 func addFileSystemFlags(cmd []string, options *shared.Options) []string {
-	if options.Cwd != nil {
-		cmd = append(cmd, "--cwd", *options.Cwd)
-	}
+	// Note: Working directory is set via exec.Cmd.Dir in transport layer, not as a CLI flag
 	for _, dir := range options.AddDirs {
 		cmd = append(cmd, "--add-dir", dir)
 	}

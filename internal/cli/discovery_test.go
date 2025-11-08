@@ -78,6 +78,26 @@ func TestCommandBuilding(t *testing.T) {
 	}
 }
 
+// TestCwdNotAddedToCommand tests that WithCwd() doesn't add --cwd flag
+func TestCwdNotAddedToCommand(t *testing.T) {
+	cwd := "/workspace/test"
+	options := &shared.Options{
+		Cwd: &cwd,
+	}
+
+	cmd := BuildCommand("/usr/local/bin/claude", options, false)
+
+	// Verify --cwd flag is NOT in the command
+	assertNotContainsArg(t, cmd, "--cwd")
+
+	// Verify the working directory path is also NOT in the command
+	for _, arg := range cmd {
+		if arg == cwd {
+			t.Errorf("Expected command to not contain working directory path %s as argument, got %v", cwd, cmd)
+		}
+	}
+}
+
 // TestCLIDiscoveryLocations tests CLI discovery path generation
 func TestCLIDiscoveryLocations(t *testing.T) {
 	locations := getCommonCLILocations()
