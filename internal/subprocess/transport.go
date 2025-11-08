@@ -48,6 +48,9 @@ type Transport struct {
 	stdout io.ReadCloser
 	stderr *os.File
 
+	// Temporary files (cleaned up on Close)
+	mcpConfigFile *os.File // Temporary MCP config file
+
 	// Message parsing
 	parser *parser.Parser
 
@@ -100,14 +103,39 @@ func (t *Transport) Connect(ctx context.Context) error {
 		return fmt.Errorf("transport already connected")
 	}
 
+	// Generate MCP config file if McpServers are specified
+	opts := t.options
+	if t.options != nil && len(t.options.McpServers) > 0 {
+		mcpConfigPath, err := t.generateMcpConfigFile()
+		if err != nil {
+			return fmt.Errorf("failed to generate MCP config file: %w", err)
+		}
+
+		// Create modified options with mcp-config in ExtraArgs
+		// We don't want to mutate the user's options, so create a shallow copy
+		optsCopy := *t.options
+		if optsCopy.ExtraArgs == nil {
+			optsCopy.ExtraArgs = make(map[string]*string)
+		} else {
+			// Deep copy the ExtraArgs map
+			extraArgsCopy := make(map[string]*string, len(optsCopy.ExtraArgs)+1)
+			for k, v := range optsCopy.ExtraArgs {
+				extraArgsCopy[k] = v
+			}
+			optsCopy.ExtraArgs = extraArgsCopy
+		}
+		optsCopy.ExtraArgs["mcp-config"] = &mcpConfigPath
+		opts = &optsCopy
+	}
+
 	// Build command with all options
 	var args []string
 	if t.promptArg != nil {
 		// One-shot query with prompt as CLI argument
-		args = cli.BuildCommandWithPrompt(t.cliPath, t.options, *t.promptArg)
+		args = cli.BuildCommandWithPrompt(t.cliPath, opts, *t.promptArg)
 	} else {
 		// Streaming mode or regular one-shot
-		args = cli.BuildCommand(t.cliPath, t.options, t.closeStdin)
+		args = cli.BuildCommand(t.cliPath, opts, t.closeStdin)
 	}
 	//nolint:gosec // G204: This is the core CLI SDK functionality - subprocess execution is required
 	t.cmd = exec.CommandContext(ctx, args[0], args[1:]...)
@@ -452,6 +480,53 @@ func (t *Transport) cleanup() {
 		t.stderr = nil
 	}
 
+	if t.mcpConfigFile != nil {
+		// Clean up temporary MCP config file
+		_ = t.mcpConfigFile.Close()
+		_ = os.Remove(t.mcpConfigFile.Name()) // Ignore cleanup errors
+		t.mcpConfigFile = nil
+	}
+
 	// Reset state
 	t.cmd = nil
+}
+
+// generateMcpConfigFile creates a temporary MCP config file from options.McpServers.
+// Returns the file path. The file is stored in t.mcpConfigFile for cleanup.
+func (t *Transport) generateMcpConfigFile() (string, error) {
+	// Create the MCP config structure matching Claude CLI expected format
+	mcpConfig := map[string]interface{}{
+		"mcpServers": t.options.McpServers,
+	}
+
+	// Marshal to JSON
+	configData, err := json.MarshalIndent(mcpConfig, "", "  ")
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal MCP config: %w", err)
+	}
+
+	// Create temporary file
+	tmpFile, err := os.CreateTemp("", "claude_mcp_config_*.json")
+	if err != nil {
+		return "", fmt.Errorf("failed to create temp file: %w", err)
+	}
+
+	// Write config data
+	if _, err := tmpFile.Write(configData); err != nil {
+		_ = tmpFile.Close()
+		_ = os.Remove(tmpFile.Name())
+		return "", fmt.Errorf("failed to write MCP config: %w", err)
+	}
+
+	// Sync to ensure data is written
+	if err := tmpFile.Sync(); err != nil {
+		_ = tmpFile.Close()
+		_ = os.Remove(tmpFile.Name())
+		return "", fmt.Errorf("failed to sync MCP config file: %w", err)
+	}
+
+	// Store for cleanup later
+	t.mcpConfigFile = tmpFile
+
+	return tmpFile.Name(), nil
 }
