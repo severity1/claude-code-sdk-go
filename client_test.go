@@ -1142,6 +1142,10 @@ func (c *clientMockTransport) injectTestMessage(msg Message) {
 	}
 }
 
+func (c *clientMockTransport) GetValidator() *StreamValidator {
+	return &StreamValidator{}
+}
+
 // Streamlined Mock Transport Options - reduced from 11 to 6 essential functions
 type ClientMockTransportOption func(*clientMockTransport)
 

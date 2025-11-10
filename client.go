@@ -22,6 +22,8 @@ type Client interface {
 	ReceiveMessages(ctx context.Context) <-chan Message
 	ReceiveResponse(ctx context.Context) MessageIterator
 	Interrupt(ctx context.Context) error
+	GetStreamIssues() []StreamIssue
+	GetStreamStats() StreamStats
 }
 
 // ClientImpl implements the Client interface.
@@ -447,4 +449,42 @@ func (ci *clientIterator) Next(ctx context.Context) (Message, error) {
 func (ci *clientIterator) Close() error {
 	ci.closed = true
 	return nil
+}
+
+// GetStreamIssues returns validation issues found in the message stream.
+// This can help diagnose problems like missing tool results or incomplete streams.
+func (c *ClientImpl) GetStreamIssues() []StreamIssue {
+	c.mu.RLock()
+	transport := c.transport
+	c.mu.RUnlock()
+
+	if transport == nil {
+		return nil
+	}
+
+	validator := transport.GetValidator()
+	if validator == nil {
+		return nil
+	}
+
+	return validator.GetIssues()
+}
+
+// GetStreamStats returns statistics about the message stream.
+// This includes counts of tools requested/received and pending tools.
+func (c *ClientImpl) GetStreamStats() StreamStats {
+	c.mu.RLock()
+	transport := c.transport
+	c.mu.RUnlock()
+
+	if transport == nil {
+		return StreamStats{}
+	}
+
+	validator := transport.GetValidator()
+	if validator == nil {
+		return StreamStats{}
+	}
+
+	return validator.GetStats()
 }

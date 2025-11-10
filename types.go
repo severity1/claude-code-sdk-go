@@ -42,6 +42,15 @@ type StreamMessage = shared.StreamMessage
 // MessageIterator provides iteration over messages.
 type MessageIterator = shared.MessageIterator
 
+// StreamValidator tracks tool requests and results to detect incomplete streams.
+type StreamValidator = shared.StreamValidator
+
+// StreamIssue represents a validation issue found in the stream.
+type StreamIssue = shared.StreamIssue
+
+// StreamStats provides statistics about the message stream.
+type StreamStats = shared.StreamStats
+
 // Re-export message type constants
 const (
 	MessageTypeUser      = shared.MessageTypeUser
@@ -66,4 +75,5 @@ type Transport interface {
 	ReceiveMessages(ctx context.Context) (<-chan Message, <-chan error)
 	Interrupt(ctx context.Context) error
 	Close() error
+	GetValidator() *StreamValidator
 }
