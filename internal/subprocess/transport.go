@@ -54,6 +54,9 @@ type Transport struct {
 	// Message parsing
 	parser *parser.Parser
 
+	// Stream validation
+	validator *shared.StreamValidator
+
 	// Channels for communication
 	msgChan chan shared.Message
 	errChan chan error
@@ -72,6 +75,7 @@ func New(cliPath string, options *shared.Options, closeStdin bool, entrypoint st
 		closeStdin: closeStdin,
 		entrypoint: entrypoint,
 		parser:     parser.New(),
+		validator:  shared.NewStreamValidator(),
 	}
 }
 
@@ -83,6 +87,7 @@ func NewWithPrompt(cliPath string, options *shared.Options, prompt string) *Tran
 		closeStdin: true,
 		entrypoint: "sdk-go", // Query mode uses sdk-go
 		parser:     parser.New(),
+		validator:  shared.NewStreamValidator(),
 		promptArg:  &prompt,
 	}
 }
@@ -348,6 +353,7 @@ func (t *Transport) handleStdout() {
 	defer t.wg.Done()
 	defer close(t.msgChan)
 	defer close(t.errChan)
+	defer t.validator.MarkStreamEnd() // Mark stream end for validation
 
 	scanner := bufio.NewScanner(t.stdout)
 
@@ -382,9 +388,12 @@ func (t *Transport) handleStdout() {
 			continue
 		}
 
-		// Send parsed messages
+		// Send parsed messages and track for validation
 		for _, msg := range messages {
 			if msg != nil {
+				// Track message for stream validation
+				t.validator.TrackMessage(msg)
+
 				select {
 				case t.msgChan <- msg:
 				case <-t.ctx.Done():
@@ -537,4 +546,10 @@ func (t *Transport) generateMcpConfigFile() (string, error) {
 	t.mcpConfigFile = tmpFile
 
 	return tmpFile.Name(), nil
+}
+
+// GetValidator returns the stream validator for diagnostic purposes.
+// This allows clients to check for validation issues like missing tool results.
+func (t *Transport) GetValidator() *shared.StreamValidator {
+	return t.validator
 }
