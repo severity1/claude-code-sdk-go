@@ -1013,6 +1013,684 @@ func TestWithEnvOptions(t *testing.T) {
 	}
 }
 
+// TestWithExtraFlag tests the WithExtraFlag convenience helper
+func TestWithExtraFlag(t *testing.T) {
+	tests := []struct {
+		name     string
+		setup    func() *Options
+		flagName string
+		wantNil  bool
+	}{
+		{
+			name: "single_flag",
+			setup: func() *Options {
+				return NewOptions(WithExtraFlag("fork-session"))
+			},
+			flagName: "fork-session",
+			wantNil:  true,
+		},
+		{
+			name: "multiple_flags",
+			setup: func() *Options {
+				return NewOptions(
+					WithExtraFlag("verbose"),
+					WithExtraFlag("debug"),
+				)
+			},
+			flagName: "verbose",
+			wantNil:  true,
+		},
+		{
+			name: "flag_with_dashes",
+			setup: func() *Options {
+				return NewOptions(WithExtraFlag("--fork-session"))
+			},
+			flagName: "--fork-session",
+			wantNil:  true,
+		},
+		{
+			name: "flag_on_nil_extraargs",
+			setup: func() *Options {
+				opts := &Options{} // ExtraArgs is nil
+				WithExtraFlag("test-flag")(opts)
+				return opts
+			},
+			flagName: "test-flag",
+			wantNil:  true,
+		},
+		{
+			name: "flag_with_existing_args",
+			setup: func() *Options {
+				return NewOptions(
+					WithExtraArg("setting", "value"),
+					WithExtraFlag("bool-flag"),
+				)
+			},
+			flagName: "bool-flag",
+			wantNil:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			options := tt.setup()
+
+			if options.ExtraArgs == nil {
+				t.Fatal("Expected ExtraArgs to be initialized")
+			}
+
+			value, exists := options.ExtraArgs[tt.flagName]
+			if !exists {
+				t.Errorf("Expected flag %q to exist", tt.flagName)
+			}
+
+			if tt.wantNil && value != nil {
+				t.Errorf("Expected flag %q to be nil (boolean flag), got %v", tt.flagName, value)
+			}
+
+			if !tt.wantNil && value == nil {
+				t.Errorf("Expected flag %q to have value, got nil", tt.flagName)
+			}
+		})
+	}
+
+	// Test multiple flags are preserved
+	t.Run("multiple_flags_preserved", func(t *testing.T) {
+		options := NewOptions(
+			WithExtraFlag("flag1"),
+			WithExtraFlag("flag2"),
+			WithExtraFlag("flag3"),
+		)
+
+		if len(options.ExtraArgs) != 3 {
+			t.Errorf("Expected 3 flags, got %d", len(options.ExtraArgs))
+		}
+
+		for _, flag := range []string{"flag1", "flag2", "flag3"} {
+			if value, exists := options.ExtraArgs[flag]; !exists || value != nil {
+				t.Errorf("Expected flag %q to exist as boolean flag", flag)
+			}
+		}
+	})
+}
+
+// TestWithExtraArg tests the WithExtraArg convenience helper
+func TestWithExtraArg(t *testing.T) {
+	tests := []struct {
+		name      string
+		setup     func() *Options
+		argName   string
+		wantValue string
+	}{
+		{
+			name: "single_arg",
+			setup: func() *Options {
+				return NewOptions(WithExtraArg("output", "json"))
+			},
+			argName:   "output",
+			wantValue: "json",
+		},
+		{
+			name: "multiple_args",
+			setup: func() *Options {
+				return NewOptions(
+					WithExtraArg("format", "xml"),
+					WithExtraArg("level", "debug"),
+				)
+			},
+			argName:   "format",
+			wantValue: "xml",
+		},
+		{
+			name: "arg_with_dashes",
+			setup: func() *Options {
+				return NewOptions(WithExtraArg("--output-file", "/tmp/out.txt"))
+			},
+			argName:   "--output-file",
+			wantValue: "/tmp/out.txt",
+		},
+		{
+			name: "arg_on_nil_extraargs",
+			setup: func() *Options {
+				opts := &Options{} // ExtraArgs is nil
+				WithExtraArg("test-arg", "test-value")(opts)
+				return opts
+			},
+			argName:   "test-arg",
+			wantValue: "test-value",
+		},
+		{
+			name: "arg_with_existing_flag",
+			setup: func() *Options {
+				return NewOptions(
+					WithExtraFlag("bool-flag"),
+					WithExtraArg("setting", "value"),
+				)
+			},
+			argName:   "setting",
+			wantValue: "value",
+		},
+		{
+			name: "empty_value",
+			setup: func() *Options {
+				return NewOptions(WithExtraArg("empty", ""))
+			},
+			argName:   "empty",
+			wantValue: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			options := tt.setup()
+
+			if options.ExtraArgs == nil {
+				t.Fatal("Expected ExtraArgs to be initialized")
+			}
+
+			value, exists := options.ExtraArgs[tt.argName]
+			if !exists {
+				t.Errorf("Expected arg %q to exist", tt.argName)
+				return
+			}
+
+			if value == nil {
+				t.Errorf("Expected arg %q to have value, got nil", tt.argName)
+				return
+			}
+
+			if *value != tt.wantValue {
+				t.Errorf("Expected arg %q value = %q, got %q", tt.argName, tt.wantValue, *value)
+			}
+		})
+	}
+
+	// Test multiple args are preserved
+	t.Run("multiple_args_preserved", func(t *testing.T) {
+		options := NewOptions(
+			WithExtraArg("arg1", "value1"),
+			WithExtraArg("arg2", "value2"),
+			WithExtraArg("arg3", "value3"),
+		)
+
+		if len(options.ExtraArgs) != 3 {
+			t.Errorf("Expected 3 args, got %d", len(options.ExtraArgs))
+		}
+
+		expected := map[string]string{
+			"arg1": "value1",
+			"arg2": "value2",
+			"arg3": "value3",
+		}
+
+		for name, wantValue := range expected {
+			value, exists := options.ExtraArgs[name]
+			if !exists || value == nil || *value != wantValue {
+				t.Errorf("Expected arg %q = %q", name, wantValue)
+			}
+		}
+	})
+}
+
+// TestExtraHelpersIntegration tests WithExtraFlag and WithExtraArg together
+func TestExtraHelpersIntegration(t *testing.T) {
+	t.Run("mixed_flags_and_args", func(t *testing.T) {
+		options := NewOptions(
+			WithExtraFlag("verbose"),
+			WithExtraArg("output", "json"),
+			WithExtraFlag("debug"),
+			WithExtraArg("level", "info"),
+		)
+
+		// Check flags
+		if value, exists := options.ExtraArgs["verbose"]; !exists || value != nil {
+			t.Error("Expected verbose to be boolean flag")
+		}
+		if value, exists := options.ExtraArgs["debug"]; !exists || value != nil {
+			t.Error("Expected debug to be boolean flag")
+		}
+
+		// Check args
+		if value, exists := options.ExtraArgs["output"]; !exists || value == nil || *value != "json" {
+			t.Error("Expected output = json")
+		}
+		if value, exists := options.ExtraArgs["level"]; !exists || value == nil || *value != "info" {
+			t.Error("Expected level = info")
+		}
+
+		if len(options.ExtraArgs) != 4 {
+			t.Errorf("Expected 4 total args, got %d", len(options.ExtraArgs))
+		}
+	})
+
+	t.Run("with_other_options", func(t *testing.T) {
+		options := NewOptions(
+			WithSystemPrompt("Test prompt"),
+			WithExtraFlag("fork-session"),
+			WithModel("claude-sonnet-3-5-20241022"),
+			WithExtraArg("custom", "value"),
+		)
+
+		// Check other options are preserved
+		assertOptionsSystemPrompt(t, options, "Test prompt")
+		assertOptionsModel(t, options, "claude-sonnet-3-5-20241022")
+
+		// Check extra args
+		if value, exists := options.ExtraArgs["fork-session"]; !exists || value != nil {
+			t.Error("Expected fork-session to be boolean flag")
+		}
+		if value, exists := options.ExtraArgs["custom"]; !exists || value == nil || *value != "value" {
+			t.Error("Expected custom = value")
+		}
+	})
+
+	t.Run("override_with_WithExtraArgs", func(t *testing.T) {
+		// Test that WithExtraArgs replaces individual flags
+		options := NewOptions(
+			WithExtraFlag("flag1"),
+			WithExtraArg("arg1", "value1"),
+			WithExtraArgs(map[string]*string{
+				"new-flag": nil,
+				"new-arg":  stringPtr("new-value"),
+			}),
+		)
+
+		// Previous flags should be replaced
+		if _, exists := options.ExtraArgs["flag1"]; exists {
+			t.Error("Expected flag1 to be replaced")
+		}
+		if _, exists := options.ExtraArgs["arg1"]; exists {
+			t.Error("Expected arg1 to be replaced")
+		}
+
+		// New flags should exist
+		if value, exists := options.ExtraArgs["new-flag"]; !exists || value != nil {
+			t.Error("Expected new-flag to be boolean flag")
+		}
+		if value, exists := options.ExtraArgs["new-arg"]; !exists || value == nil || *value != "new-value" {
+			t.Error("Expected new-arg = new-value")
+		}
+	})
+
+	t.Run("add_after_WithExtraArgs", func(t *testing.T) {
+		// Test that individual helpers work after WithExtraArgs
+		options := NewOptions(
+			WithExtraArgs(map[string]*string{
+				"initial-flag": nil,
+			}),
+			WithExtraFlag("added-flag"),
+			WithExtraArg("added-arg", "added-value"),
+		)
+
+		// All flags should exist
+		if value, exists := options.ExtraArgs["initial-flag"]; !exists || value != nil {
+			t.Error("Expected initial-flag to be boolean flag")
+		}
+		if value, exists := options.ExtraArgs["added-flag"]; !exists || value != nil {
+			t.Error("Expected added-flag to be boolean flag")
+		}
+		if value, exists := options.ExtraArgs["added-arg"]; !exists || value == nil || *value != "added-value" {
+			t.Error("Expected added-arg = added-value")
+		}
+
+		if len(options.ExtraArgs) != 3 {
+			t.Errorf("Expected 3 args, got %d", len(options.ExtraArgs))
+		}
+	})
+
+	t.Run("real_world_example_fork_session", func(t *testing.T) {
+		// Example from issue: WithExtraFlag('fork-session')
+		options := NewOptions(
+			WithSystemPrompt("You are a helpful assistant"),
+			WithExtraFlag("fork-session"),
+			WithModel("claude-sonnet-3-5-20241022"),
+		)
+
+		// Verify fork-session flag
+		if value, exists := options.ExtraArgs["fork-session"]; !exists || value != nil {
+			t.Error("Expected fork-session to be boolean flag")
+		}
+
+		// Verify other options
+		assertOptionsSystemPrompt(t, options, "You are a helpful assistant")
+		assertOptionsModel(t, options, "claude-sonnet-3-5-20241022")
+	})
+}
+
+// TestExtraHelperEdgeCases tests edge cases and error conditions
+func TestExtraHelperEdgeCases(t *testing.T) {
+	t.Run("empty_flag_name", func(t *testing.T) {
+		options := NewOptions(WithExtraFlag(""))
+
+		if _, exists := options.ExtraArgs[""]; !exists {
+			t.Error("Expected empty flag name to be accepted")
+		}
+	})
+
+	t.Run("empty_arg_name", func(t *testing.T) {
+		options := NewOptions(WithExtraArg("", "value"))
+
+		if _, exists := options.ExtraArgs[""]; !exists {
+			t.Error("Expected empty arg name to be accepted")
+		}
+	})
+
+	t.Run("duplicate_flag", func(t *testing.T) {
+		options := NewOptions(
+			WithExtraFlag("duplicate"),
+			WithExtraFlag("duplicate"), // Should overwrite
+		)
+
+		if len(options.ExtraArgs) != 1 {
+			t.Errorf("Expected 1 arg after duplicate, got %d", len(options.ExtraArgs))
+		}
+	})
+
+	t.Run("duplicate_arg", func(t *testing.T) {
+		options := NewOptions(
+			WithExtraArg("duplicate", "first"),
+			WithExtraArg("duplicate", "second"), // Should overwrite
+		)
+
+		if len(options.ExtraArgs) != 1 {
+			t.Errorf("Expected 1 arg after duplicate, got %d", len(options.ExtraArgs))
+		}
+
+		if value, exists := options.ExtraArgs["duplicate"]; !exists || value == nil || *value != "second" {
+			t.Error("Expected duplicate = second (last wins)")
+		}
+	})
+
+	t.Run("flag_then_arg_same_name", func(t *testing.T) {
+		options := NewOptions(
+			WithExtraFlag("same"),
+			WithExtraArg("same", "value"), // Should convert to valued arg
+		)
+
+		if len(options.ExtraArgs) != 1 {
+			t.Errorf("Expected 1 arg, got %d", len(options.ExtraArgs))
+		}
+
+		if value, exists := options.ExtraArgs["same"]; !exists || value == nil || *value != "value" {
+			t.Error("Expected same = value (arg overwrites flag)")
+		}
+	})
+
+	t.Run("arg_then_flag_same_name", func(t *testing.T) {
+		options := NewOptions(
+			WithExtraArg("same", "value"),
+			WithExtraFlag("same"), // Should convert to boolean flag
+		)
+
+		if len(options.ExtraArgs) != 1 {
+			t.Errorf("Expected 1 arg, got %d", len(options.ExtraArgs))
+		}
+
+		if value, exists := options.ExtraArgs["same"]; !exists || value != nil {
+			t.Error("Expected same to be boolean flag (flag overwrites arg)")
+		}
+	})
+
+	t.Run("value_with_special_chars", func(t *testing.T) {
+		specialValue := "path/to/file with spaces & special=chars"
+		options := NewOptions(WithExtraArg("path", specialValue))
+
+		if value, exists := options.ExtraArgs["path"]; !exists || value == nil || *value != specialValue {
+			t.Errorf("Expected path = %q", specialValue)
+		}
+	})
+}
+
+// TestWithForkSession tests the WithForkSession convenience option
+func TestWithForkSession(t *testing.T) {
+	tests := []struct {
+		name     string
+		setup    func() *Options
+		validate func(*testing.T, *Options)
+	}{
+		{
+			name: "fork_session_alone",
+			setup: func() *Options {
+				return NewOptions(WithForkSession(true))
+			},
+			validate: func(t *testing.T, opts *Options) {
+				t.Helper()
+				if opts.ExtraArgs == nil {
+					t.Fatal("Expected ExtraArgs to be initialized")
+				}
+				value, exists := opts.ExtraArgs["fork-session"]
+				if !exists {
+					t.Error("Expected fork-session flag to exist")
+				}
+				if value != nil {
+					t.Errorf("Expected fork-session to be nil (boolean flag), got %v", value)
+				}
+			},
+		},
+		{
+			name: "fork_session_with_resume",
+			setup: func() *Options {
+				return NewOptions(
+					WithResume("original-session-uuid"),
+					WithForkSession(true),
+				)
+			},
+			validate: func(t *testing.T, opts *Options) {
+				t.Helper()
+				// Verify resume is set
+				if opts.Resume == nil || *opts.Resume != "original-session-uuid" {
+					t.Error("Expected Resume to be set to 'original-session-uuid'")
+				}
+				// Verify fork-session flag
+				value, exists := opts.ExtraArgs["fork-session"]
+				if !exists {
+					t.Error("Expected fork-session flag to exist")
+				}
+				if value != nil {
+					t.Errorf("Expected fork-session to be nil (boolean flag), got %v", value)
+				}
+			},
+		},
+		{
+			name: "fork_session_with_other_options",
+			setup: func() *Options {
+				return NewOptions(
+					WithSystemPrompt("Test prompt"),
+					WithResume("session-123"),
+					WithForkSession(true),
+					WithModel("claude-3-5-sonnet-20241022"),
+					WithMaxTurns(10),
+				)
+			},
+			validate: func(t *testing.T, opts *Options) {
+				t.Helper()
+				// Verify all options are preserved
+				if opts.SystemPrompt == nil || *opts.SystemPrompt != "Test prompt" {
+					t.Error("Expected SystemPrompt to be preserved")
+				}
+				if opts.Resume == nil || *opts.Resume != "session-123" {
+					t.Error("Expected Resume to be preserved")
+				}
+				if opts.Model == nil || *opts.Model != "claude-3-5-sonnet-20241022" {
+					t.Error("Expected Model to be preserved")
+				}
+				if opts.MaxTurns != 10 {
+					t.Error("Expected MaxTurns to be preserved")
+				}
+				// Verify fork-session flag
+				value, exists := opts.ExtraArgs["fork-session"]
+				if !exists {
+					t.Error("Expected fork-session flag to exist")
+				}
+				if value != nil {
+					t.Errorf("Expected fork-session to be nil (boolean flag), got %v", value)
+				}
+			},
+		},
+		{
+			name: "fork_session_with_other_extra_args",
+			setup: func() *Options {
+				return NewOptions(
+					WithExtraFlag("verbose"),
+					WithExtraArg("setting", "value"),
+					WithForkSession(true),
+					WithExtraFlag("debug"),
+				)
+			},
+			validate: func(t *testing.T, opts *Options) {
+				t.Helper()
+				if len(opts.ExtraArgs) != 4 {
+					t.Errorf("Expected 4 ExtraArgs, got %d", len(opts.ExtraArgs))
+				}
+				// Verify all flags exist
+				expectedFlags := map[string]bool{
+					"verbose":      true,
+					"fork-session": true,
+					"debug":        true,
+				}
+				for flag := range expectedFlags {
+					value, exists := opts.ExtraArgs[flag]
+					if !exists {
+						t.Errorf("Expected %q flag to exist", flag)
+					}
+					if value != nil {
+						t.Errorf("Expected %q to be nil (boolean flag), got %v", flag, value)
+					}
+				}
+				// Verify valued arg
+				value, exists := opts.ExtraArgs["setting"]
+				if !exists || value == nil || *value != "value" {
+					t.Error("Expected setting arg to be 'value'")
+				}
+			},
+		},
+		{
+			name: "fork_session_multiple_times",
+			setup: func() *Options {
+				return NewOptions(
+					WithForkSession(true),
+					WithForkSession(true), // Should be idempotent
+				)
+			},
+			validate: func(t *testing.T, opts *Options) {
+				t.Helper()
+				if len(opts.ExtraArgs) != 1 {
+					t.Errorf("Expected 1 ExtraArg, got %d", len(opts.ExtraArgs))
+				}
+				value, exists := opts.ExtraArgs["fork-session"]
+				if !exists || value != nil {
+					t.Error("Expected fork-session to be boolean flag")
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			options := tt.setup()
+			tt.validate(t, options)
+		})
+	}
+}
+
+// TestWithForkSessionIntegration tests WithForkSession in realistic scenarios
+func TestWithForkSessionIntegration(t *testing.T) {
+	t.Run("conversation_branching_scenario", func(t *testing.T) {
+		// Simulate a conversation branching workflow
+		originalSessionID := "uuid-original-session"
+
+		// Create options for forking from original session
+		forkOptions := NewOptions(
+			WithResume(originalSessionID),
+			WithForkSession(true),
+			WithSystemPrompt("Continue with alternative approach"),
+		)
+
+		// Verify configuration
+		if forkOptions.Resume == nil || *forkOptions.Resume != originalSessionID {
+			t.Error("Expected Resume to reference original session")
+		}
+
+		value, exists := forkOptions.ExtraArgs["fork-session"]
+		if !exists || value != nil {
+			t.Error("Expected fork-session flag to be set correctly")
+		}
+
+		if forkOptions.SystemPrompt == nil || *forkOptions.SystemPrompt != "Continue with alternative approach" {
+			t.Error("Expected SystemPrompt to be preserved")
+		}
+	})
+
+	t.Run("parallel_experimentation_scenario", func(t *testing.T) {
+		// Simulate creating multiple forks for parallel experimentation
+		baseSessionID := "uuid-base-session"
+
+		// Fork 1: Optimization approach
+		fork1 := NewOptions(
+			WithResume(baseSessionID),
+			WithForkSession(true),
+			WithExtraArg("experiment", "optimization"),
+		)
+
+		// Fork 2: Alternative approach
+		fork2 := NewOptions(
+			WithResume(baseSessionID),
+			WithForkSession(true),
+			WithExtraArg("experiment", "alternative"),
+		)
+
+		// Both should reference the same base session
+		if fork1.Resume == nil || *fork1.Resume != baseSessionID {
+			t.Error("Fork 1 should reference base session")
+		}
+		if fork2.Resume == nil || *fork2.Resume != baseSessionID {
+			t.Error("Fork 2 should reference base session")
+		}
+
+		// Both should have fork-session flag
+		for i, fork := range []*Options{fork1, fork2} {
+			value, exists := fork.ExtraArgs["fork-session"]
+			if !exists || value != nil {
+				t.Errorf("Fork %d should have fork-session flag", i+1)
+			}
+		}
+
+		// Each should have unique experiment tags
+		if exp1, exists := fork1.ExtraArgs["experiment"]; !exists || exp1 == nil || *exp1 != "optimization" {
+			t.Error("Fork 1 should have optimization experiment tag")
+		}
+		if exp2, exists := fork2.ExtraArgs["experiment"]; !exists || exp2 == nil || *exp2 != "alternative" {
+			t.Error("Fork 2 should have alternative experiment tag")
+		}
+	})
+
+	t.Run("recovery_scenario", func(t *testing.T) {
+		// Simulate recovery from a known good state
+		knownGoodSessionID := "uuid-known-good-state"
+
+		recoveryOptions := NewOptions(
+			WithResume(knownGoodSessionID),
+			WithForkSession(true),
+			WithSystemPrompt("Retry with corrected approach"),
+			WithExtraArg("retry-attempt", "2"),
+		)
+
+		// Verify all components for recovery scenario
+		if recoveryOptions.Resume == nil || *recoveryOptions.Resume != knownGoodSessionID {
+			t.Error("Expected Resume to reference known good state")
+		}
+
+		value, exists := recoveryOptions.ExtraArgs["fork-session"]
+		if !exists || value != nil {
+			t.Error("Expected fork-session flag for recovery")
+		}
+
+		if retry, exists := recoveryOptions.ExtraArgs["retry-attempt"]; !exists || retry == nil || *retry != "2" {
+			t.Error("Expected retry-attempt metadata")
+		}
+	})
+}
+
 // TestWithEnvIntegration tests environment variable options integration with other options
 func TestWithEnvIntegration(t *testing.T) {
 	options := NewOptions(
