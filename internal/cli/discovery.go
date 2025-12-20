@@ -143,6 +143,7 @@ func addOptionsToCommand(cmd []string, options *shared.Options) []string {
 	cmd = addFileSystemFlags(cmd, options)
 	cmd = addMCPFlags(cmd, options)
 	cmd = addBetasFlag(cmd, options)
+	cmd = addSandboxFlags(cmd, options)
 	cmd = addExtraFlags(cmd, options)
 	return cmd
 }
@@ -265,6 +266,26 @@ func addBetasFlag(cmd []string, options *shared.Options) []string {
 		}
 		cmd = append(cmd, "--betas", strings.Join(betaStrs, ","))
 	}
+	return cmd
+}
+
+func addSandboxFlags(cmd []string, options *shared.Options) []string {
+	if options.Sandbox == nil {
+		return cmd
+	}
+
+	// Create settings object with sandbox config
+	settings := map[string]interface{}{
+		"sandbox": options.Sandbox,
+	}
+
+	data, err := json.Marshal(settings)
+	if err != nil {
+		// If serialization fails, skip sandbox settings
+		return cmd
+	}
+
+	cmd = append(cmd, "--settings", string(data))
 	return cmd
 }
 
