@@ -48,6 +48,22 @@ const (
 	SettingSourceLocal SettingSource = "local"
 )
 
+// SdkPluginType represents the type of SDK plugin.
+type SdkPluginType string
+
+const (
+	// SdkPluginTypeLocal represents a local plugin loaded from the filesystem.
+	SdkPluginTypeLocal SdkPluginType = "local"
+)
+
+// SdkPluginConfig represents a plugin configuration.
+type SdkPluginConfig struct {
+	// Type is the plugin type (currently only "local" is supported).
+	Type SdkPluginType `json:"type"`
+	// Path is the filesystem path to the plugin directory.
+	Path string `json:"path"`
+}
+
 // Options configures the Claude Code SDK behavior.
 type Options struct {
 	// Tool Control
@@ -93,6 +109,9 @@ type Options struct {
 
 	// MCP Integration
 	McpServers map[string]McpServerConfig `json:"mcp_servers,omitempty"`
+
+	// Plugin Configurations
+	Plugins []SdkPluginConfig `json:"plugins,omitempty"`
 
 	// Extensibility
 	ExtraArgs map[string]*string `json:"extra_args,omitempty"`
@@ -195,6 +214,7 @@ func NewOptions() *Options {
 		MaxThinkingTokens: DefaultMaxThinkingTokens,
 		AddDirs:           []string{},
 		McpServers:        make(map[string]McpServerConfig),
+		Plugins:           []SdkPluginConfig{},
 		ExtraArgs:         make(map[string]*string),
 		ExtraEnv:          make(map[string]string),
 		SettingSources:    []SettingSource{},
