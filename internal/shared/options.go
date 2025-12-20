@@ -30,11 +30,21 @@ const (
 	SdkBetaContext1M SdkBeta = "context-1m-2025-08-07"
 )
 
+// ToolsPreset represents a preset tools configuration.
+type ToolsPreset struct {
+	Type   string `json:"type"`   // Always "preset"
+	Preset string `json:"preset"` // e.g., "claude_code"
+}
+
 // Options configures the Claude Code SDK behavior.
 type Options struct {
 	// Tool Control
 	AllowedTools    []string `json:"allowed_tools,omitempty"`
 	DisallowedTools []string `json:"disallowed_tools,omitempty"`
+
+	// Tools configures available tools.
+	// Can be []string (list of tool names) or ToolsPreset (preset configuration).
+	Tools any `json:"tools,omitempty"`
 
 	// Beta Features
 	Betas []SdkBeta `json:"betas,omitempty"`

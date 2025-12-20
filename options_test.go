@@ -1255,3 +1255,160 @@ func assertOptionsMaxBufferSizeNil(t *testing.T, options *Options) {
 		t.Errorf("Expected MaxBufferSize = nil, got %d", *options.MaxBufferSize)
 	}
 }
+
+// T031: Tools Preset Option
+func TestWithToolsPreset(t *testing.T) {
+	tests := []struct {
+		name           string
+		preset         string
+		expectedType   string
+		expectedPreset string
+	}{
+		{
+			name:           "claude_code_preset",
+			preset:         "claude_code",
+			expectedType:   "preset",
+			expectedPreset: "claude_code",
+		},
+		{
+			name:           "custom_preset",
+			preset:         "custom_preset",
+			expectedType:   "preset",
+			expectedPreset: "custom_preset",
+		},
+		{
+			name:           "empty_preset",
+			preset:         "",
+			expectedType:   "preset",
+			expectedPreset: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			options := NewOptions(WithToolsPreset(tt.preset))
+			assertOptionsToolsPreset(t, options, tt.expectedType, tt.expectedPreset)
+		})
+	}
+}
+
+// T032: WithClaudeCodeTools Convenience Function
+func TestWithClaudeCodeTools(t *testing.T) {
+	options := NewOptions(WithClaudeCodeTools())
+	assertOptionsToolsPreset(t, options, "preset", "claude_code")
+}
+
+// T033: WithTools List Option
+func TestWithToolsList(t *testing.T) {
+	tests := []struct {
+		name     string
+		tools    []string
+		expected []string
+	}{
+		{
+			name:     "multiple_tools",
+			tools:    []string{"Read", "Write", "Edit"},
+			expected: []string{"Read", "Write", "Edit"},
+		},
+		{
+			name:     "single_tool",
+			tools:    []string{"Read"},
+			expected: []string{"Read"},
+		},
+		{
+			name:     "empty_tools",
+			tools:    []string{},
+			expected: []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			options := NewOptions(WithTools(tt.tools...))
+			assertOptionsToolsList(t, options, tt.expected)
+		})
+	}
+}
+
+// T034: Tools Option Override Behavior
+func TestToolsOptionOverride(t *testing.T) {
+	// Test that later Tools options override earlier ones
+	t.Run("preset_overrides_list", func(t *testing.T) {
+		options := NewOptions(
+			WithTools("Read", "Write"),
+			WithToolsPreset("claude_code"),
+		)
+		assertOptionsToolsPreset(t, options, "preset", "claude_code")
+	})
+
+	t.Run("list_overrides_preset", func(t *testing.T) {
+		options := NewOptions(
+			WithToolsPreset("claude_code"),
+			WithTools("Read", "Write"),
+		)
+		assertOptionsToolsList(t, options, []string{"Read", "Write"})
+	})
+}
+
+// T035: Tools Option Nil by Default
+func TestToolsOptionNilByDefault(t *testing.T) {
+	options := NewOptions()
+	assertOptionsToolsNil(t, options)
+}
+
+// Helper functions for Tools options
+
+// assertOptionsToolsPreset verifies Tools contains a ToolsPreset
+func assertOptionsToolsPreset(t *testing.T, options *Options, expectedType, expectedPreset string) {
+	t.Helper()
+	if options.Tools == nil {
+		t.Error("Expected Tools to be set, got nil")
+		return
+	}
+	preset, ok := options.Tools.(ToolsPreset)
+	if !ok {
+		t.Errorf("Expected Tools to be ToolsPreset, got %T", options.Tools)
+		return
+	}
+	if preset.Type != expectedType {
+		t.Errorf("Expected ToolsPreset.Type = %q, got %q", expectedType, preset.Type)
+	}
+	if preset.Preset != expectedPreset {
+		t.Errorf("Expected ToolsPreset.Preset = %q, got %q", expectedPreset, preset.Preset)
+	}
+}
+
+// assertOptionsToolsList verifies Tools contains a []string
+func assertOptionsToolsList(t *testing.T, options *Options, expected []string) {
+	t.Helper()
+	if options.Tools == nil {
+		if len(expected) == 0 {
+			// Empty list case - Tools can be nil or empty slice
+			return
+		}
+		t.Error("Expected Tools to be set, got nil")
+		return
+	}
+	tools, ok := options.Tools.([]string)
+	if !ok {
+		t.Errorf("Expected Tools to be []string, got %T", options.Tools)
+		return
+	}
+	if len(tools) != len(expected) {
+		t.Errorf("Expected Tools length = %d, got %d", len(expected), len(tools))
+		return
+	}
+	for i, exp := range expected {
+		if tools[i] != exp {
+			t.Errorf("Expected Tools[%d] = %q, got %q", i, exp, tools[i])
+		}
+	}
+}
+
+// assertOptionsToolsNil verifies Tools is nil
+func assertOptionsToolsNil(t *testing.T, options *Options) {
+	t.Helper()
+	if options.Tools != nil {
+		t.Errorf("Expected Tools = nil, got %v", options.Tools)
+	}
+}
