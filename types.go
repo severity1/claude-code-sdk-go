@@ -80,6 +80,20 @@ const (
 	AssistantMessageErrorUnknown        = shared.AssistantMessageErrorUnknown
 )
 
+// AgentModel represents the model to use for an agent.
+type AgentModel = shared.AgentModel
+
+// AgentDefinition defines a programmatic subagent.
+type AgentDefinition = shared.AgentDefinition
+
+// Re-export agent model constants
+const (
+	AgentModelSonnet  = shared.AgentModelSonnet
+	AgentModelOpus    = shared.AgentModelOpus
+	AgentModelHaiku   = shared.AgentModelHaiku
+	AgentModelInherit = shared.AgentModelInherit
+)
+
 // Transport abstracts the communication layer with Claude Code CLI.
 // This interface stays in main package because it's used by client code.
 type Transport interface {

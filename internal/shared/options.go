@@ -114,6 +114,35 @@ type OutputFormat struct {
 	Schema map[string]any `json:"schema"` // JSON Schema definition
 }
 
+// AgentModel represents the model to use for an agent.
+type AgentModel string
+
+const (
+	// AgentModelSonnet specifies Claude Sonnet model for the agent.
+	AgentModelSonnet AgentModel = "sonnet"
+	// AgentModelOpus specifies Claude Opus model for the agent.
+	AgentModelOpus AgentModel = "opus"
+	// AgentModelHaiku specifies Claude Haiku model for the agent.
+	AgentModelHaiku AgentModel = "haiku"
+	// AgentModelInherit specifies the agent should inherit the parent's model.
+	AgentModelInherit AgentModel = "inherit"
+)
+
+// AgentDefinition defines a programmatic subagent.
+type AgentDefinition struct {
+	// Description is a brief description of the agent's purpose.
+	Description string `json:"description"`
+
+	// Prompt is the agent's system prompt.
+	Prompt string `json:"prompt"`
+
+	// Tools is an optional list of tools available to the agent.
+	Tools []string `json:"tools,omitempty"`
+
+	// Model specifies which model the agent should use.
+	Model AgentModel `json:"model,omitempty"`
+}
+
 // Options configures the Claude Code SDK behavior.
 type Options struct {
 	// Tool Control
@@ -152,6 +181,9 @@ type Options struct {
 	Settings             *string         `json:"settings,omitempty"`
 	ForkSession          bool            `json:"fork_session,omitempty"`
 	SettingSources       []SettingSource `json:"setting_sources,omitempty"`
+
+	// Agent Definitions
+	Agents map[string]AgentDefinition `json:"agents,omitempty"`
 
 	// File System & Context
 	Cwd     *string  `json:"cwd,omitempty"`
