@@ -299,8 +299,8 @@ func (p *Parser) parseResultMessage(data map[string]any) (*shared.ResultMessage,
 	}
 
 	if resultData, ok := data["result"]; ok {
-		if resultMap, ok := resultData.(map[string]any); ok {
-			result.Result = &resultMap
+		if resultStr, ok := resultData.(string); ok {
+			result.Result = &resultStr
 		}
 	}
 

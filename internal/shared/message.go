@@ -163,7 +163,7 @@ type ResultMessage struct {
 	SessionID     string          `json:"session_id"`
 	TotalCostUSD  *float64        `json:"total_cost_usd,omitempty"`
 	Usage         *map[string]any `json:"usage,omitempty"`
-	Result        *map[string]any `json:"result,omitempty"`
+	Result        *string         `json:"result,omitempty"`
 }
 
 // Type returns the message type for ResultMessage.
