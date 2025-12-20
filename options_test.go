@@ -2431,3 +2431,197 @@ func assertOptionsSandboxIgnoreViolationsNotNil(t *testing.T, options *Options) 
 func intPtr(i int) *int {
 	return &i
 }
+
+// T050: Agent Definition Options
+func TestAgentDefinitionOptions(t *testing.T) {
+	t.Run("single_agent", func(t *testing.T) {
+		options := NewOptions(WithAgent("code-reviewer", AgentDefinition{
+			Description: "Reviews code for best practices",
+			Prompt:      "You are a code reviewer...",
+			Tools:       []string{"Read", "Grep"},
+			Model:       AgentModelSonnet,
+		}))
+
+		assertOptionsAgentsLength(t, options, 1)
+		agent, exists := options.Agents["code-reviewer"]
+		if !exists {
+			t.Fatal("Expected code-reviewer agent to exist")
+		}
+		assertAgentDefinition(t, agent, "Reviews code for best practices", "You are a code reviewer...", []string{"Read", "Grep"}, AgentModelSonnet)
+	})
+
+	t.Run("multiple_agents", func(t *testing.T) {
+		agents := map[string]AgentDefinition{
+			"code-reviewer": {
+				Description: "Reviews code",
+				Prompt:      "You are a reviewer...",
+				Tools:       []string{"Read"},
+				Model:       AgentModelSonnet,
+			},
+			"test-writer": {
+				Description: "Writes tests",
+				Prompt:      "You are a tester...",
+				Tools:       []string{"Write", "Bash"},
+				Model:       AgentModelHaiku,
+			},
+		}
+		options := NewOptions(WithAgents(agents))
+
+		assertOptionsAgentsLength(t, options, 2)
+		assertAgentExists(t, options, "code-reviewer")
+		assertAgentExists(t, options, "test-writer")
+	})
+
+	t.Run("merge_agents", func(t *testing.T) {
+		options := NewOptions(
+			WithAgent("agent1", AgentDefinition{Description: "First", Prompt: "First prompt"}),
+			WithAgent("agent2", AgentDefinition{Description: "Second", Prompt: "Second prompt"}),
+		)
+
+		assertOptionsAgentsLength(t, options, 2)
+		assertAgentExists(t, options, "agent1")
+		assertAgentExists(t, options, "agent2")
+	})
+
+	t.Run("override_same_name", func(t *testing.T) {
+		options := NewOptions(
+			WithAgent("agent", AgentDefinition{Description: "Original", Prompt: "Original prompt"}),
+			WithAgent("agent", AgentDefinition{Description: "Updated", Prompt: "Updated prompt"}),
+		)
+
+		assertOptionsAgentsLength(t, options, 1)
+		agent := options.Agents["agent"]
+		if agent.Description != "Updated" {
+			t.Errorf("Expected Description = %q, got %q", "Updated", agent.Description)
+		}
+	})
+
+	t.Run("withagents_replaces_existing", func(t *testing.T) {
+		options := NewOptions(
+			WithAgent("agent1", AgentDefinition{Description: "First", Prompt: "First prompt"}),
+			WithAgents(map[string]AgentDefinition{
+				"agent2": {Description: "Second", Prompt: "Second prompt"},
+			}),
+		)
+
+		// WithAgents should replace entirely
+		assertOptionsAgentsLength(t, options, 1)
+		assertAgentNotExists(t, options, "agent1")
+		assertAgentExists(t, options, "agent2")
+	})
+
+	t.Run("nil_by_default", func(t *testing.T) {
+		options := NewOptions()
+		if options.Agents != nil {
+			t.Errorf("Expected Agents = nil by default, got %v", options.Agents)
+		}
+	})
+
+	t.Run("optional_fields", func(t *testing.T) {
+		// Test agent with only required fields (description, prompt)
+		options := NewOptions(WithAgent("minimal", AgentDefinition{
+			Description: "Minimal agent",
+			Prompt:      "You are minimal...",
+		}))
+
+		agent := options.Agents["minimal"]
+		if len(agent.Tools) != 0 {
+			t.Errorf("Expected empty Tools, got %v", agent.Tools)
+		}
+		if agent.Model != "" {
+			t.Errorf("Expected empty Model, got %q", agent.Model)
+		}
+	})
+}
+
+// T051: Agent Model Constants
+func TestAgentModelConstants(t *testing.T) {
+	tests := []struct {
+		name     string
+		model    AgentModel
+		expected string
+	}{
+		{"sonnet", AgentModelSonnet, "sonnet"},
+		{"opus", AgentModelOpus, "opus"},
+		{"haiku", AgentModelHaiku, "haiku"},
+		{"inherit", AgentModelInherit, "inherit"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if string(tt.model) != tt.expected {
+				t.Errorf("Expected AgentModel%s = %q, got %q", tt.name, tt.expected, string(tt.model))
+			}
+		})
+	}
+}
+
+// T052: Agent Options Integration
+func TestAgentOptionsIntegration(t *testing.T) {
+	options := NewOptions(
+		WithSystemPrompt("System prompt"),
+		WithModel("claude-3-5-sonnet-20241022"),
+		WithAgent("code-reviewer", AgentDefinition{
+			Description: "Reviews code",
+			Prompt:      "You are a reviewer...",
+			Tools:       []string{"Read", "Grep"},
+			Model:       AgentModelSonnet,
+		}),
+		WithSettingSources(SettingSourceProject),
+	)
+
+	// Verify agents work with other options
+	assertOptionsSystemPrompt(t, options, "System prompt")
+	assertOptionsModel(t, options, "claude-3-5-sonnet-20241022")
+	assertOptionsAgentsLength(t, options, 1)
+	assertOptionsSettingSources(t, options, []SettingSource{SettingSourceProject})
+}
+
+// Helper functions for agent options
+
+// assertOptionsAgentsLength verifies the number of agents
+func assertOptionsAgentsLength(t *testing.T, options *Options, expected int) {
+	t.Helper()
+	if len(options.Agents) != expected {
+		t.Errorf("Expected Agents length = %d, got %d", expected, len(options.Agents))
+	}
+}
+
+// assertAgentExists verifies an agent exists in the map
+func assertAgentExists(t *testing.T, options *Options, name string) {
+	t.Helper()
+	if _, exists := options.Agents[name]; !exists {
+		t.Errorf("Expected agent %q to exist", name)
+	}
+}
+
+// assertAgentNotExists verifies an agent does not exist in the map
+func assertAgentNotExists(t *testing.T, options *Options, name string) {
+	t.Helper()
+	if _, exists := options.Agents[name]; exists {
+		t.Errorf("Expected agent %q to not exist", name)
+	}
+}
+
+// assertAgentDefinition verifies an agent's fields
+func assertAgentDefinition(t *testing.T, agent AgentDefinition, description, prompt string, tools []string, model AgentModel) {
+	t.Helper()
+	if agent.Description != description {
+		t.Errorf("Expected Description = %q, got %q", description, agent.Description)
+	}
+	if agent.Prompt != prompt {
+		t.Errorf("Expected Prompt = %q, got %q", prompt, agent.Prompt)
+	}
+	if len(agent.Tools) != len(tools) {
+		t.Errorf("Expected Tools length = %d, got %d", len(tools), len(agent.Tools))
+	} else {
+		for i, tool := range tools {
+			if agent.Tools[i] != tool {
+				t.Errorf("Expected Tools[%d] = %q, got %q", i, tool, agent.Tools[i])
+			}
+		}
+	}
+	if agent.Model != model {
+		t.Errorf("Expected Model = %q, got %q", model, agent.Model)
+	}
+}
