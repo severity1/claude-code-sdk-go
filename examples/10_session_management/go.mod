@@ -1,4 +1,4 @@
-module github.com/severity1/claude-code-sdk-go/examples/11_session_management
+module github.com/severity1/claude-code-sdk-go/examples/10_session_management
 
 go 1.21
 
