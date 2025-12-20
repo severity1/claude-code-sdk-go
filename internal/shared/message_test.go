@@ -376,3 +376,90 @@ func validateToolResultBlock(t *testing.T, block ContentBlock) {
 		t.Error("Expected non-nil Content field")
 	}
 }
+
+// Issue #24: Test UUID and ParentToolUseID helper methods
+
+// TestUserMessageGetUUID tests the GetUUID helper method
+func TestUserMessageGetUUID(t *testing.T) {
+	tests := []struct {
+		name     string
+		uuid     *string
+		expected string
+	}{
+		{"nil uuid returns empty", nil, ""},
+		{"non-nil uuid returns value", strPtr("msg-123"), "msg-123"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			msg := &UserMessage{UUID: tt.uuid}
+			if got := msg.GetUUID(); got != tt.expected {
+				t.Errorf("GetUUID() = %q, want %q", got, tt.expected)
+			}
+		})
+	}
+}
+
+// TestUserMessageGetParentToolUseID tests the GetParentToolUseID helper method
+func TestUserMessageGetParentToolUseID(t *testing.T) {
+	tests := []struct {
+		name     string
+		id       *string
+		expected string
+	}{
+		{"nil returns empty", nil, ""},
+		{"non-nil returns value", strPtr("tool-456"), "tool-456"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			msg := &UserMessage{ParentToolUseID: tt.id}
+			if got := msg.GetParentToolUseID(); got != tt.expected {
+				t.Errorf("GetParentToolUseID() = %q, want %q", got, tt.expected)
+			}
+		})
+	}
+}
+
+// TestUserMessageJSONMarshalingWithOptionalFields tests JSON marshaling with UUID and ParentToolUseID
+func TestUserMessageJSONMarshalingWithOptionalFields(t *testing.T) {
+	// Test with both fields set
+	uuid := "msg-123"
+	parentToolUseID := "tool-456"
+	userMsg := &UserMessage{
+		Content:         "Hello",
+		UUID:            &uuid,
+		ParentToolUseID: &parentToolUseID,
+	}
+
+	jsonData, err := json.Marshal(userMsg)
+	if err != nil {
+		t.Fatalf("Failed to marshal UserMessage: %v", err)
+	}
+
+	assertJSONField(t, jsonData, "type", MessageTypeUser)
+	assertJSONField(t, jsonData, "uuid", "msg-123")
+	assertJSONField(t, jsonData, "parent_tool_use_id", "tool-456")
+
+	// Test without optional fields (should not include them in JSON)
+	userMsgNoOptional := &UserMessage{Content: "Hello"}
+	jsonDataNoOptional, err := json.Marshal(userMsgNoOptional)
+	if err != nil {
+		t.Fatalf("Failed to marshal UserMessage: %v", err)
+	}
+
+	var result map[string]any
+	if err := json.Unmarshal(jsonDataNoOptional, &result); err != nil {
+		t.Fatalf("Failed to unmarshal JSON: %v", err)
+	}
+
+	if _, exists := result["uuid"]; exists {
+		t.Error("Expected 'uuid' field to be omitted when nil")
+	}
+	if _, exists := result["parent_tool_use_id"]; exists {
+		t.Error("Expected 'parent_tool_use_id' field to be omitted when nil")
+	}
+}
+
+// strPtr is a helper to create a pointer to a string
+func strPtr(s string) *string {
+	return &s
+}
