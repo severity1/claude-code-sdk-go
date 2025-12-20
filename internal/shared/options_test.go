@@ -20,6 +20,8 @@ func TestOptionsDefaults(t *testing.T) {
 		{"AllowedTools_empty", len(options.AllowedTools), 0},
 		{"DisallowedTools_initialized", options.DisallowedTools == nil, false},
 		{"DisallowedTools_empty", len(options.DisallowedTools), 0},
+		{"Betas_initialized", options.Betas == nil, false},
+		{"Betas_empty", len(options.Betas), 0},
 		{"AddDirs_initialized", options.AddDirs == nil, false},
 		{"AddDirs_empty", len(options.AddDirs), 0},
 		{"McpServers_initialized", options.McpServers == nil, false},

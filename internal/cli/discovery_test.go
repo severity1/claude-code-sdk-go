@@ -120,6 +120,44 @@ func TestExtraArgsSupport(t *testing.T) {
 	}
 }
 
+// TestBetasFlagSupport tests SDK beta features CLI flag support
+func TestBetasFlagSupport(t *testing.T) {
+	tests := []struct {
+		name     string
+		betas    []shared.SdkBeta
+		validate func(*testing.T, []string)
+	}{
+		{
+			name:     "single_beta",
+			betas:    []shared.SdkBeta{shared.SdkBetaContext1M},
+			validate: validateSingleBetaFlag,
+		},
+		{
+			name:     "multiple_betas",
+			betas:    []shared.SdkBeta{shared.SdkBetaContext1M, "other-beta"},
+			validate: validateMultipleBetasFlag,
+		},
+		{
+			name:     "empty_betas",
+			betas:    []shared.SdkBeta{},
+			validate: validateNoBetasFlag,
+		},
+		{
+			name:     "nil_betas",
+			betas:    nil,
+			validate: validateNoBetasFlag,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			options := &shared.Options{Betas: test.betas}
+			cmd := BuildCommand("/usr/local/bin/claude", options, true)
+			test.validate(t, cmd)
+		})
+	}
+}
+
 // TestBuildCommandWithPrompt tests CLI command construction with prompt argument
 func TestBuildCommandWithPrompt(t *testing.T) {
 	tests := []struct {
@@ -369,6 +407,21 @@ func validateBooleanExtraArgs(t *testing.T, cmd []string) {
 func validateValueExtraArgs(t *testing.T, cmd []string) {
 	t.Helper()
 	assertContainsArgs(t, cmd, "--log-level", "info")
+}
+
+func validateSingleBetaFlag(t *testing.T, cmd []string) {
+	t.Helper()
+	assertContainsArgs(t, cmd, "--betas", "context-1m-2025-08-07")
+}
+
+func validateMultipleBetasFlag(t *testing.T, cmd []string) {
+	t.Helper()
+	assertContainsArgs(t, cmd, "--betas", "context-1m-2025-08-07,other-beta")
+}
+
+func validateNoBetasFlag(t *testing.T, cmd []string) {
+	t.Helper()
+	assertNotContainsArg(t, cmd, "--betas")
 }
 
 // Low-level assertion helpers

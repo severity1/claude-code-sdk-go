@@ -25,6 +25,9 @@ type McpSSEServerConfig = shared.McpSSEServerConfig
 // McpHTTPServerConfig represents an HTTP MCP server configuration.
 type McpHTTPServerConfig = shared.McpHTTPServerConfig
 
+// SdkBeta represents a beta feature identifier.
+type SdkBeta = shared.SdkBeta
+
 // Re-export constants
 const (
 	PermissionModeDefault           = shared.PermissionModeDefault
@@ -34,6 +37,7 @@ const (
 	McpServerTypeStdio              = shared.McpServerTypeStdio
 	McpServerTypeSSE                = shared.McpServerTypeSSE
 	McpServerTypeHTTP               = shared.McpServerTypeHTTP
+	SdkBetaContext1M                = shared.SdkBetaContext1M
 )
 
 // Option configures Options using the functional options pattern.
@@ -181,6 +185,14 @@ func WithEnvVar(key, value string) Option {
 			o.ExtraEnv = make(map[string]string)
 		}
 		o.ExtraEnv[key] = value
+	}
+}
+
+// WithBetas sets the SDK beta features to enable.
+// See https://docs.anthropic.com/en/api/beta-headers
+func WithBetas(betas ...SdkBeta) Option {
+	return func(o *Options) {
+		o.Betas = betas
 	}
 }
 

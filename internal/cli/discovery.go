@@ -140,6 +140,7 @@ func addOptionsToCommand(cmd []string, options *shared.Options) []string {
 	cmd = addSessionFlags(cmd, options)
 	cmd = addFileSystemFlags(cmd, options)
 	cmd = addMCPFlags(cmd, options)
+	cmd = addBetasFlag(cmd, options)
 	cmd = addExtraFlags(cmd, options)
 	return cmd
 }
@@ -210,6 +211,17 @@ func addFileSystemFlags(cmd []string, options *shared.Options) []string {
 func addMCPFlags(cmd []string, _ *shared.Options) []string {
 	// TODO: Implement MCP configuration file generation when len(options.McpServers) > 0
 	// For now, skip MCP servers - this will be added in a subsequent commit
+	return cmd
+}
+
+func addBetasFlag(cmd []string, options *shared.Options) []string {
+	if len(options.Betas) > 0 {
+		betaStrs := make([]string, len(options.Betas))
+		for i, beta := range options.Betas {
+			betaStrs[i] = string(beta)
+		}
+		cmd = append(cmd, "--betas", strings.Join(betaStrs, ","))
+	}
 	return cmd
 }
 

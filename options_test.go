@@ -43,6 +43,54 @@ func TestOptionsWithTools(t *testing.T) {
 	assertOptionsStringSlice(t, emptyOptions.DisallowedTools, []string{}, "DisallowedTools")
 }
 
+// TestWithBetasOption tests SDK beta features functional option
+func TestWithBetasOption(t *testing.T) {
+	tests := []struct {
+		name     string
+		setup    func() *Options
+		expected []SdkBeta
+	}{
+		{
+			name: "single_beta",
+			setup: func() *Options {
+				return NewOptions(WithBetas(SdkBetaContext1M))
+			},
+			expected: []SdkBeta{SdkBetaContext1M},
+		},
+		{
+			name: "multiple_betas",
+			setup: func() *Options {
+				return NewOptions(WithBetas(SdkBetaContext1M, "other-beta"))
+			},
+			expected: []SdkBeta{SdkBetaContext1M, "other-beta"},
+		},
+		{
+			name: "empty_betas",
+			setup: func() *Options {
+				return NewOptions(WithBetas())
+			},
+			expected: []SdkBeta{},
+		},
+		{
+			name: "override_betas",
+			setup: func() *Options {
+				return NewOptions(
+					WithBetas(SdkBetaContext1M),
+					WithBetas("new-beta"), // Should replace, not append
+				)
+			},
+			expected: []SdkBeta{"new-beta"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			options := tt.setup()
+			assertOptionsBetas(t, options.Betas, tt.expected)
+		})
+	}
+}
+
 // T017: Permission Mode Options
 func TestPermissionModeOptions(t *testing.T) {
 	// Test all permission modes using table-driven approach
@@ -669,6 +717,20 @@ func assertOptionsStringSlice(t *testing.T, actual, expected []string, fieldName
 	for i, expectedVal := range expected {
 		if i >= len(actual) || actual[i] != expectedVal {
 			t.Errorf("Expected %s[%d] = %q, got %q", fieldName, i, expectedVal, actual[i])
+		}
+	}
+}
+
+// assertOptionsBetas verifies Betas slice values
+func assertOptionsBetas(t *testing.T, actual, expected []SdkBeta) {
+	t.Helper()
+	if len(actual) != len(expected) {
+		t.Errorf("Expected Betas length = %d, got %d", len(expected), len(actual))
+		return
+	}
+	for i, exp := range expected {
+		if actual[i] != exp {
+			t.Errorf("Expected Betas[%d] = %q, got %q", i, exp, actual[i])
 		}
 	}
 }
