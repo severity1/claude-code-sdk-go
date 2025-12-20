@@ -9,6 +9,9 @@ import (
 	"github.com/severity1/claude-code-sdk-go/internal/shared"
 )
 
+// Test constants to avoid goconst warnings
+const testResultAnswer42 = "The answer is 42"
+
 // TestParseValidMessages tests parsing of valid message types
 func TestParseValidMessages(t *testing.T) {
 	tests := []struct {
@@ -755,7 +758,7 @@ func TestResultMessageOptionalFields(t *testing.T) {
 	}
 	dataWithOptionals["total_cost_usd"] = 0.05
 	dataWithOptionals["usage"] = map[string]any{"input_tokens": 100}
-	dataWithOptionals["result"] = "The answer is 42"
+	dataWithOptionals["result"] = testResultAnswer42
 
 	msg, err := parser.ParseMessage(dataWithOptionals)
 	assertNoParseError(t, err)
@@ -770,8 +773,8 @@ func TestResultMessageOptionalFields(t *testing.T) {
 	if resultMsg.Result == nil {
 		t.Error("Expected result field to be set")
 	}
-	if *resultMsg.Result != "The answer is 42" {
-		t.Errorf("Expected result = 'The answer is 42', got %v", *resultMsg.Result)
+	if *resultMsg.Result != testResultAnswer42 {
+		t.Errorf("Expected result = %q, got %v", testResultAnswer42, *resultMsg.Result)
 	}
 
 	// Test with invalid result type (not string)
@@ -1273,7 +1276,7 @@ func TestResultMessageStructuredOutputWithOtherFields(t *testing.T) {
 		"num_turns":       1.0,
 		"session_id":      "s123",
 		"total_cost_usd":  0.05,
-		"result":          "The answer is 42",
+		"result":          testResultAnswer42,
 		"usage":           map[string]any{"input_tokens": 100.0, "output_tokens": 50.0},
 		"structured_output": map[string]any{
 			"answer":     "42",
@@ -1290,8 +1293,8 @@ func TestResultMessageStructuredOutputWithOtherFields(t *testing.T) {
 	if resultMsg.TotalCostUSD == nil || *resultMsg.TotalCostUSD != 0.05 {
 		t.Errorf("Expected total_cost_usd = 0.05, got %v", resultMsg.TotalCostUSD)
 	}
-	if resultMsg.Result == nil || *resultMsg.Result != "The answer is 42" {
-		t.Errorf("Expected result = 'The answer is 42', got %v", resultMsg.Result)
+	if resultMsg.Result == nil || *resultMsg.Result != testResultAnswer42 {
+		t.Errorf("Expected result = %q, got %v", testResultAnswer42, resultMsg.Result)
 	}
 	if resultMsg.Usage == nil {
 		t.Error("Expected usage to be set")
