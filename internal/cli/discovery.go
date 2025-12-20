@@ -224,6 +224,20 @@ func addSessionFlags(cmd []string, options *shared.Options) []string {
 	if options.Settings != nil {
 		cmd = append(cmd, "--settings", *options.Settings)
 	}
+	if options.ForkSession {
+		cmd = append(cmd, "--fork-session")
+	}
+	// Always pass --setting-sources (Python SDK parity)
+	// Empty slice results in empty string value
+	sourcesValue := ""
+	if len(options.SettingSources) > 0 {
+		strs := make([]string, len(options.SettingSources))
+		for i, s := range options.SettingSources {
+			strs[i] = string(s)
+		}
+		sourcesValue = strings.Join(strs, ",")
+	}
+	cmd = append(cmd, "--setting-sources", sourcesValue)
 	return cmd
 }
 
