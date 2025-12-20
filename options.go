@@ -31,6 +31,9 @@ type SdkBeta = shared.SdkBeta
 // ToolsPreset represents a preset tools configuration.
 type ToolsPreset = shared.ToolsPreset
 
+// SettingSource represents a settings source location.
+type SettingSource = shared.SettingSource
+
 // Re-export constants
 const (
 	PermissionModeDefault           = shared.PermissionModeDefault
@@ -41,6 +44,9 @@ const (
 	McpServerTypeSSE                = shared.McpServerTypeSSE
 	McpServerTypeHTTP               = shared.McpServerTypeHTTP
 	SdkBetaContext1M                = shared.SdkBetaContext1M
+	SettingSourceUser               = shared.SettingSourceUser
+	SettingSourceProject            = shared.SettingSourceProject
+	SettingSourceLocal              = shared.SettingSourceLocal
 )
 
 // Option configures Options using the functional options pattern.
@@ -198,6 +204,23 @@ func WithMaxTurns(turns int) Option {
 func WithSettings(settings string) Option {
 	return func(o *Options) {
 		o.Settings = &settings
+	}
+}
+
+// WithForkSession enables forking to a new session ID when resuming.
+// When true, resumed sessions fork to a new session ID rather than
+// continuing the previous session.
+func WithForkSession(fork bool) Option {
+	return func(o *Options) {
+		o.ForkSession = fork
+	}
+}
+
+// WithSettingSources sets which settings sources to load.
+// Valid sources are SettingSourceUser, SettingSourceProject, and SettingSourceLocal.
+func WithSettingSources(sources ...SettingSource) Option {
+	return func(o *Options) {
+		o.SettingSources = sources
 	}
 }
 

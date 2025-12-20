@@ -36,6 +36,18 @@ type ToolsPreset struct {
 	Preset string `json:"preset"` // e.g., "claude_code"
 }
 
+// SettingSource represents a settings source location.
+type SettingSource string
+
+const (
+	// SettingSourceUser loads user-level settings.
+	SettingSourceUser SettingSource = "user"
+	// SettingSourceProject loads project-level settings.
+	SettingSourceProject SettingSource = "project"
+	// SettingSourceLocal loads local/workspace-level settings.
+	SettingSourceLocal SettingSource = "local"
+)
+
 // Options configures the Claude Code SDK behavior.
 type Options struct {
 	// Tool Control
@@ -68,10 +80,12 @@ type Options struct {
 	PermissionPromptToolName *string         `json:"permission_prompt_tool_name,omitempty"`
 
 	// Session & State Management
-	ContinueConversation bool    `json:"continue_conversation,omitempty"`
-	Resume               *string `json:"resume,omitempty"`
-	MaxTurns             int     `json:"max_turns,omitempty"`
-	Settings             *string `json:"settings,omitempty"`
+	ContinueConversation bool            `json:"continue_conversation,omitempty"`
+	Resume               *string         `json:"resume,omitempty"`
+	MaxTurns             int             `json:"max_turns,omitempty"`
+	Settings             *string         `json:"settings,omitempty"`
+	ForkSession          bool            `json:"fork_session,omitempty"`
+	SettingSources       []SettingSource `json:"setting_sources,omitempty"`
 
 	// File System & Context
 	Cwd     *string  `json:"cwd,omitempty"`
@@ -183,5 +197,6 @@ func NewOptions() *Options {
 		McpServers:        make(map[string]McpServerConfig),
 		ExtraArgs:         make(map[string]*string),
 		ExtraEnv:          make(map[string]string),
+		SettingSources:    []SettingSource{},
 	}
 }
