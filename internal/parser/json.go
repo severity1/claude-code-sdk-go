@@ -155,12 +155,25 @@ func (p *Parser) parseUserMessage(data map[string]any) (*shared.UserMessage, err
 		return nil, shared.NewMessageParseError("user message missing content field", data)
 	}
 
+	// Extract optional top-level fields (following Python SDK pattern)
+	var uuid *string
+	if u, ok := data["uuid"].(string); ok {
+		uuid = &u
+	}
+
+	var parentToolUseID *string
+	if ptid, ok := data["parent_tool_use_id"].(string); ok {
+		parentToolUseID = &ptid
+	}
+
 	// Handle both string content and array of content blocks
 	switch c := content.(type) {
 	case string:
 		// String content - create directly
 		return &shared.UserMessage{
-			Content: c,
+			Content:         c,
+			UUID:            uuid,
+			ParentToolUseID: parentToolUseID,
 		}, nil
 	case []any:
 		// Array of content blocks
@@ -173,7 +186,9 @@ func (p *Parser) parseUserMessage(data map[string]any) (*shared.UserMessage, err
 			blocks[i] = block
 		}
 		return &shared.UserMessage{
-			Content: blocks,
+			Content:         blocks,
+			UUID:            uuid,
+			ParentToolUseID: parentToolUseID,
 		}, nil
 	default:
 		return nil, shared.NewMessageParseError("invalid user message content type", data)

@@ -32,13 +32,31 @@ type ContentBlock interface {
 
 // UserMessage represents a message from the user.
 type UserMessage struct {
-	MessageType string      `json:"type"`
-	Content     interface{} `json:"content"` // string or []ContentBlock
+	MessageType     string      `json:"type"`
+	Content         interface{} `json:"content"` // string or []ContentBlock
+	UUID            *string     `json:"uuid,omitempty"`
+	ParentToolUseID *string     `json:"parent_tool_use_id,omitempty"`
 }
 
 // Type returns the message type for UserMessage.
 func (m *UserMessage) Type() string {
 	return MessageTypeUser
+}
+
+// GetUUID returns the UUID or empty string if nil.
+func (m *UserMessage) GetUUID() string {
+	if m.UUID != nil {
+		return *m.UUID
+	}
+	return ""
+}
+
+// GetParentToolUseID returns the parent tool use ID or empty string if nil.
+func (m *UserMessage) GetParentToolUseID() string {
+	if m.ParentToolUseID != nil {
+		return *m.ParentToolUseID
+	}
+	return ""
 }
 
 // MarshalJSON implements custom JSON marshaling for UserMessage

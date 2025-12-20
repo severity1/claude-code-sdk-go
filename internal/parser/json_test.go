@@ -15,6 +15,7 @@ func TestParseValidMessages(t *testing.T) {
 		name         string
 		data         map[string]any
 		expectedType string
+		validate     func(*testing.T, shared.Message)
 	}{
 		{
 			name: "user_message_string_content",
@@ -36,6 +37,77 @@ func TestParseValidMessages(t *testing.T) {
 				},
 			},
 			expectedType: shared.MessageTypeUser,
+		},
+		// Issue #24: UUID and ParentToolUseID field tests
+		{
+			name: "user_message_with_uuid",
+			data: map[string]any{
+				"type":    "user",
+				"uuid":    "msg-123-abc",
+				"message": map[string]any{"content": "Hello"},
+			},
+			expectedType: shared.MessageTypeUser,
+			validate: func(t *testing.T, msg shared.Message) {
+				t.Helper()
+				um := msg.(*shared.UserMessage)
+				if um.UUID == nil || *um.UUID != "msg-123-abc" {
+					t.Errorf("expected UUID 'msg-123-abc', got %v", um.UUID)
+				}
+			},
+		},
+		{
+			name: "user_message_with_parent_tool_use_id",
+			data: map[string]any{
+				"type":               "user",
+				"parent_tool_use_id": "tool-456",
+				"message":            map[string]any{"content": "Tool response"},
+			},
+			expectedType: shared.MessageTypeUser,
+			validate: func(t *testing.T, msg shared.Message) {
+				t.Helper()
+				um := msg.(*shared.UserMessage)
+				if um.ParentToolUseID == nil || *um.ParentToolUseID != "tool-456" {
+					t.Errorf("expected ParentToolUseID 'tool-456', got %v", um.ParentToolUseID)
+				}
+			},
+		},
+		{
+			name: "user_message_with_uuid_and_parent_tool_use_id",
+			data: map[string]any{
+				"type":               "user",
+				"uuid":               "msg-789",
+				"parent_tool_use_id": "tool-012",
+				"message":            map[string]any{"content": "Both fields"},
+			},
+			expectedType: shared.MessageTypeUser,
+			validate: func(t *testing.T, msg shared.Message) {
+				t.Helper()
+				um := msg.(*shared.UserMessage)
+				if um.UUID == nil || *um.UUID != "msg-789" {
+					t.Errorf("expected UUID 'msg-789', got %v", um.UUID)
+				}
+				if um.ParentToolUseID == nil || *um.ParentToolUseID != "tool-012" {
+					t.Errorf("expected ParentToolUseID 'tool-012', got %v", um.ParentToolUseID)
+				}
+			},
+		},
+		{
+			name: "user_message_without_optional_fields",
+			data: map[string]any{
+				"type":    "user",
+				"message": map[string]any{"content": "No optional fields"},
+			},
+			expectedType: shared.MessageTypeUser,
+			validate: func(t *testing.T, msg shared.Message) {
+				t.Helper()
+				um := msg.(*shared.UserMessage)
+				if um.UUID != nil {
+					t.Errorf("expected UUID nil, got %v", um.UUID)
+				}
+				if um.ParentToolUseID != nil {
+					t.Errorf("expected ParentToolUseID nil, got %v", um.ParentToolUseID)
+				}
+			},
 		},
 		{
 			name: "assistant_message",
@@ -74,6 +146,9 @@ func TestParseValidMessages(t *testing.T) {
 			message, err := parser.ParseMessage(test.data)
 			assertParseSuccess(t, err, message)
 			assertMessageType(t, message, test.expectedType)
+			if test.validate != nil {
+				test.validate(t, message)
+			}
 		})
 	}
 }
