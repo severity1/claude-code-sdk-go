@@ -881,6 +881,7 @@ func (m *mockTransportForOptions) ReceiveMessages(_ context.Context) (<-chan Mes
 }
 func (m *mockTransportForOptions) Interrupt(_ context.Context) error { return nil }
 func (m *mockTransportForOptions) Close() error                      { return nil }
+func (m *mockTransportForOptions) GetValidator() *StreamValidator    { return &StreamValidator{} }
 
 // TestWithEnvOptions tests environment variable functional options following table-driven pattern
 func TestWithEnvOptions(t *testing.T) {
@@ -1042,5 +1043,215 @@ func assertEnvVars(t *testing.T, actual, expected map[string]string) {
 		if actual[k] != v {
 			t.Errorf("Expected %s=%s, got %s=%s", k, v, k, actual[k])
 		}
+	}
+}
+
+// T026: MaxBudgetUSD Option
+func TestMaxBudgetUSDOption(t *testing.T) {
+	tests := []struct {
+		name     string
+		budget   float64
+		expected float64
+	}{
+		{"positive_budget", 10.50, 10.50},
+		{"zero_budget", 0.0, 0.0},
+		{"large_budget", 1000.00, 1000.00},
+		{"decimal_precision", 99.99, 99.99},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			options := NewOptions(WithMaxBudgetUSD(tt.budget))
+			assertOptionsMaxBudgetUSD(t, options, tt.expected)
+		})
+	}
+
+	// Test nil case
+	t.Run("nil_by_default", func(t *testing.T) {
+		options := NewOptions()
+		assertOptionsMaxBudgetUSDNil(t, options)
+	})
+}
+
+// T027: FallbackModel Option
+func TestFallbackModelOption(t *testing.T) {
+	tests := []struct {
+		name     string
+		model    string
+		expected string
+	}{
+		{"sonnet_model", "claude-3-5-sonnet-20241022", "claude-3-5-sonnet-20241022"},
+		{"opus_model", "claude-opus-4", "claude-opus-4"},
+		{"empty_model", "", ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			options := NewOptions(WithFallbackModel(tt.model))
+			assertOptionsFallbackModel(t, options, tt.expected)
+		})
+	}
+
+	// Test nil case
+	t.Run("nil_by_default", func(t *testing.T) {
+		options := NewOptions()
+		assertOptionsFallbackModelNil(t, options)
+	})
+}
+
+// T028: User Option
+func TestUserOption(t *testing.T) {
+	tests := []struct {
+		name     string
+		user     string
+		expected string
+	}{
+		{"standard_user", "user-123", "user-123"},
+		{"email_user", "user@example.com", "user@example.com"},
+		{"empty_user", "", ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			options := NewOptions(WithUser(tt.user))
+			assertOptionsUser(t, options, tt.expected)
+		})
+	}
+
+	// Test nil case
+	t.Run("nil_by_default", func(t *testing.T) {
+		options := NewOptions()
+		assertOptionsUserNil(t, options)
+	})
+}
+
+// T029: MaxBufferSize Option
+func TestMaxBufferSizeOption(t *testing.T) {
+	tests := []struct {
+		name     string
+		size     int
+		expected int
+	}{
+		{"default_1mb", 1048576, 1048576},
+		{"custom_2mb", 2097152, 2097152},
+		{"zero_size", 0, 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			options := NewOptions(WithMaxBufferSize(tt.size))
+			assertOptionsMaxBufferSize(t, options, tt.expected)
+		})
+	}
+
+	// Test nil case
+	t.Run("nil_by_default", func(t *testing.T) {
+		options := NewOptions()
+		assertOptionsMaxBufferSizeNil(t, options)
+	})
+}
+
+// T030: New Options Integration Test
+func TestNewConfigOptionsIntegration(t *testing.T) {
+	// Test all new options together with existing options
+	options := NewOptions(
+		WithSystemPrompt("You are a helpful assistant"),
+		WithModel("claude-3-5-sonnet-20241022"),
+		WithMaxBudgetUSD(50.00),
+		WithFallbackModel("claude-opus-4"),
+		WithUser("user-test-123"),
+		WithMaxBufferSize(2097152),
+	)
+
+	// Verify new options
+	assertOptionsMaxBudgetUSD(t, options, 50.00)
+	assertOptionsFallbackModel(t, options, "claude-opus-4")
+	assertOptionsUser(t, options, "user-test-123")
+	assertOptionsMaxBufferSize(t, options, 2097152)
+
+	// Verify existing options still work
+	assertOptionsSystemPrompt(t, options, "You are a helpful assistant")
+	assertOptionsModel(t, options, "claude-3-5-sonnet-20241022")
+}
+
+// Helper functions for new options
+
+// assertOptionsMaxBudgetUSD verifies MaxBudgetUSD value
+func assertOptionsMaxBudgetUSD(t *testing.T, options *Options, expected float64) {
+	t.Helper()
+	if options.MaxBudgetUSD == nil {
+		t.Error("Expected MaxBudgetUSD to be set, got nil")
+		return
+	}
+	if *options.MaxBudgetUSD != expected {
+		t.Errorf("Expected MaxBudgetUSD = %f, got %f", expected, *options.MaxBudgetUSD)
+	}
+}
+
+// assertOptionsMaxBudgetUSDNil verifies MaxBudgetUSD is nil
+func assertOptionsMaxBudgetUSDNil(t *testing.T, options *Options) {
+	t.Helper()
+	if options.MaxBudgetUSD != nil {
+		t.Errorf("Expected MaxBudgetUSD = nil, got %f", *options.MaxBudgetUSD)
+	}
+}
+
+// assertOptionsFallbackModel verifies FallbackModel value
+func assertOptionsFallbackModel(t *testing.T, options *Options, expected string) {
+	t.Helper()
+	if options.FallbackModel == nil {
+		t.Error("Expected FallbackModel to be set, got nil")
+		return
+	}
+	if *options.FallbackModel != expected {
+		t.Errorf("Expected FallbackModel = %q, got %q", expected, *options.FallbackModel)
+	}
+}
+
+// assertOptionsFallbackModelNil verifies FallbackModel is nil
+func assertOptionsFallbackModelNil(t *testing.T, options *Options) {
+	t.Helper()
+	if options.FallbackModel != nil {
+		t.Errorf("Expected FallbackModel = nil, got %q", *options.FallbackModel)
+	}
+}
+
+// assertOptionsUser verifies User value
+func assertOptionsUser(t *testing.T, options *Options, expected string) {
+	t.Helper()
+	if options.User == nil {
+		t.Error("Expected User to be set, got nil")
+		return
+	}
+	if *options.User != expected {
+		t.Errorf("Expected User = %q, got %q", expected, *options.User)
+	}
+}
+
+// assertOptionsUserNil verifies User is nil
+func assertOptionsUserNil(t *testing.T, options *Options) {
+	t.Helper()
+	if options.User != nil {
+		t.Errorf("Expected User = nil, got %q", *options.User)
+	}
+}
+
+// assertOptionsMaxBufferSize verifies MaxBufferSize value
+func assertOptionsMaxBufferSize(t *testing.T, options *Options, expected int) {
+	t.Helper()
+	if options.MaxBufferSize == nil {
+		t.Error("Expected MaxBufferSize to be set, got nil")
+		return
+	}
+	if *options.MaxBufferSize != expected {
+		t.Errorf("Expected MaxBufferSize = %d, got %d", expected, *options.MaxBufferSize)
+	}
+}
+
+// assertOptionsMaxBufferSizeNil verifies MaxBufferSize is nil
+func assertOptionsMaxBufferSizeNil(t *testing.T, options *Options) {
+	t.Helper()
+	if options.MaxBufferSize != nil {
+		t.Errorf("Expected MaxBufferSize = nil, got %d", *options.MaxBufferSize)
 	}
 }

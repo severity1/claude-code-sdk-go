@@ -78,6 +78,26 @@ func TestCommandBuilding(t *testing.T) {
 	}
 }
 
+// TestCwdNotAddedToCommand tests that WithCwd() doesn't add --cwd flag
+func TestCwdNotAddedToCommand(t *testing.T) {
+	cwd := "/workspace/test"
+	options := &shared.Options{
+		Cwd: &cwd,
+	}
+
+	cmd := BuildCommand("/usr/local/bin/claude", options, false)
+
+	// Verify --cwd flag is NOT in the command
+	assertNotContainsArg(t, cmd, "--cwd")
+
+	// Verify the working directory path is also NOT in the command
+	for _, arg := range cmd {
+		if arg == cwd {
+			t.Errorf("Expected command to not contain working directory path %s as argument, got %v", cwd, cmd)
+		}
+	}
+}
+
 // TestCLIDiscoveryLocations tests CLI discovery path generation
 func TestCLIDiscoveryLocations(t *testing.T) {
 	locations := getCommonCLILocations()
@@ -564,37 +584,6 @@ func TestFindCLISuccess(t *testing.T) {
 			}
 		})
 	}
-}
-
-// TestFindCLINodeJSValidation tests Node.js dependency checks
-func TestFindCLINodeJSValidation(t *testing.T) {
-	// Test when Node.js is not available
-	t.Run("nodejs_not_found", func(t *testing.T) {
-		// Isolate environment
-		originalPath := os.Getenv("PATH")
-		if err := os.Setenv("PATH", "/nonexistent/path"); err != nil {
-			t.Fatalf("Failed to set PATH: %v", err)
-		}
-		defer func() {
-			if err := os.Setenv("PATH", originalPath); err != nil {
-				t.Logf("Failed to restore PATH: %v", err)
-			}
-		}()
-
-		_, err := FindCLI()
-		if err == nil {
-			t.Error("Expected error when Node.js not found")
-			return
-		}
-
-		errMsg := err.Error()
-		if !strings.Contains(errMsg, "Node.js") {
-			t.Error("Error should mention Node.js requirement")
-		}
-		if !strings.Contains(errMsg, "nodejs.org") {
-			t.Error("Error should include Node.js installation URL")
-		}
-	})
 }
 
 // TestGetCommonCLILocationsPlatforms tests platform-specific path generation

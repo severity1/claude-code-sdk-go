@@ -165,10 +165,17 @@ func addModelAndPromptFlags(cmd []string, options *shared.Options) []string {
 	if options.Model != nil {
 		cmd = append(cmd, "--model", *options.Model)
 	}
+	if options.FallbackModel != nil {
+		cmd = append(cmd, "--fallback-model", *options.FallbackModel)
+	}
+	if options.MaxBudgetUSD != nil {
+		cmd = append(cmd, "--max-budget-usd", fmt.Sprintf("%.2f", *options.MaxBudgetUSD))
+	}
 	// NOTE: --max-thinking-tokens not supported by current CLI version
 	// if options.MaxThinkingTokens > 0 {
 	//	cmd = append(cmd, "--max-thinking-tokens", fmt.Sprintf("%d", options.MaxThinkingTokens))
 	// }
+	// NOTE: User and MaxBufferSize are internal SDK options without CLI flag mappings
 	return cmd
 }
 
@@ -199,9 +206,7 @@ func addSessionFlags(cmd []string, options *shared.Options) []string {
 }
 
 func addFileSystemFlags(cmd []string, options *shared.Options) []string {
-	if options.Cwd != nil {
-		cmd = append(cmd, "--cwd", *options.Cwd)
-	}
+	// Note: Working directory is set via exec.Cmd.Dir in transport layer, not as a CLI flag
 	for _, dir := range options.AddDirs {
 		cmd = append(cmd, "--add-dir", dir)
 	}
@@ -209,8 +214,10 @@ func addFileSystemFlags(cmd []string, options *shared.Options) []string {
 }
 
 func addMCPFlags(cmd []string, _ *shared.Options) []string {
-	// TODO: Implement MCP configuration file generation when len(options.McpServers) > 0
-	// For now, skip MCP servers - this will be added in a subsequent commit
+	// Note: MCP server configuration is handled by the Transport layer.
+	// When options.McpServers is set, Transport generates a temporary config file
+	// and adds it to ExtraArgs as "--mcp-config", which is then added by addExtraFlags().
+	// This function is kept for potential future direct MCP flag support.
 	return cmd
 }
 

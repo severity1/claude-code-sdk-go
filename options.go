@@ -78,6 +78,34 @@ func WithModel(model string) Option {
 	}
 }
 
+// WithFallbackModel sets the fallback model when primary model is unavailable.
+func WithFallbackModel(model string) Option {
+	return func(o *Options) {
+		o.FallbackModel = &model
+	}
+}
+
+// WithMaxBudgetUSD sets the maximum budget in USD for API usage.
+func WithMaxBudgetUSD(budget float64) Option {
+	return func(o *Options) {
+		o.MaxBudgetUSD = &budget
+	}
+}
+
+// WithUser sets the user identifier for tracking and billing.
+func WithUser(user string) Option {
+	return func(o *Options) {
+		o.User = &user
+	}
+}
+
+// WithMaxBufferSize sets the maximum buffer size for CLI output.
+func WithMaxBufferSize(size int) Option {
+	return func(o *Options) {
+		o.MaxBufferSize = &size
+	}
+}
+
 // WithMaxThinkingTokens sets the maximum thinking tokens.
 func WithMaxThinkingTokens(tokens int) Option {
 	return func(o *Options) {

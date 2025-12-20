@@ -926,6 +926,10 @@ func (q *queryMockTransport) Close() error {
 	return nil
 }
 
+func (q *queryMockTransport) GetValidator() *StreamValidator {
+	return &StreamValidator{}
+}
+
 // Mock helper methods
 
 func (q *queryMockTransport) hasReceivedOptions() bool {
