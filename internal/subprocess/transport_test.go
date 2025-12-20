@@ -961,6 +961,71 @@ func TestSubprocessEnvironmentVariables(t *testing.T) {
 	}
 }
 
+// TestTransportWorkingDirectory tests that working directory is set via exec.Cmd.Dir
+func TestTransportWorkingDirectory(t *testing.T) {
+	ctx, cancel := setupTransportTestContext(t, 5*time.Second)
+	defer cancel()
+
+	tests := []struct {
+		name     string
+		setup    func() *Transport
+		validate func(*testing.T, *Transport)
+	}{
+		{
+			name: "working_directory_set_via_cmd_dir",
+			setup: func() *Transport {
+				cwd := t.TempDir()
+				options := &shared.Options{
+					Cwd: &cwd,
+				}
+				return New(newTransportMockCLI(), options, false, "sdk-go")
+			},
+			validate: func(t *testing.T, transport *Transport) {
+				t.Helper()
+				if transport.cmd == nil {
+					t.Fatal("Expected command to be initialized after Connect()")
+				}
+				expectedCwd := *transport.options.Cwd
+				if transport.cmd.Dir != expectedCwd {
+					t.Errorf("Expected cmd.Dir to be %s, got %s", expectedCwd, transport.cmd.Dir)
+				}
+			},
+		},
+		{
+			name: "no_working_directory_when_cwd_nil",
+			setup: func() *Transport {
+				options := &shared.Options{
+					Cwd: nil,
+				}
+				return New(newTransportMockCLI(), options, false, "sdk-go")
+			},
+			validate: func(t *testing.T, transport *Transport) {
+				t.Helper()
+				if transport.cmd == nil {
+					t.Fatal("Expected command to be initialized after Connect()")
+				}
+				if transport.cmd.Dir != "" {
+					t.Errorf("Expected cmd.Dir to be empty when Cwd is nil, got %s", transport.cmd.Dir)
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			transport := tt.setup()
+			defer disconnectTransportSafely(t, transport)
+
+			// Connect to initialize the command
+			err := transport.Connect(ctx)
+			assertNoTransportError(t, err)
+
+			// Validate working directory was set correctly via cmd.Dir
+			tt.validate(t, transport)
+		})
+	}
+}
+
 // assertEnvContains checks if environment slice contains a key=value pair
 func assertEnvContains(t *testing.T, env []string, expected string) {
 	t.Helper()
