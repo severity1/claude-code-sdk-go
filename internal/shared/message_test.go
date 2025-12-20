@@ -463,3 +463,121 @@ func TestUserMessageJSONMarshalingWithOptionalFields(t *testing.T) {
 func strPtr(s string) *string {
 	return &s
 }
+
+// Issue #23: Test AssistantMessage.Error field and helper methods
+
+// TestAssistantMessageWithError tests AssistantMessage with the Error field set
+func TestAssistantMessageWithError(t *testing.T) {
+	tests := []struct {
+		name      string
+		errType   AssistantMessageError
+		wantError bool
+		wantRate  bool
+	}{
+		{"rate_limit", AssistantMessageErrorRateLimit, true, true},
+		{"auth_failed", AssistantMessageErrorAuthFailed, true, false},
+		{"billing", AssistantMessageErrorBilling, true, false},
+		{"invalid_request", AssistantMessageErrorInvalidRequest, true, false},
+		{"server_error", AssistantMessageErrorServer, true, false},
+		{"unknown", AssistantMessageErrorUnknown, true, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			errType := tt.errType // Avoid memory aliasing in for loop
+			msg := &AssistantMessage{
+				Content: []ContentBlock{&TextBlock{Text: "Error response"}},
+				Model:   "claude-3-sonnet",
+				Error:   &errType,
+			}
+
+			if got := msg.HasError(); got != tt.wantError {
+				t.Errorf("HasError() = %v, want %v", got, tt.wantError)
+			}
+			if got := msg.IsRateLimited(); got != tt.wantRate {
+				t.Errorf("IsRateLimited() = %v, want %v", got, tt.wantRate)
+			}
+		})
+	}
+}
+
+// TestAssistantMessageNoError tests AssistantMessage without Error field
+func TestAssistantMessageNoError(t *testing.T) {
+	msg := &AssistantMessage{
+		Content: []ContentBlock{&TextBlock{Text: "Hello!"}},
+		Model:   "claude-3-sonnet",
+		Error:   nil,
+	}
+
+	if msg.HasError() {
+		t.Error("HasError() = true, want false for nil error")
+	}
+	if msg.GetError() != "" {
+		t.Errorf("GetError() = %q, want empty string for nil error", msg.GetError())
+	}
+	if msg.IsRateLimited() {
+		t.Error("IsRateLimited() = true, want false for nil error")
+	}
+}
+
+// TestAssistantMessageGetError tests the GetError helper method
+func TestAssistantMessageGetError(t *testing.T) {
+	tests := []struct {
+		name     string
+		errType  *AssistantMessageError
+		expected AssistantMessageError
+	}{
+		{"nil error returns empty", nil, ""},
+		{"rate_limit returns value", func() *AssistantMessageError { e := AssistantMessageErrorRateLimit; return &e }(), AssistantMessageErrorRateLimit},
+		{"auth_failed returns value", func() *AssistantMessageError { e := AssistantMessageErrorAuthFailed; return &e }(), AssistantMessageErrorAuthFailed},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			msg := &AssistantMessage{Error: tt.errType}
+			if got := msg.GetError(); got != tt.expected {
+				t.Errorf("GetError() = %q, want %q", got, tt.expected)
+			}
+		})
+	}
+}
+
+// TestAssistantMessageErrorJSONMarshaling tests JSON marshaling with error field
+func TestAssistantMessageErrorJSONMarshaling(t *testing.T) {
+	// Test with error field set
+	errType := AssistantMessageErrorRateLimit
+	msgWithError := &AssistantMessage{
+		Content: []ContentBlock{&TextBlock{Text: "Rate limited"}},
+		Model:   "claude-3-sonnet",
+		Error:   &errType,
+	}
+
+	jsonData, err := json.Marshal(msgWithError)
+	if err != nil {
+		t.Fatalf("Failed to marshal AssistantMessage with error: %v", err)
+	}
+
+	assertJSONField(t, jsonData, "type", MessageTypeAssistant)
+	assertJSONField(t, jsonData, "model", "claude-3-sonnet")
+	assertJSONField(t, jsonData, "error", "rate_limit")
+
+	// Test without error field (should be omitted)
+	msgNoError := &AssistantMessage{
+		Content: []ContentBlock{&TextBlock{Text: "Hello!"}},
+		Model:   "claude-3-sonnet",
+		Error:   nil,
+	}
+
+	jsonDataNoError, err := json.Marshal(msgNoError)
+	if err != nil {
+		t.Fatalf("Failed to marshal AssistantMessage: %v", err)
+	}
+
+	var result map[string]any
+	if err := json.Unmarshal(jsonDataNoError, &result); err != nil {
+		t.Fatalf("Failed to unmarshal JSON: %v", err)
+	}
+
+	if _, exists := result["error"]; exists {
+		t.Error("Expected 'error' field to be omitted when nil")
+	}
+}

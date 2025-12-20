@@ -221,9 +221,17 @@ func (p *Parser) parseAssistantMessage(data map[string]any) (*shared.AssistantMe
 		blocks[i] = block
 	}
 
+	// Parse optional error field
+	var errorPtr *shared.AssistantMessageError
+	if errorStr, ok := messageData["error"].(string); ok {
+		errType := shared.AssistantMessageError(errorStr)
+		errorPtr = &errType
+	}
+
 	return &shared.AssistantMessage{
 		Content: blocks,
 		Model:   model,
+		Error:   errorPtr,
 	}, nil
 }
 
