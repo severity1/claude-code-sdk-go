@@ -323,6 +323,14 @@ func (t *Transport) handleStdout() {
 
 	scanner := bufio.NewScanner(t.stdout)
 
+	// Increase scanner buffer to handle large tool results (files, etc.)
+	// Default bufio.Scanner has MaxScanTokenSize of 64KB which is insufficient
+	// for tool results containing large files. We use 1MB to match parser's
+	// MaxBufferSize and handle files up to ~900KB after JSON encoding overhead.
+	const maxScanTokenSize = 1024 * 1024 // 1MB
+	buf := make([]byte, maxScanTokenSize)
+	scanner.Buffer(buf, maxScanTokenSize)
+
 	for scanner.Scan() {
 		select {
 		case <-t.ctx.Done():
