@@ -1413,6 +1413,227 @@ func assertOptionsToolsNil(t *testing.T, options *Options) {
 	}
 }
 
+// TestWithPluginsOption tests plugin configuration functional options
+func TestWithPluginsOption(t *testing.T) {
+	tests := []struct {
+		name     string
+		setup    func() *Options
+		expected []SdkPluginConfig
+	}{
+		{
+			name: "single_local_plugin",
+			setup: func() *Options {
+				return NewOptions(WithPlugins([]SdkPluginConfig{
+					{Type: SdkPluginTypeLocal, Path: "/path/to/plugin"},
+				}))
+			},
+			expected: []SdkPluginConfig{
+				{Type: SdkPluginTypeLocal, Path: "/path/to/plugin"},
+			},
+		},
+		{
+			name: "multiple_plugins",
+			setup: func() *Options {
+				return NewOptions(WithPlugins([]SdkPluginConfig{
+					{Type: SdkPluginTypeLocal, Path: "/path/to/plugin1"},
+					{Type: SdkPluginTypeLocal, Path: "/path/to/plugin2"},
+				}))
+			},
+			expected: []SdkPluginConfig{
+				{Type: SdkPluginTypeLocal, Path: "/path/to/plugin1"},
+				{Type: SdkPluginTypeLocal, Path: "/path/to/plugin2"},
+			},
+		},
+		{
+			name: "empty_plugins",
+			setup: func() *Options {
+				return NewOptions(WithPlugins([]SdkPluginConfig{}))
+			},
+			expected: []SdkPluginConfig{},
+		},
+		{
+			name: "nil_plugins_replaces_with_nil",
+			setup: func() *Options {
+				return NewOptions(WithPlugins(nil))
+			},
+			expected: nil,
+		},
+		{
+			name: "override_plugins",
+			setup: func() *Options {
+				return NewOptions(
+					WithPlugins([]SdkPluginConfig{
+						{Type: SdkPluginTypeLocal, Path: "/first"},
+					}),
+					WithPlugins([]SdkPluginConfig{
+						{Type: SdkPluginTypeLocal, Path: "/second"},
+					}),
+				)
+			},
+			expected: []SdkPluginConfig{
+				{Type: SdkPluginTypeLocal, Path: "/second"},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			options := tt.setup()
+			assertOptionsPlugins(t, options.Plugins, tt.expected)
+		})
+	}
+}
+
+// TestWithPluginOption tests single plugin append functional option
+func TestWithPluginOption(t *testing.T) {
+	tests := []struct {
+		name     string
+		setup    func() *Options
+		expected []SdkPluginConfig
+	}{
+		{
+			name: "append_single_plugin",
+			setup: func() *Options {
+				return NewOptions(WithPlugin(SdkPluginConfig{
+					Type: SdkPluginTypeLocal,
+					Path: "/path/to/plugin",
+				}))
+			},
+			expected: []SdkPluginConfig{
+				{Type: SdkPluginTypeLocal, Path: "/path/to/plugin"},
+			},
+		},
+		{
+			name: "append_multiple_plugins",
+			setup: func() *Options {
+				return NewOptions(
+					WithPlugin(SdkPluginConfig{Type: SdkPluginTypeLocal, Path: "/plugin1"}),
+					WithPlugin(SdkPluginConfig{Type: SdkPluginTypeLocal, Path: "/plugin2"}),
+					WithPlugin(SdkPluginConfig{Type: SdkPluginTypeLocal, Path: "/plugin3"}),
+				)
+			},
+			expected: []SdkPluginConfig{
+				{Type: SdkPluginTypeLocal, Path: "/plugin1"},
+				{Type: SdkPluginTypeLocal, Path: "/plugin2"},
+				{Type: SdkPluginTypeLocal, Path: "/plugin3"},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			options := tt.setup()
+			assertOptionsPlugins(t, options.Plugins, tt.expected)
+		})
+	}
+}
+
+// TestWithLocalPluginOption tests local plugin convenience function
+func TestWithLocalPluginOption(t *testing.T) {
+	tests := []struct {
+		name     string
+		setup    func() *Options
+		expected []SdkPluginConfig
+	}{
+		{
+			name: "single_local_plugin",
+			setup: func() *Options {
+				return NewOptions(WithLocalPlugin("/path/to/plugin"))
+			},
+			expected: []SdkPluginConfig{
+				{Type: SdkPluginTypeLocal, Path: "/path/to/plugin"},
+			},
+		},
+		{
+			name: "multiple_local_plugins",
+			setup: func() *Options {
+				return NewOptions(
+					WithLocalPlugin("/plugin1"),
+					WithLocalPlugin("/plugin2"),
+				)
+			},
+			expected: []SdkPluginConfig{
+				{Type: SdkPluginTypeLocal, Path: "/plugin1"},
+				{Type: SdkPluginTypeLocal, Path: "/plugin2"},
+			},
+		},
+		{
+			name: "empty_path",
+			setup: func() *Options {
+				return NewOptions(WithLocalPlugin(""))
+			},
+			expected: []SdkPluginConfig{
+				{Type: SdkPluginTypeLocal, Path: ""},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			options := tt.setup()
+			assertOptionsPlugins(t, options.Plugins, tt.expected)
+		})
+	}
+}
+
+// TestPluginsDefaultEmpty tests that Plugins is initialized as empty slice
+func TestPluginsDefaultEmpty(t *testing.T) {
+	options := NewOptions()
+	if options.Plugins == nil {
+		t.Error("Expected Plugins to be initialized, got nil")
+	}
+	if len(options.Plugins) != 0 {
+		t.Errorf("Expected empty Plugins, got %v", options.Plugins)
+	}
+}
+
+// TestPluginTypeConstant tests SdkPluginTypeLocal constant value
+func TestPluginTypeConstant(t *testing.T) {
+	if SdkPluginTypeLocal != "local" {
+		t.Errorf("Expected SdkPluginTypeLocal = %q, got %q", "local", SdkPluginTypeLocal)
+	}
+}
+
+// TestPluginsMixedWithOtherOptions tests plugins work with other options
+func TestPluginsMixedWithOtherOptions(t *testing.T) {
+	options := NewOptions(
+		WithSystemPrompt("Test prompt"),
+		WithLocalPlugin("/path/to/plugin1"),
+		WithModel("claude-3-sonnet"),
+		WithLocalPlugin("/path/to/plugin2"),
+		WithBetas(SdkBetaContext1M),
+	)
+
+	// Verify plugins
+	expectedPlugins := []SdkPluginConfig{
+		{Type: SdkPluginTypeLocal, Path: "/path/to/plugin1"},
+		{Type: SdkPluginTypeLocal, Path: "/path/to/plugin2"},
+	}
+	assertOptionsPlugins(t, options.Plugins, expectedPlugins)
+
+	// Verify other options are preserved
+	assertOptionsSystemPrompt(t, options, "Test prompt")
+	assertOptionsModel(t, options, "claude-3-sonnet")
+	assertOptionsBetas(t, options.Betas, []SdkBeta{SdkBetaContext1M})
+}
+
+// assertOptionsPlugins verifies Plugins slice values
+func assertOptionsPlugins(t *testing.T, actual, expected []SdkPluginConfig) {
+	t.Helper()
+	if len(actual) != len(expected) {
+		t.Errorf("Expected Plugins length = %d, got %d. Actual: %v", len(expected), len(actual), actual)
+		return
+	}
+	for i, exp := range expected {
+		if actual[i].Type != exp.Type {
+			t.Errorf("Expected Plugins[%d].Type = %q, got %q", i, exp.Type, actual[i].Type)
+		}
+		if actual[i].Path != exp.Path {
+			t.Errorf("Expected Plugins[%d].Path = %q, got %q", i, exp.Path, actual[i].Path)
+		}
+	}
+}
+
 // TestSessionManagementOptions tests fork_session and setting_sources options
 func TestSessionManagementOptions(t *testing.T) {
 	t.Run("fork_session", func(t *testing.T) {

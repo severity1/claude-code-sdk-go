@@ -142,6 +142,7 @@ func addOptionsToCommand(cmd []string, options *shared.Options) []string {
 	cmd = addSessionFlags(cmd, options)
 	cmd = addFileSystemFlags(cmd, options)
 	cmd = addMCPFlags(cmd, options)
+	cmd = addPluginsFlag(cmd, options)
 	cmd = addBetasFlag(cmd, options)
 	cmd = addExtraFlags(cmd, options)
 	return cmd
@@ -264,6 +265,16 @@ func addBetasFlag(cmd []string, options *shared.Options) []string {
 			betaStrs[i] = string(beta)
 		}
 		cmd = append(cmd, "--betas", strings.Join(betaStrs, ","))
+	}
+	return cmd
+}
+
+func addPluginsFlag(cmd []string, options *shared.Options) []string {
+	for _, plugin := range options.Plugins {
+		if plugin.Type == shared.SdkPluginTypeLocal {
+			cmd = append(cmd, "--plugin-dir", plugin.Path)
+		}
+		// Note: Future plugin types would be handled here
 	}
 	return cmd
 }

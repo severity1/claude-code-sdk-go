@@ -34,6 +34,12 @@ type ToolsPreset = shared.ToolsPreset
 // SettingSource represents a settings source location.
 type SettingSource = shared.SettingSource
 
+// SdkPluginType represents the type of SDK plugin.
+type SdkPluginType = shared.SdkPluginType
+
+// SdkPluginConfig represents a plugin configuration.
+type SdkPluginConfig = shared.SdkPluginConfig
+
 // Re-export constants
 const (
 	PermissionModeDefault           = shared.PermissionModeDefault
@@ -47,6 +53,7 @@ const (
 	SettingSourceUser               = shared.SettingSourceUser
 	SettingSourceProject            = shared.SettingSourceProject
 	SettingSourceLocal              = shared.SettingSourceLocal
+	SdkPluginTypeLocal              = shared.SdkPluginTypeLocal
 )
 
 // Option configures Options using the functional options pattern.
@@ -269,6 +276,33 @@ func WithEnvVar(key, value string) Option {
 func WithBetas(betas ...SdkBeta) Option {
 	return func(o *Options) {
 		o.Betas = betas
+	}
+}
+
+// WithPlugins sets the plugin configurations.
+// This replaces any previously configured plugins.
+func WithPlugins(plugins []SdkPluginConfig) Option {
+	return func(o *Options) {
+		o.Plugins = plugins
+	}
+}
+
+// WithPlugin appends a single plugin configuration.
+// Multiple calls accumulate plugins.
+func WithPlugin(plugin SdkPluginConfig) Option {
+	return func(o *Options) {
+		o.Plugins = append(o.Plugins, plugin)
+	}
+}
+
+// WithLocalPlugin appends a local plugin by path.
+// This is a convenience method for the common case of local plugins.
+func WithLocalPlugin(path string) Option {
+	return func(o *Options) {
+		o.Plugins = append(o.Plugins, SdkPluginConfig{
+			Type: SdkPluginTypeLocal,
+			Path: path,
+		})
 	}
 }
 

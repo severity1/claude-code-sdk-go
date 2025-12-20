@@ -986,3 +986,126 @@ func validateForkSessionWithResume(t *testing.T, cmd []string) {
 	assertContainsArg(t, cmd, "--fork-session")
 	assertContainsArgs(t, cmd, "--setting-sources", "user")
 }
+
+// TestPluginsFlagSupport tests --plugin-dir CLI flag generation
+func TestPluginsFlagSupport(t *testing.T) {
+	tests := []struct {
+		name     string
+		options  *shared.Options
+		validate func(*testing.T, []string)
+	}{
+		{
+			name: "single_local_plugin",
+			options: &shared.Options{
+				Plugins: []shared.SdkPluginConfig{
+					{Type: shared.SdkPluginTypeLocal, Path: "/path/to/plugin"},
+				},
+			},
+			validate: validateSinglePluginFlag,
+		},
+		{
+			name: "multiple_local_plugins",
+			options: &shared.Options{
+				Plugins: []shared.SdkPluginConfig{
+					{Type: shared.SdkPluginTypeLocal, Path: "/plugin1"},
+					{Type: shared.SdkPluginTypeLocal, Path: "/plugin2"},
+					{Type: shared.SdkPluginTypeLocal, Path: "/plugin3"},
+				},
+			},
+			validate: validateMultiplePluginFlags,
+		},
+		{
+			name: "empty_plugins",
+			options: &shared.Options{
+				Plugins: []shared.SdkPluginConfig{},
+			},
+			validate: validateNoPluginFlag,
+		},
+		{
+			name: "nil_plugins",
+			options: &shared.Options{
+				Plugins: nil,
+			},
+			validate: validateNoPluginFlag,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			cmd := BuildCommand("/usr/local/bin/claude", test.options, true)
+			test.validate(t, cmd)
+		})
+	}
+}
+
+// TestPluginsWithOtherFlags tests plugins work alongside other CLI flags
+func TestPluginsWithOtherFlags(t *testing.T) {
+	options := &shared.Options{
+		Plugins: []shared.SdkPluginConfig{
+			{Type: shared.SdkPluginTypeLocal, Path: "/my/plugin"},
+		},
+		Betas:          []shared.SdkBeta{shared.SdkBetaContext1M},
+		AllowedTools:   []string{"Read", "Write"},
+		SettingSources: []shared.SettingSource{},
+	}
+
+	cmd := BuildCommand("/usr/local/bin/claude", options, true)
+
+	// Verify plugin flag is present
+	assertContainsArgs(t, cmd, "--plugin-dir", "/my/plugin")
+
+	// Verify other flags are also present
+	assertContainsArgs(t, cmd, "--betas", "context-1m-2025-08-07")
+	assertContainsArgs(t, cmd, "--allowed-tools", "Read,Write")
+}
+
+// TestPluginsOrderPreserved tests that plugin order is preserved in CLI flags
+func TestPluginsOrderPreserved(t *testing.T) {
+	options := &shared.Options{
+		Plugins: []shared.SdkPluginConfig{
+			{Type: shared.SdkPluginTypeLocal, Path: "/first"},
+			{Type: shared.SdkPluginTypeLocal, Path: "/second"},
+			{Type: shared.SdkPluginTypeLocal, Path: "/third"},
+		},
+		SettingSources: []shared.SettingSource{},
+	}
+
+	cmd := BuildCommand("/usr/local/bin/claude", options, true)
+
+	// Find all --plugin-dir flags and verify order
+	var pluginPaths []string
+	for i, arg := range cmd {
+		if arg == "--plugin-dir" && i+1 < len(cmd) {
+			pluginPaths = append(pluginPaths, cmd[i+1])
+		}
+	}
+
+	expected := []string{"/first", "/second", "/third"}
+	if len(pluginPaths) != len(expected) {
+		t.Errorf("Expected %d plugin paths, got %d", len(expected), len(pluginPaths))
+		return
+	}
+	for i, exp := range expected {
+		if pluginPaths[i] != exp {
+			t.Errorf("Expected plugin path[%d] = %q, got %q", i, exp, pluginPaths[i])
+		}
+	}
+}
+
+func validateSinglePluginFlag(t *testing.T, cmd []string) {
+	t.Helper()
+	assertContainsArgs(t, cmd, "--plugin-dir", "/path/to/plugin")
+}
+
+func validateMultiplePluginFlags(t *testing.T, cmd []string) {
+	t.Helper()
+	// Each plugin should generate a separate --plugin-dir flag
+	assertContainsArgs(t, cmd, "--plugin-dir", "/plugin1")
+	assertContainsArgs(t, cmd, "--plugin-dir", "/plugin2")
+	assertContainsArgs(t, cmd, "--plugin-dir", "/plugin3")
+}
+
+func validateNoPluginFlag(t *testing.T, cmd []string) {
+	t.Helper()
+	assertNotContainsArg(t, cmd, "--plugin-dir")
+}
