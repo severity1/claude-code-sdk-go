@@ -1,6 +1,9 @@
 package claudecode
 
 import (
+	"io"
+	"os"
+
 	"github.com/severity1/claude-code-sdk-go/internal/shared"
 )
 
@@ -299,4 +302,25 @@ func NewOptions(opts ...Option) *Options {
 	}
 
 	return options
+}
+
+// WithDebugWriter sets the writer for CLI debug output.
+// If not set, stderr is isolated to a temporary file (default behavior).
+// Common values: os.Stderr, io.Discard, or a custom io.Writer like bytes.Buffer.
+func WithDebugWriter(w io.Writer) Option {
+	return func(o *Options) {
+		o.DebugWriter = w
+	}
+}
+
+// WithDebugStderr redirects CLI debug output to os.Stderr.
+// This is useful for seeing debug output in real-time during development.
+func WithDebugStderr() Option {
+	return WithDebugWriter(os.Stderr)
+}
+
+// WithDebugDisabled discards all CLI debug output.
+// This is more explicit than the default nil behavior but has the same effect.
+func WithDebugDisabled() Option {
+	return WithDebugWriter(io.Discard)
 }

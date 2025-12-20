@@ -185,13 +185,19 @@ func (t *Transport) Connect(ctx context.Context) error {
 		return fmt.Errorf("failed to create stdout pipe: %w", err)
 	}
 
-	// Isolate stderr using temporary file to prevent deadlocks
-	// This matches Python SDK pattern to avoid subprocess pipe deadlocks
-	t.stderr, err = os.CreateTemp("", "claude_stderr_*.log")
-	if err != nil {
-		return fmt.Errorf("failed to create stderr file: %w", err)
+	// Handle stderr based on DebugWriter configuration
+	if t.options != nil && t.options.DebugWriter != nil {
+		// Use custom debug writer provided by user
+		t.cmd.Stderr = t.options.DebugWriter
+	} else {
+		// Isolate stderr using temporary file to prevent deadlocks
+		// This matches Python SDK pattern to avoid subprocess pipe deadlocks
+		t.stderr, err = os.CreateTemp("", "claude_stderr_*.log")
+		if err != nil {
+			return fmt.Errorf("failed to create stderr file: %w", err)
+		}
+		t.cmd.Stderr = t.stderr
 	}
-	t.cmd.Stderr = t.stderr
 
 	// Start the process
 	if err := t.cmd.Start(); err != nil {

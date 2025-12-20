@@ -1,9 +1,15 @@
 package claudecode
 
 import (
+	"bytes"
 	"context"
+	"io"
+	"os"
 	"testing"
 )
+
+// Ensure context is used (for mock transport)
+var _ = context.Background
 
 // T015: Default Options Creation - Test functional options integration
 func TestDefaultOptions(t *testing.T) {
@@ -1503,4 +1509,137 @@ func assertOptionsSettingSources(t *testing.T, options *Options, expected []Sett
 			t.Errorf("Expected SettingSources[%d] = %q, got %q", i, exp, options.SettingSources[i])
 		}
 	}
+}
+
+// T036: Debug Writer Options - Issue #12
+func TestWithDebugWriter(t *testing.T) {
+	tests := []struct {
+		name     string
+		setup    func() *Options
+		validate func(t *testing.T, options *Options)
+	}{
+		{
+			name: "custom_writer",
+			setup: func() *Options {
+				var buf bytes.Buffer
+				return NewOptions(WithDebugWriter(&buf))
+			},
+			validate: func(t *testing.T, options *Options) {
+				t.Helper()
+				if options.DebugWriter == nil {
+					t.Error("Expected DebugWriter to be set, got nil")
+				}
+			},
+		},
+		{
+			name: "debug_stderr",
+			setup: func() *Options {
+				return NewOptions(WithDebugStderr())
+			},
+			validate: func(t *testing.T, options *Options) {
+				t.Helper()
+				if options.DebugWriter != os.Stderr {
+					t.Errorf("Expected DebugWriter to be os.Stderr, got %v", options.DebugWriter)
+				}
+			},
+		},
+		{
+			name: "debug_disabled",
+			setup: func() *Options {
+				return NewOptions(WithDebugDisabled())
+			},
+			validate: func(t *testing.T, options *Options) {
+				t.Helper()
+				if options.DebugWriter != io.Discard {
+					t.Errorf("Expected DebugWriter to be io.Discard, got %v", options.DebugWriter)
+				}
+			},
+		},
+		{
+			name: "nil_by_default",
+			setup: func() *Options {
+				return NewOptions()
+			},
+			validate: func(t *testing.T, options *Options) {
+				t.Helper()
+				if options.DebugWriter != nil {
+					t.Errorf("Expected DebugWriter to be nil by default, got %v", options.DebugWriter)
+				}
+			},
+		},
+		{
+			name: "override_behavior",
+			setup: func() *Options {
+				var buf1, buf2 bytes.Buffer
+				return NewOptions(
+					WithDebugWriter(&buf1),
+					WithDebugWriter(&buf2), // Should override
+				)
+			},
+			validate: func(t *testing.T, options *Options) {
+				t.Helper()
+				if options.DebugWriter == nil {
+					t.Error("Expected DebugWriter to be set after override")
+				}
+			},
+		},
+		{
+			name: "nil_writer_explicit",
+			setup: func() *Options {
+				return NewOptions(WithDebugWriter(nil))
+			},
+			validate: func(t *testing.T, options *Options) {
+				t.Helper()
+				if options.DebugWriter != nil {
+					t.Errorf("Expected DebugWriter to be nil when explicitly set, got %v", options.DebugWriter)
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			options := tt.setup()
+			tt.validate(t, options)
+		})
+	}
+}
+
+// TestWithDebugWriterIntegration tests debug writer with other options
+func TestWithDebugWriterIntegration(t *testing.T) {
+	var debugBuf bytes.Buffer
+
+	options := NewOptions(
+		WithSystemPrompt("You are a helpful assistant"),
+		WithDebugWriter(&debugBuf),
+		WithModel("claude-3-5-sonnet-20241022"),
+		WithPermissionMode(PermissionModeAcceptEdits),
+	)
+
+	// Verify debug writer is set
+	if options.DebugWriter == nil {
+		t.Error("Expected DebugWriter to be set")
+	}
+
+	// Verify other options are preserved
+	assertOptionsSystemPrompt(t, options, "You are a helpful assistant")
+	assertOptionsModel(t, options, "claude-3-5-sonnet-20241022")
+	assertOptionsPermissionMode(t, options, PermissionModeAcceptEdits)
+}
+
+// TestDebugWriterConvenienceFunctions tests the convenience functions
+func TestDebugWriterConvenienceFunctions(t *testing.T) {
+	t.Run("WithDebugStderr_returns_os_stderr", func(t *testing.T) {
+		options := NewOptions(WithDebugStderr())
+		if options.DebugWriter != os.Stderr {
+			t.Errorf("Expected os.Stderr, got %T", options.DebugWriter)
+		}
+	})
+
+	t.Run("WithDebugDisabled_returns_io_discard", func(t *testing.T) {
+		options := NewOptions(WithDebugDisabled())
+		if options.DebugWriter != io.Discard {
+			t.Errorf("Expected io.Discard, got %T", options.DebugWriter)
+		}
+	})
 }
