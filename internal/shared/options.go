@@ -67,6 +67,13 @@ type SdkPluginConfig struct {
 	Path string `json:"path"`
 }
 
+// OutputFormat specifies the format for structured output.
+// Matches the Messages API structure: {"type": "json_schema", "schema": {...}}
+type OutputFormat struct {
+	Type   string         `json:"type"`   // Always "json_schema"
+	Schema map[string]any `json:"schema"` // JSON Schema definition
+}
+
 // Options configures the Claude Code SDK behavior.
 type Options struct {
 	// Tool Control
@@ -122,6 +129,10 @@ type Options struct {
 	// ExtraEnv specifies additional environment variables for the subprocess.
 	// These are merged with the system environment variables.
 	ExtraEnv map[string]string `json:"extra_env,omitempty"`
+
+	// OutputFormat specifies structured output format with JSON schema.
+	// When set, Claude's response will conform to the provided schema.
+	OutputFormat *OutputFormat `json:"output_format,omitempty"`
 
 	// CLI Path (for testing and custom installations)
 	CLIPath *string `json:"cli_path,omitempty"`

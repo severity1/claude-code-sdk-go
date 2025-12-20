@@ -304,6 +304,11 @@ func (p *Parser) parseResultMessage(data map[string]any) (*shared.ResultMessage,
 		}
 	}
 
+	// Parse structured_output (any JSON value)
+	if structuredOutput, exists := data["structured_output"]; exists {
+		result.StructuredOutput = structuredOutput
+	}
+
 	return result, nil
 }
 
