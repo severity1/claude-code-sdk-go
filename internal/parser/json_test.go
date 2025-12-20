@@ -120,6 +120,81 @@ func TestParseValidMessages(t *testing.T) {
 			},
 			expectedType: shared.MessageTypeAssistant,
 		},
+		// Issue #23: AssistantMessage error field tests
+		{
+			name: "assistant_message_with_rate_limit_error",
+			data: map[string]any{
+				"type": "assistant",
+				"message": map[string]any{
+					"content": []any{map[string]any{"type": "text", "text": "Rate limited"}},
+					"model":   "claude-3-sonnet",
+					"error":   "rate_limit",
+				},
+			},
+			expectedType: shared.MessageTypeAssistant,
+			validate: func(t *testing.T, msg shared.Message) {
+				t.Helper()
+				am := msg.(*shared.AssistantMessage)
+				if am.Error == nil {
+					t.Fatal("expected Error to be set, got nil")
+				}
+				if *am.Error != shared.AssistantMessageErrorRateLimit {
+					t.Errorf("expected Error 'rate_limit', got %v", *am.Error)
+				}
+				if !am.IsRateLimited() {
+					t.Error("expected IsRateLimited() to return true")
+				}
+			},
+		},
+		{
+			name: "assistant_message_with_auth_error",
+			data: map[string]any{
+				"type": "assistant",
+				"message": map[string]any{
+					"content": []any{map[string]any{"type": "text", "text": "Auth failed"}},
+					"model":   "claude-3-sonnet",
+					"error":   "authentication_failed",
+				},
+			},
+			expectedType: shared.MessageTypeAssistant,
+			validate: func(t *testing.T, msg shared.Message) {
+				t.Helper()
+				am := msg.(*shared.AssistantMessage)
+				if am.Error == nil {
+					t.Fatal("expected Error to be set, got nil")
+				}
+				if *am.Error != shared.AssistantMessageErrorAuthFailed {
+					t.Errorf("expected Error 'authentication_failed', got %v", *am.Error)
+				}
+				if !am.HasError() {
+					t.Error("expected HasError() to return true")
+				}
+				if am.IsRateLimited() {
+					t.Error("expected IsRateLimited() to return false for auth error")
+				}
+			},
+		},
+		{
+			name: "assistant_message_without_error",
+			data: map[string]any{
+				"type": "assistant",
+				"message": map[string]any{
+					"content": []any{map[string]any{"type": "text", "text": "Success"}},
+					"model":   "claude-3-sonnet",
+				},
+			},
+			expectedType: shared.MessageTypeAssistant,
+			validate: func(t *testing.T, msg shared.Message) {
+				t.Helper()
+				am := msg.(*shared.AssistantMessage)
+				if am.Error != nil {
+					t.Errorf("expected Error to be nil, got %v", am.Error)
+				}
+				if am.HasError() {
+					t.Error("expected HasError() to return false")
+				}
+			},
+		},
 		{
 			name:         "system_message",
 			data:         map[string]any{"type": "system", "subtype": "status"},
