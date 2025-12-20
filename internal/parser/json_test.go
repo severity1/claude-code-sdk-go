@@ -1058,3 +1058,253 @@ func assertBufferOverflowError(t *testing.T, err error) {
 		t.Errorf("Expected buffer overflow error, got %q", jsonDecodeErr.Error())
 	}
 }
+
+// TestResultMessageStructuredOutput tests structured_output field parsing in ResultMessage
+func TestResultMessageStructuredOutput(t *testing.T) {
+	parser := setupParserTest(t)
+
+	baseData := func() map[string]any {
+		return map[string]any{
+			"type":            "result",
+			"subtype":         "completed",
+			"duration_ms":     1000.0,
+			"duration_api_ms": 500.0,
+			"is_error":        false,
+			"num_turns":       1.0,
+			"session_id":      "s123",
+		}
+	}
+
+	tests := []struct {
+		name     string
+		getData  func() map[string]any
+		validate func(*testing.T, *shared.ResultMessage)
+	}{
+		{
+			name: "structured_output_object",
+			getData: func() map[string]any {
+				data := baseData()
+				data["structured_output"] = map[string]any{
+					"name":  "test",
+					"count": 42.0,
+				}
+				return data
+			},
+			validate: func(t *testing.T, msg *shared.ResultMessage) {
+				t.Helper()
+				if msg.StructuredOutput == nil {
+					t.Fatal("Expected StructuredOutput to be set")
+				}
+				output, ok := msg.StructuredOutput.(map[string]any)
+				if !ok {
+					t.Fatalf("Expected map[string]any, got %T", msg.StructuredOutput)
+				}
+				if output["name"] != "test" {
+					t.Errorf("Expected name = 'test', got %v", output["name"])
+				}
+				if output["count"] != 42.0 {
+					t.Errorf("Expected count = 42.0, got %v", output["count"])
+				}
+			},
+		},
+		{
+			name: "structured_output_array",
+			getData: func() map[string]any {
+				data := baseData()
+				data["structured_output"] = []any{"item1", "item2", "item3"}
+				return data
+			},
+			validate: func(t *testing.T, msg *shared.ResultMessage) {
+				t.Helper()
+				if msg.StructuredOutput == nil {
+					t.Fatal("Expected StructuredOutput to be set")
+				}
+				output, ok := msg.StructuredOutput.([]any)
+				if !ok {
+					t.Fatalf("Expected []any, got %T", msg.StructuredOutput)
+				}
+				if len(output) != 3 {
+					t.Errorf("Expected 3 items, got %d", len(output))
+				}
+				if output[0] != "item1" {
+					t.Errorf("Expected first item = 'item1', got %v", output[0])
+				}
+			},
+		},
+		{
+			name: "structured_output_string",
+			getData: func() map[string]any {
+				data := baseData()
+				data["structured_output"] = "simple string output"
+				return data
+			},
+			validate: func(t *testing.T, msg *shared.ResultMessage) {
+				t.Helper()
+				if msg.StructuredOutput == nil {
+					t.Fatal("Expected StructuredOutput to be set")
+				}
+				output, ok := msg.StructuredOutput.(string)
+				if !ok {
+					t.Fatalf("Expected string, got %T", msg.StructuredOutput)
+				}
+				if output != "simple string output" {
+					t.Errorf("Expected 'simple string output', got %q", output)
+				}
+			},
+		},
+		{
+			name: "structured_output_number",
+			getData: func() map[string]any {
+				data := baseData()
+				data["structured_output"] = 42.5
+				return data
+			},
+			validate: func(t *testing.T, msg *shared.ResultMessage) {
+				t.Helper()
+				if msg.StructuredOutput == nil {
+					t.Fatal("Expected StructuredOutput to be set")
+				}
+				output, ok := msg.StructuredOutput.(float64)
+				if !ok {
+					t.Fatalf("Expected float64, got %T", msg.StructuredOutput)
+				}
+				if output != 42.5 {
+					t.Errorf("Expected 42.5, got %v", output)
+				}
+			},
+		},
+		{
+			name: "structured_output_boolean",
+			getData: func() map[string]any {
+				data := baseData()
+				data["structured_output"] = true
+				return data
+			},
+			validate: func(t *testing.T, msg *shared.ResultMessage) {
+				t.Helper()
+				if msg.StructuredOutput == nil {
+					t.Fatal("Expected StructuredOutput to be set")
+				}
+				output, ok := msg.StructuredOutput.(bool)
+				if !ok {
+					t.Fatalf("Expected bool, got %T", msg.StructuredOutput)
+				}
+				if !output {
+					t.Error("Expected true, got false")
+				}
+			},
+		},
+		{
+			name: "structured_output_nil",
+			getData: func() map[string]any {
+				return baseData() // No structured_output field
+			},
+			validate: func(t *testing.T, msg *shared.ResultMessage) {
+				t.Helper()
+				if msg.StructuredOutput != nil {
+					t.Errorf("Expected StructuredOutput = nil, got %v", msg.StructuredOutput)
+				}
+			},
+		},
+		{
+			name: "structured_output_nested_object",
+			getData: func() map[string]any {
+				data := baseData()
+				data["structured_output"] = map[string]any{
+					"results": []any{
+						map[string]any{"id": 1.0, "name": "first"},
+						map[string]any{"id": 2.0, "name": "second"},
+					},
+					"metadata": map[string]any{
+						"total": 2.0,
+						"page":  1.0,
+					},
+				}
+				return data
+			},
+			validate: func(t *testing.T, msg *shared.ResultMessage) {
+				t.Helper()
+				if msg.StructuredOutput == nil {
+					t.Fatal("Expected StructuredOutput to be set")
+				}
+				output, ok := msg.StructuredOutput.(map[string]any)
+				if !ok {
+					t.Fatalf("Expected map[string]any, got %T", msg.StructuredOutput)
+				}
+				results, ok := output["results"].([]any)
+				if !ok || len(results) != 2 {
+					t.Errorf("Expected results array with 2 items, got %v", output["results"])
+				}
+				metadata, ok := output["metadata"].(map[string]any)
+				if !ok {
+					t.Errorf("Expected metadata map, got %v", output["metadata"])
+				}
+				if metadata["total"] != 2.0 {
+					t.Errorf("Expected total = 2, got %v", metadata["total"])
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			msg, err := parser.ParseMessage(tt.getData())
+			assertNoParseError(t, err)
+
+			resultMsg, ok := msg.(*shared.ResultMessage)
+			if !ok {
+				t.Fatalf("Expected ResultMessage, got %T", msg)
+			}
+			tt.validate(t, resultMsg)
+		})
+	}
+}
+
+// TestResultMessageStructuredOutputWithOtherFields tests structured_output works with other optional fields
+func TestResultMessageStructuredOutputWithOtherFields(t *testing.T) {
+	parser := setupParserTest(t)
+
+	data := map[string]any{
+		"type":            "result",
+		"subtype":         "completed",
+		"duration_ms":     1000.0,
+		"duration_api_ms": 500.0,
+		"is_error":        false,
+		"num_turns":       1.0,
+		"session_id":      "s123",
+		"total_cost_usd":  0.05,
+		"result":          "The answer is 42",
+		"usage":           map[string]any{"input_tokens": 100.0, "output_tokens": 50.0},
+		"structured_output": map[string]any{
+			"answer":     "42",
+			"confidence": 0.95,
+		},
+	}
+
+	msg, err := parser.ParseMessage(data)
+	assertNoParseError(t, err)
+
+	resultMsg := msg.(*shared.ResultMessage)
+
+	// Verify all fields are set correctly
+	if resultMsg.TotalCostUSD == nil || *resultMsg.TotalCostUSD != 0.05 {
+		t.Errorf("Expected total_cost_usd = 0.05, got %v", resultMsg.TotalCostUSD)
+	}
+	if resultMsg.Result == nil || *resultMsg.Result != "The answer is 42" {
+		t.Errorf("Expected result = 'The answer is 42', got %v", resultMsg.Result)
+	}
+	if resultMsg.Usage == nil {
+		t.Error("Expected usage to be set")
+	}
+	if resultMsg.StructuredOutput == nil {
+		t.Error("Expected structured_output to be set")
+	}
+
+	output := resultMsg.StructuredOutput.(map[string]any)
+	if output["answer"] != "42" {
+		t.Errorf("Expected answer = '42', got %v", output["answer"])
+	}
+	if output["confidence"] != 0.95 {
+		t.Errorf("Expected confidence = 0.95, got %v", output["confidence"])
+	}
+}

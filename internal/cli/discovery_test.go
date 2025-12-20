@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -1108,4 +1109,127 @@ func validateMultiplePluginFlags(t *testing.T, cmd []string) {
 func validateNoPluginFlag(t *testing.T, cmd []string) {
 	t.Helper()
 	assertNotContainsArg(t, cmd, "--plugin-dir")
+}
+
+// TestOutputFormatFlagSupport tests --json-schema CLI flag generation for structured output
+func TestOutputFormatFlagSupport(t *testing.T) {
+	tests := []struct {
+		name     string
+		options  *shared.Options
+		validate func(*testing.T, []string)
+	}{
+		{
+			name: "json_schema_flag_present",
+			options: &shared.Options{
+				OutputFormat: &shared.OutputFormat{
+					Type: "json_schema",
+					Schema: map[string]any{
+						"type": "object",
+						"properties": map[string]any{
+							"answer": map[string]any{"type": "string"},
+						},
+					},
+				},
+			},
+			validate: validateJSONSchemaFlagPresent,
+		},
+		{
+			name: "no_flag_when_nil",
+			options: &shared.Options{
+				OutputFormat: nil,
+			},
+			validate: validateNoJSONSchemaFlag,
+		},
+		{
+			name: "no_flag_when_nil_schema",
+			options: &shared.Options{
+				OutputFormat: &shared.OutputFormat{
+					Type:   "json_schema",
+					Schema: nil,
+				},
+			},
+			validate: validateNoJSONSchemaFlag,
+		},
+		{
+			name: "complex_nested_schema",
+			options: &shared.Options{
+				OutputFormat: &shared.OutputFormat{
+					Type: "json_schema",
+					Schema: map[string]any{
+						"type": "object",
+						"properties": map[string]any{
+							"items": map[string]any{
+								"type": "array",
+								"items": map[string]any{
+									"type": "object",
+									"properties": map[string]any{
+										"name":  map[string]any{"type": "string"},
+										"value": map[string]any{"type": "number"},
+									},
+								},
+							},
+						},
+						"required": []string{"items"},
+					},
+				},
+			},
+			validate: validateJSONSchemaFlagPresent,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			cmd := BuildCommand("/usr/local/bin/claude", test.options, true)
+			test.validate(t, cmd)
+		})
+	}
+}
+
+// TestOutputFormatFlagWithOtherOptions tests --json-schema flag works with other options
+func TestOutputFormatFlagWithOtherOptions(t *testing.T) {
+	systemPrompt := "You are helpful"
+	permissionMode := shared.PermissionModeAcceptEdits
+
+	options := &shared.Options{
+		SystemPrompt:   &systemPrompt,
+		PermissionMode: &permissionMode,
+		OutputFormat: &shared.OutputFormat{
+			Type: "json_schema",
+			Schema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"result": map[string]any{"type": "string"},
+				},
+			},
+		},
+	}
+
+	cmd := BuildCommand("/usr/local/bin/claude", options, true)
+
+	// Verify all flags are present
+	assertContainsArgs(t, cmd, "--system-prompt", "You are helpful")
+	assertContainsArgs(t, cmd, "--permission-mode", "acceptEdits")
+	validateJSONSchemaFlagPresent(t, cmd)
+}
+
+// validateJSONSchemaFlagPresent checks that --json-schema flag is present with valid JSON
+func validateJSONSchemaFlagPresent(t *testing.T, cmd []string) {
+	t.Helper()
+	for i, arg := range cmd {
+		if arg == "--json-schema" && i+1 < len(cmd) {
+			// Verify it's valid JSON
+			var schema map[string]any
+			if err := json.Unmarshal([]byte(cmd[i+1]), &schema); err != nil {
+				t.Errorf("Expected valid JSON for --json-schema, got error: %v", err)
+			}
+			return
+		}
+	}
+	t.Error("Expected --json-schema flag to be present")
+}
+
+// validateNoJSONSchemaFlag checks that --json-schema flag is not present
+func validateNoJSONSchemaFlag(t *testing.T, cmd []string) {
+	t.Helper()
+	assertNotContainsArg(t, cmd, "--json-schema")
 }
