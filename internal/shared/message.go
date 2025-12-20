@@ -20,6 +20,19 @@ const (
 	ContentBlockTypeToolResult = "tool_result"
 )
 
+// AssistantMessageError represents error types in assistant messages.
+type AssistantMessageError string
+
+// AssistantMessageError constants for error type identification.
+const (
+	AssistantMessageErrorAuthFailed     AssistantMessageError = "authentication_failed"
+	AssistantMessageErrorBilling        AssistantMessageError = "billing_error"
+	AssistantMessageErrorRateLimit      AssistantMessageError = "rate_limit"
+	AssistantMessageErrorInvalidRequest AssistantMessageError = "invalid_request"
+	AssistantMessageErrorServer         AssistantMessageError = "server_error"
+	AssistantMessageErrorUnknown        AssistantMessageError = "unknown"
+)
+
 // Message represents any message type in the Claude Code protocol.
 type Message interface {
 	Type() string
@@ -74,14 +87,25 @@ func (m *UserMessage) MarshalJSON() ([]byte, error) {
 
 // AssistantMessage represents a message from the assistant.
 type AssistantMessage struct {
-	MessageType string         `json:"type"`
-	Content     []ContentBlock `json:"content"`
-	Model       string         `json:"model"`
+	MessageType string                 `json:"type"`
+	Content     []ContentBlock         `json:"content"`
+	Model       string                 `json:"model"`
+	Error       *AssistantMessageError `json:"error,omitempty"`
 }
 
 // Type returns the message type for AssistantMessage.
 func (m *AssistantMessage) Type() string {
 	return MessageTypeAssistant
+}
+
+// HasError returns true if the message contains an error.
+func (m *AssistantMessage) HasError() bool {
+	return m.Error != nil
+}
+
+// IsRateLimited returns true if the error is a rate limit error.
+func (m *AssistantMessage) IsRateLimited() bool {
+	return m.Error != nil && *m.Error == AssistantMessageErrorRateLimit
 }
 
 // MarshalJSON implements custom JSON marshaling for AssistantMessage

@@ -484,10 +484,11 @@ func TestAssistantMessageWithError(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			errType := tt.errType // Avoid memory aliasing in for loop
 			msg := &AssistantMessage{
 				Content: []ContentBlock{&TextBlock{Text: "Error response"}},
 				Model:   "claude-3-sonnet",
-				Error:   &tt.errType,
+				Error:   &errType,
 			}
 
 			if got := msg.HasError(); got != tt.wantError {
@@ -555,9 +556,4 @@ func TestAssistantMessageErrorJSONMarshaling(t *testing.T) {
 	if _, exists := result["error"]; exists {
 		t.Error("Expected 'error' field to be omitted when nil")
 	}
-}
-
-// errPtr is a helper to create a pointer to an AssistantMessageError
-func errPtr(e AssistantMessageError) *AssistantMessageError {
-	return &e
 }

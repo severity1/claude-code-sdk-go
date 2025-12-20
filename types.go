@@ -18,6 +18,9 @@ type UserMessage = shared.UserMessage
 // AssistantMessage represents a message from the assistant.
 type AssistantMessage = shared.AssistantMessage
 
+// AssistantMessageError represents error types in assistant messages.
+type AssistantMessageError = shared.AssistantMessageError
+
 // SystemMessage represents a system prompt message.
 type SystemMessage = shared.SystemMessage
 
@@ -56,6 +59,16 @@ const (
 	ContentBlockTypeThinking   = shared.ContentBlockTypeThinking
 	ContentBlockTypeToolUse    = shared.ContentBlockTypeToolUse
 	ContentBlockTypeToolResult = shared.ContentBlockTypeToolResult
+)
+
+// Re-export AssistantMessageError constants
+const (
+	AssistantMessageErrorAuthFailed     = shared.AssistantMessageErrorAuthFailed
+	AssistantMessageErrorBilling        = shared.AssistantMessageErrorBilling
+	AssistantMessageErrorRateLimit      = shared.AssistantMessageErrorRateLimit
+	AssistantMessageErrorInvalidRequest = shared.AssistantMessageErrorInvalidRequest
+	AssistantMessageErrorServer         = shared.AssistantMessageErrorServer
+	AssistantMessageErrorUnknown        = shared.AssistantMessageErrorUnknown
 )
 
 // Transport abstracts the communication layer with Claude Code CLI.
