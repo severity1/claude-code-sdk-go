@@ -893,3 +893,96 @@ func validateNoToolsFlag(t *testing.T, cmd []string) {
 	t.Helper()
 	assertNotContainsArg(t, cmd, "--tools")
 }
+
+// TestSessionManagementFlagsSupport tests fork_session and setting_sources CLI flags
+func TestSessionManagementFlagsSupport(t *testing.T) {
+	tests := []struct {
+		name     string
+		options  *shared.Options
+		validate func(*testing.T, []string)
+	}{
+		{
+			name:     "fork_session_enabled",
+			options:  &shared.Options{ForkSession: true, SettingSources: []shared.SettingSource{}},
+			validate: validateForkSessionEnabled,
+		},
+		{
+			name:     "fork_session_disabled",
+			options:  &shared.Options{ForkSession: false, SettingSources: []shared.SettingSource{}},
+			validate: validateForkSessionDisabled,
+		},
+		{
+			name:     "setting_sources_single",
+			options:  &shared.Options{SettingSources: []shared.SettingSource{shared.SettingSourceUser}},
+			validate: validateSettingSourcesSingle,
+		},
+		{
+			name:     "setting_sources_multiple",
+			options:  &shared.Options{SettingSources: []shared.SettingSource{shared.SettingSourceUser, shared.SettingSourceProject}},
+			validate: validateSettingSourcesMultiple,
+		},
+		{
+			name:     "setting_sources_all",
+			options:  &shared.Options{SettingSources: []shared.SettingSource{shared.SettingSourceUser, shared.SettingSourceProject, shared.SettingSourceLocal}},
+			validate: validateSettingSourcesAll,
+		},
+		{
+			name:     "setting_sources_empty",
+			options:  &shared.Options{SettingSources: []shared.SettingSource{}},
+			validate: validateSettingSourcesEmpty,
+		},
+		{
+			name: "fork_session_with_resume",
+			options: &shared.Options{
+				Resume:         stringPtr("session-123"),
+				ForkSession:    true,
+				SettingSources: []shared.SettingSource{shared.SettingSourceUser},
+			},
+			validate: validateForkSessionWithResume,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			cmd := BuildCommand("/usr/local/bin/claude", test.options, true)
+			test.validate(t, cmd)
+		})
+	}
+}
+
+func validateForkSessionEnabled(t *testing.T, cmd []string) {
+	t.Helper()
+	assertContainsArg(t, cmd, "--fork-session")
+}
+
+func validateForkSessionDisabled(t *testing.T, cmd []string) {
+	t.Helper()
+	assertNotContainsArg(t, cmd, "--fork-session")
+}
+
+func validateSettingSourcesSingle(t *testing.T, cmd []string) {
+	t.Helper()
+	assertContainsArgs(t, cmd, "--setting-sources", "user")
+}
+
+func validateSettingSourcesMultiple(t *testing.T, cmd []string) {
+	t.Helper()
+	assertContainsArgs(t, cmd, "--setting-sources", "user,project")
+}
+
+func validateSettingSourcesAll(t *testing.T, cmd []string) {
+	t.Helper()
+	assertContainsArgs(t, cmd, "--setting-sources", "user,project,local")
+}
+
+func validateSettingSourcesEmpty(t *testing.T, cmd []string) {
+	t.Helper()
+	assertContainsArgs(t, cmd, "--setting-sources", "")
+}
+
+func validateForkSessionWithResume(t *testing.T, cmd []string) {
+	t.Helper()
+	assertContainsArgs(t, cmd, "--resume", "session-123")
+	assertContainsArg(t, cmd, "--fork-session")
+	assertContainsArgs(t, cmd, "--setting-sources", "user")
+}

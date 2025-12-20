@@ -30,6 +30,9 @@ func TestOptionsDefaults(t *testing.T) {
 		{"ExtraArgs_empty", len(options.ExtraArgs), 0},
 		{"ExtraEnv_initialized", options.ExtraEnv == nil, false},
 		{"ExtraEnv_empty", len(options.ExtraEnv), 0},
+		{"ForkSession", options.ForkSession, false},
+		{"SettingSources_initialized", options.SettingSources == nil, false},
+		{"SettingSources_empty", len(options.SettingSources), 0},
 	}
 
 	for _, test := range tests {
@@ -177,6 +180,24 @@ func TestPermissionModeConstants(t *testing.T) {
 	for _, test := range tests {
 		t.Run(string(test.mode), func(t *testing.T) {
 			assertOptionsField(t, string(test.mode), test.expected, "PermissionMode")
+		})
+	}
+}
+
+// TestSettingSourceConstants tests setting source constant values
+func TestSettingSourceConstants(t *testing.T) {
+	tests := []struct {
+		source   SettingSource
+		expected string
+	}{
+		{SettingSourceUser, "user"},
+		{SettingSourceProject, "project"},
+		{SettingSourceLocal, "local"},
+	}
+
+	for _, test := range tests {
+		t.Run(string(test.source), func(t *testing.T) {
+			assertOptionsField(t, string(test.source), test.expected, "SettingSource")
 		})
 	}
 }

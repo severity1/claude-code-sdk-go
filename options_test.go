@@ -1412,3 +1412,95 @@ func assertOptionsToolsNil(t *testing.T, options *Options) {
 		t.Errorf("Expected Tools = nil, got %v", options.Tools)
 	}
 }
+
+// TestSessionManagementOptions tests fork_session and setting_sources options
+func TestSessionManagementOptions(t *testing.T) {
+	t.Run("fork_session", func(t *testing.T) {
+		tests := []struct {
+			name     string
+			value    bool
+			expected bool
+		}{
+			{"enabled", true, true},
+			{"disabled", false, false},
+		}
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				options := NewOptions(WithForkSession(tt.value))
+				assertOptionsForkSession(t, options, tt.expected)
+			})
+		}
+	})
+
+	t.Run("setting_sources", func(t *testing.T) {
+		tests := []struct {
+			name     string
+			sources  []SettingSource
+			expected []SettingSource
+		}{
+			{"single_source", []SettingSource{SettingSourceUser}, []SettingSource{SettingSourceUser}},
+			{"all_sources", []SettingSource{SettingSourceUser, SettingSourceProject, SettingSourceLocal},
+				[]SettingSource{SettingSourceUser, SettingSourceProject, SettingSourceLocal}},
+			{"empty_sources", []SettingSource{}, []SettingSource{}},
+		}
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				options := NewOptions(WithSettingSources(tt.sources...))
+				assertOptionsSettingSources(t, options, tt.expected)
+			})
+		}
+	})
+
+	t.Run("override_behavior", func(t *testing.T) {
+		options := NewOptions(
+			WithSettingSources(SettingSourceUser),
+			WithSettingSources(SettingSourceProject, SettingSourceLocal),
+		)
+		// Later call should replace, not append
+		assertOptionsSettingSources(t, options, []SettingSource{SettingSourceProject, SettingSourceLocal})
+	})
+
+	t.Run("nil_by_default", func(t *testing.T) {
+		options := NewOptions()
+		assertOptionsForkSession(t, options, false)
+		if options.SettingSources == nil {
+			t.Error("Expected SettingSources to be initialized, got nil")
+		}
+		if len(options.SettingSources) != 0 {
+			t.Errorf("Expected empty SettingSources, got %v", options.SettingSources)
+		}
+	})
+
+	t.Run("integration_with_other_options", func(t *testing.T) {
+		options := NewOptions(
+			WithResume("session-123"),
+			WithForkSession(true),
+			WithSettingSources(SettingSourceUser, SettingSourceProject),
+		)
+		assertOptionsResume(t, options, "session-123")
+		assertOptionsForkSession(t, options, true)
+		assertOptionsSettingSources(t, options, []SettingSource{SettingSourceUser, SettingSourceProject})
+	})
+}
+
+// assertOptionsForkSession verifies ForkSession value
+func assertOptionsForkSession(t *testing.T, options *Options, expected bool) {
+	t.Helper()
+	if options.ForkSession != expected {
+		t.Errorf("Expected ForkSession = %v, got %v", expected, options.ForkSession)
+	}
+}
+
+// assertOptionsSettingSources verifies SettingSources slice values
+func assertOptionsSettingSources(t *testing.T, options *Options, expected []SettingSource) {
+	t.Helper()
+	if len(options.SettingSources) != len(expected) {
+		t.Errorf("Expected SettingSources length = %d, got %d", len(expected), len(options.SettingSources))
+		return
+	}
+	for i, exp := range expected {
+		if options.SettingSources[i] != exp {
+			t.Errorf("Expected SettingSources[%d] = %q, got %q", i, exp, options.SettingSources[i])
+		}
+	}
+}
