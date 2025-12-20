@@ -6,19 +6,19 @@ import (
 
 // StreamValidator tracks tool requests and results to detect incomplete streams.
 type StreamValidator struct {
-	mu              sync.RWMutex
-	toolsRequested  map[string]bool   // Set of all tool_use IDs requested
-	toolsReceived   map[string]bool   // Set of all tool_result IDs received
-	pendingToolsSet map[string]bool   // Set of tool IDs awaiting results
-	hasResultMessage bool              // Whether we've seen a result message
-	streamEnded     bool               // Whether stream has ended
-	issues          []StreamIssue      // Validation issues found
+	mu               sync.RWMutex
+	toolsRequested   map[string]bool // Set of all tool_use IDs requested
+	toolsReceived    map[string]bool // Set of all tool_result IDs received
+	pendingToolsSet  map[string]bool // Set of tool IDs awaiting results
+	hasResultMessage bool            // Whether we've seen a result message
+	streamEnded      bool            // Whether stream has ended
+	issues           []StreamIssue   // Validation issues found
 }
 
 // StreamIssue represents a validation issue found in the stream.
 type StreamIssue struct {
-	Type        string `json:"type"`        // "missing_tool_result", "extra_tool_result", etc.
-	Description string `json:"description"` // Human-readable description
+	Type        string `json:"type"`                  // "missing_tool_result", "extra_tool_result", etc.
+	Description string `json:"description"`           // Human-readable description
 	ToolUseID   string `json:"tool_use_id,omitempty"` // Related tool use ID if applicable
 }
 
