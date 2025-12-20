@@ -140,6 +140,7 @@ func addOptionsToCommand(cmd []string, options *shared.Options) []string {
 	cmd = addSessionFlags(cmd, options)
 	cmd = addFileSystemFlags(cmd, options)
 	cmd = addMCPFlags(cmd, options)
+	cmd = addBetasFlag(cmd, options)
 	cmd = addExtraFlags(cmd, options)
 	return cmd
 }
@@ -217,6 +218,17 @@ func addMCPFlags(cmd []string, _ *shared.Options) []string {
 	// When options.McpServers is set, Transport generates a temporary config file
 	// and adds it to ExtraArgs as "--mcp-config", which is then added by addExtraFlags().
 	// This function is kept for potential future direct MCP flag support.
+	return cmd
+}
+
+func addBetasFlag(cmd []string, options *shared.Options) []string {
+	if len(options.Betas) > 0 {
+		betaStrs := make([]string, len(options.Betas))
+		for i, beta := range options.Betas {
+			betaStrs[i] = string(beta)
+		}
+		cmd = append(cmd, "--betas", strings.Join(betaStrs, ","))
+	}
 	return cmd
 }
 

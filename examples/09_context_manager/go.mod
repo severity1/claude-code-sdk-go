@@ -1,4 +1,4 @@
-module 10_context_manager
+module 09_context_manager
 
 go 1.18
 

@@ -21,11 +21,23 @@ const (
 	PermissionModeBypassPermissions PermissionMode = "bypassPermissions"
 )
 
+// SdkBeta represents a beta feature identifier.
+// See https://docs.anthropic.com/en/api/beta-headers
+type SdkBeta string
+
+const (
+	// SdkBetaContext1M enables the 1M context window beta feature.
+	SdkBetaContext1M SdkBeta = "context-1m-2025-08-07"
+)
+
 // Options configures the Claude Code SDK behavior.
 type Options struct {
 	// Tool Control
 	AllowedTools    []string `json:"allowed_tools,omitempty"`
 	DisallowedTools []string `json:"disallowed_tools,omitempty"`
+
+	// Beta Features
+	Betas []SdkBeta `json:"betas,omitempty"`
 
 	// System Prompts & Model
 	SystemPrompt       *string `json:"system_prompt,omitempty"`
@@ -155,6 +167,7 @@ func NewOptions() *Options {
 	return &Options{
 		AllowedTools:      []string{},
 		DisallowedTools:   []string{},
+		Betas:             []SdkBeta{},
 		MaxThinkingTokens: DefaultMaxThinkingTokens,
 		AddDirs:           []string{},
 		McpServers:        make(map[string]McpServerConfig),
