@@ -43,7 +43,6 @@ release:
   github:
     owner: severity1
     name: claude-code-sdk-go
-  discussion_category_name: General
   prerelease: auto
   mode: replace
   header: |
