@@ -3,6 +3,7 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -135,6 +136,7 @@ func BuildCommandWithPrompt(cliPath string, options *shared.Options, prompt stri
 // addOptionsToCommand adds all Options fields as CLI flags
 func addOptionsToCommand(cmd []string, options *shared.Options) []string {
 	cmd = addToolControlFlags(cmd, options)
+	cmd = addToolsFlag(cmd, options)
 	cmd = addModelAndPromptFlags(cmd, options)
 	cmd = addPermissionFlags(cmd, options)
 	cmd = addSessionFlags(cmd, options)
@@ -151,6 +153,26 @@ func addToolControlFlags(cmd []string, options *shared.Options) []string {
 	}
 	if len(options.DisallowedTools) > 0 {
 		cmd = append(cmd, "--disallowed-tools", strings.Join(options.DisallowedTools, ","))
+	}
+	return cmd
+}
+
+func addToolsFlag(cmd []string, options *shared.Options) []string {
+	if options.Tools == nil {
+		return cmd
+	}
+
+	switch v := options.Tools.(type) {
+	case []string:
+		if len(v) > 0 {
+			cmd = append(cmd, "--tools", strings.Join(v, ","))
+		}
+	case shared.ToolsPreset:
+		// Serialize as JSON for preset
+		data, err := json.Marshal(v)
+		if err == nil {
+			cmd = append(cmd, "--tools", string(data))
+		}
 	}
 	return cmd
 }

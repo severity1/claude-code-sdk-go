@@ -819,3 +819,77 @@ func TestWorkingDirectoryValidationStatError(t *testing.T) {
 func stringPtr(s string) *string {
 	return &s
 }
+
+// TestToolsFlagSupport tests --tools CLI flag generation for both list and preset
+func TestToolsFlagSupport(t *testing.T) {
+	tests := []struct {
+		name     string
+		options  *shared.Options
+		validate func(*testing.T, []string)
+	}{
+		{
+			name: "tools_list",
+			options: &shared.Options{
+				Tools: []string{"Read", "Write", "Edit"},
+			},
+			validate: validateToolsListFlag,
+		},
+		{
+			name: "tools_preset",
+			options: &shared.Options{
+				Tools: shared.ToolsPreset{Type: "preset", Preset: "claude_code"},
+			},
+			validate: validateToolsPresetFlag,
+		},
+		{
+			name: "tools_nil",
+			options: &shared.Options{
+				Tools: nil,
+			},
+			validate: validateNoToolsFlag,
+		},
+		{
+			name: "tools_empty_list",
+			options: &shared.Options{
+				Tools: []string{},
+			},
+			validate: validateNoToolsFlag,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			cmd := BuildCommand("/usr/local/bin/claude", test.options, true)
+			test.validate(t, cmd)
+		})
+	}
+}
+
+// validateToolsListFlag checks that --tools flag is present with comma-separated list
+func validateToolsListFlag(t *testing.T, cmd []string) {
+	t.Helper()
+	assertContainsArgs(t, cmd, "--tools", "Read,Write,Edit")
+}
+
+// validateToolsPresetFlag checks that --tools flag contains JSON preset
+func validateToolsPresetFlag(t *testing.T, cmd []string) {
+	t.Helper()
+	// Find the --tools flag and check its value contains the preset JSON
+	for i, arg := range cmd {
+		if arg == "--tools" && i+1 < len(cmd) {
+			value := cmd[i+1]
+			// Should contain type and preset fields
+			if !strings.Contains(value, `"type":"preset"`) || !strings.Contains(value, `"preset":"claude_code"`) {
+				t.Errorf("Expected --tools value to contain preset JSON, got %q", value)
+			}
+			return
+		}
+	}
+	t.Error("Expected --tools flag to be present")
+}
+
+// validateNoToolsFlag checks that --tools flag is not present
+func validateNoToolsFlag(t *testing.T, cmd []string) {
+	t.Helper()
+	assertNotContainsArg(t, cmd, "--tools")
+}

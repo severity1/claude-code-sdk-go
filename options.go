@@ -28,6 +28,9 @@ type McpHTTPServerConfig = shared.McpHTTPServerConfig
 // SdkBeta represents a beta feature identifier.
 type SdkBeta = shared.SdkBeta
 
+// ToolsPreset represents a preset tools configuration.
+type ToolsPreset = shared.ToolsPreset
+
 // Re-export constants
 const (
 	PermissionModeDefault           = shared.PermissionModeDefault
@@ -55,6 +58,28 @@ func WithDisallowedTools(tools ...string) Option {
 	return func(o *Options) {
 		o.DisallowedTools = tools
 	}
+}
+
+// WithTools sets available tools as a list of tool names.
+func WithTools(tools ...string) Option {
+	return func(o *Options) {
+		o.Tools = tools
+	}
+}
+
+// WithToolsPreset sets tools to a preset configuration.
+func WithToolsPreset(preset string) Option {
+	return func(o *Options) {
+		o.Tools = ToolsPreset{
+			Type:   "preset",
+			Preset: preset,
+		}
+	}
+}
+
+// WithClaudeCodeTools sets tools to the claude_code preset.
+func WithClaudeCodeTools() Option {
+	return WithToolsPreset("claude_code")
 }
 
 // WithSystemPrompt sets the system prompt.
