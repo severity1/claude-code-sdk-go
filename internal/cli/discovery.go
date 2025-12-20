@@ -213,8 +213,10 @@ func addFileSystemFlags(cmd []string, options *shared.Options) []string {
 }
 
 func addMCPFlags(cmd []string, _ *shared.Options) []string {
-	// TODO: Implement MCP configuration file generation when len(options.McpServers) > 0
-	// For now, skip MCP servers - this will be added in a subsequent commit
+	// Note: MCP server configuration is handled by the Transport layer.
+	// When options.McpServers is set, Transport generates a temporary config file
+	// and adds it to ExtraArgs as "--mcp-config", which is then added by addExtraFlags().
+	// This function is kept for potential future direct MCP flag support.
 	return cmd
 }
 

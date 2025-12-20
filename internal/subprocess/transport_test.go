@@ -2,6 +2,7 @@ package subprocess
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -1021,6 +1022,173 @@ func TestTransportWorkingDirectory(t *testing.T) {
 			assertNoTransportError(t, err)
 
 			// Validate working directory was set correctly via cmd.Dir
+			tt.validate(t, transport)
+		})
+	}
+}
+
+// TestTransportMcpServerConfiguration tests MCP server config file generation
+func TestTransportMcpServerConfiguration(t *testing.T) {
+	ctx, cancel := setupTransportTestContext(t, 5*time.Second)
+	defer cancel()
+
+	tests := []struct {
+		name     string
+		setup    func() *Transport
+		validate func(*testing.T, *Transport)
+	}{
+		{
+			name: "mcp_config_file_generated",
+			setup: func() *Transport {
+				mcpServers := map[string]shared.McpServerConfig{
+					"test-server": &shared.McpStdioServerConfig{
+						Type:    shared.McpServerTypeStdio,
+						Command: "node",
+						Args:    []string{"test-server.js"},
+						Env:     map[string]string{"TEST_VAR": "test_value"},
+					},
+				}
+				options := &shared.Options{
+					McpServers: mcpServers,
+				}
+				return New(newTransportMockCLI(), options, false, "sdk-go")
+			},
+			validate: func(t *testing.T, transport *Transport) {
+				t.Helper()
+				if transport.mcpConfigFile == nil {
+					t.Fatal("Expected MCP config file to be generated")
+				}
+
+				// Read and verify the generated config file
+				configData, err := os.ReadFile(transport.mcpConfigFile.Name())
+				if err != nil {
+					t.Fatalf("Failed to read MCP config file: %v", err)
+				}
+
+				// Verify it's valid JSON
+				var config map[string]interface{}
+				if err := json.Unmarshal(configData, &config); err != nil {
+					t.Fatalf("MCP config is not valid JSON: %v", err)
+				}
+
+				// Verify structure
+				mcpServers, ok := config["mcpServers"].(map[string]interface{})
+				if !ok {
+					t.Fatal("MCP config missing 'mcpServers' key")
+				}
+
+				testServer, ok := mcpServers["test-server"].(map[string]interface{})
+				if !ok {
+					t.Fatal("MCP config missing 'test-server'")
+				}
+
+				if testServer["command"] != "node" {
+					t.Errorf("Expected command 'node', got %v", testServer["command"])
+				}
+			},
+		},
+		{
+			name: "mcp_config_file_cleaned_up",
+			setup: func() *Transport {
+				mcpServers := map[string]shared.McpServerConfig{
+					"cleanup-test": &shared.McpStdioServerConfig{
+						Type:    shared.McpServerTypeStdio,
+						Command: "echo",
+						Args:    []string{"test"},
+					},
+				}
+				options := &shared.Options{
+					McpServers: mcpServers,
+				}
+				return New(newTransportMockCLI(), options, false, "sdk-go")
+			},
+			validate: func(t *testing.T, transport *Transport) {
+				t.Helper()
+				if transport.mcpConfigFile == nil {
+					t.Fatal("Expected MCP config file to be generated")
+				}
+
+				configPath := transport.mcpConfigFile.Name()
+
+				// Verify file exists while transport is connected
+				if _, err := os.Stat(configPath); os.IsNotExist(err) {
+					t.Error("MCP config file should exist while transport is connected")
+				}
+
+				// Close transport and verify cleanup
+				if err := transport.Close(); err != nil {
+					t.Errorf("Failed to close transport: %v", err)
+				}
+
+				// Verify file is deleted after cleanup
+				if _, err := os.Stat(configPath); !os.IsNotExist(err) {
+					t.Error("MCP config file should be deleted after transport Close()")
+				}
+			},
+		},
+		{
+			name: "no_mcp_config_when_servers_empty",
+			setup: func() *Transport {
+				options := &shared.Options{
+					McpServers: nil,
+				}
+				return New(newTransportMockCLI(), options, false, "sdk-go")
+			},
+			validate: func(t *testing.T, transport *Transport) {
+				t.Helper()
+				if transport.mcpConfigFile != nil {
+					t.Error("MCP config file should not be generated when McpServers is empty")
+				}
+			},
+		},
+		{
+			name: "mcp_config_added_to_extra_args",
+			setup: func() *Transport {
+				mcpServers := map[string]shared.McpServerConfig{
+					"args-test": &shared.McpStdioServerConfig{
+						Type:    shared.McpServerTypeStdio,
+						Command: "test",
+					},
+				}
+				options := &shared.Options{
+					McpServers: mcpServers,
+					ExtraArgs:  map[string]*string{"existing": stringPtr("value")},
+				}
+				return New(newTransportMockCLI(), options, false, "sdk-go")
+			},
+			validate: func(t *testing.T, transport *Transport) {
+				t.Helper()
+				// Verify the command includes --mcp-config flag
+				if transport.cmd == nil {
+					t.Fatal("Expected command to be initialized")
+				}
+
+				cmdStr := strings.Join(transport.cmd.Args, " ")
+				if !strings.Contains(cmdStr, "--mcp-config") {
+					t.Errorf("Expected command to contain --mcp-config flag, got: %s", cmdStr)
+				}
+
+				// Verify original ExtraArgs was not mutated
+				if transport.options.ExtraArgs["mcp-config"] != nil {
+					t.Error("Original options.ExtraArgs should not be mutated")
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			transport := tt.setup()
+			// Note: cleanup is handled in the validate function for cleanup test
+			if tt.name != "mcp_config_file_cleaned_up" {
+				defer disconnectTransportSafely(t, transport)
+			}
+
+			// Connect to trigger MCP config generation
+			err := transport.Connect(ctx)
+			assertNoTransportError(t, err)
+
+			// Run validation
 			tt.validate(t, transport)
 		})
 	}
