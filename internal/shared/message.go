@@ -103,6 +103,14 @@ func (m *AssistantMessage) HasError() bool {
 	return m.Error != nil
 }
 
+// GetError returns the error type or empty string if nil.
+func (m *AssistantMessage) GetError() AssistantMessageError {
+	if m.Error != nil {
+		return *m.Error
+	}
+	return ""
+}
+
 // IsRateLimited returns true if the error is a rate limit error.
 func (m *AssistantMessage) IsRateLimited() bool {
 	return m.Error != nil && *m.Error == AssistantMessageErrorRateLimit

@@ -512,8 +512,32 @@ func TestAssistantMessageNoError(t *testing.T) {
 	if msg.HasError() {
 		t.Error("HasError() = true, want false for nil error")
 	}
+	if msg.GetError() != "" {
+		t.Errorf("GetError() = %q, want empty string for nil error", msg.GetError())
+	}
 	if msg.IsRateLimited() {
 		t.Error("IsRateLimited() = true, want false for nil error")
+	}
+}
+
+// TestAssistantMessageGetError tests the GetError helper method
+func TestAssistantMessageGetError(t *testing.T) {
+	tests := []struct {
+		name     string
+		errType  *AssistantMessageError
+		expected AssistantMessageError
+	}{
+		{"nil error returns empty", nil, ""},
+		{"rate_limit returns value", func() *AssistantMessageError { e := AssistantMessageErrorRateLimit; return &e }(), AssistantMessageErrorRateLimit},
+		{"auth_failed returns value", func() *AssistantMessageError { e := AssistantMessageErrorAuthFailed; return &e }(), AssistantMessageErrorAuthFailed},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			msg := &AssistantMessage{Error: tt.errType}
+			if got := msg.GetError(); got != tt.expected {
+				t.Errorf("GetError() = %q, want %q", got, tt.expected)
+			}
+		})
 	}
 }
 
