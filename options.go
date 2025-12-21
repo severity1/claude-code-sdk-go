@@ -37,6 +37,15 @@ type ToolsPreset = shared.ToolsPreset
 // SettingSource represents a settings source location.
 type SettingSource = shared.SettingSource
 
+// SandboxSettings configures sandbox behavior for bash command execution.
+type SandboxSettings = shared.SandboxSettings
+
+// SandboxNetworkConfig configures network access within sandbox.
+type SandboxNetworkConfig = shared.SandboxNetworkConfig
+
+// SandboxIgnoreViolations specifies patterns to ignore during sandbox violations.
+type SandboxIgnoreViolations = shared.SandboxIgnoreViolations
+
 // SdkPluginType represents the type of SDK plugin.
 type SdkPluginType = shared.SdkPluginType
 
@@ -282,6 +291,57 @@ func WithEnvVar(key, value string) Option {
 func WithBetas(betas ...SdkBeta) Option {
 	return func(o *Options) {
 		o.Betas = betas
+	}
+}
+
+// WithSandbox sets the sandbox settings for bash command isolation.
+func WithSandbox(sandbox *SandboxSettings) Option {
+	return func(o *Options) {
+		o.Sandbox = sandbox
+	}
+}
+
+// WithSandboxEnabled enables or disables sandbox.
+// If sandbox settings don't exist, they are initialized.
+func WithSandboxEnabled(enabled bool) Option {
+	return func(o *Options) {
+		if o.Sandbox == nil {
+			o.Sandbox = &SandboxSettings{}
+		}
+		o.Sandbox.Enabled = enabled
+	}
+}
+
+// WithAutoAllowBashIfSandboxed sets whether to auto-approve bash when sandboxed.
+// If sandbox settings don't exist, they are initialized.
+func WithAutoAllowBashIfSandboxed(autoAllow bool) Option {
+	return func(o *Options) {
+		if o.Sandbox == nil {
+			o.Sandbox = &SandboxSettings{}
+		}
+		o.Sandbox.AutoAllowBashIfSandboxed = autoAllow
+	}
+}
+
+// WithSandboxExcludedCommands sets commands that always bypass sandbox.
+// If sandbox settings don't exist, they are initialized.
+func WithSandboxExcludedCommands(commands ...string) Option {
+	return func(o *Options) {
+		if o.Sandbox == nil {
+			o.Sandbox = &SandboxSettings{}
+		}
+		o.Sandbox.ExcludedCommands = commands
+	}
+}
+
+// WithSandboxNetwork sets the network configuration for sandbox.
+// If sandbox settings don't exist, they are initialized.
+func WithSandboxNetwork(network *SandboxNetworkConfig) Option {
+	return func(o *Options) {
+		if o.Sandbox == nil {
+			o.Sandbox = &SandboxSettings{}
+		}
+		o.Sandbox.Network = network
 	}
 }
 

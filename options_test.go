@@ -2048,3 +2048,386 @@ func assertOutputFormatHasSchema(t *testing.T, opts *Options) {
 		t.Error("Expected OutputFormat.Schema to be set")
 	}
 }
+
+// T041: Sandbox Settings Option
+func TestWithSandbox(t *testing.T) {
+	tests := []struct {
+		name     string
+		sandbox  *SandboxSettings
+		validate func(*testing.T, *Options)
+	}{
+		{
+			name: "full_sandbox_settings",
+			sandbox: &SandboxSettings{
+				Enabled:                  true,
+				AutoAllowBashIfSandboxed: true,
+				ExcludedCommands:         []string{"docker", "git"},
+				AllowUnsandboxedCommands: false,
+				Network: &SandboxNetworkConfig{
+					AllowUnixSockets:  []string{"/var/run/docker.sock"},
+					AllowLocalBinding: true,
+				},
+				IgnoreViolations: &SandboxIgnoreViolations{
+					File:    []string{"/tmp/*"},
+					Network: []string{"localhost"},
+				},
+				EnableWeakerNestedSandbox: false,
+			},
+			validate: func(t *testing.T, options *Options) {
+				t.Helper()
+				assertOptionsSandboxNotNil(t, options)
+				assertOptionsSandboxEnabled(t, options, true)
+				assertOptionsSandboxAutoAllow(t, options, true)
+				assertOptionsSandboxExcludedCommands(t, options, []string{"docker", "git"})
+				assertOptionsSandboxAllowUnsandboxed(t, options, false)
+				assertOptionsSandboxNetworkNotNil(t, options)
+				assertOptionsSandboxNetworkAllowLocalBinding(t, options, true)
+				assertOptionsSandboxIgnoreViolationsNotNil(t, options)
+			},
+		},
+		{
+			name: "minimal_sandbox_enabled",
+			sandbox: &SandboxSettings{
+				Enabled: true,
+			},
+			validate: func(t *testing.T, options *Options) {
+				t.Helper()
+				assertOptionsSandboxNotNil(t, options)
+				assertOptionsSandboxEnabled(t, options, true)
+			},
+		},
+		{
+			name:    "nil_sandbox",
+			sandbox: nil,
+			validate: func(t *testing.T, options *Options) {
+				t.Helper()
+				assertOptionsSandboxNil(t, options)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			options := NewOptions(WithSandbox(tt.sandbox))
+			tt.validate(t, options)
+		})
+	}
+}
+
+// T042: Sandbox Enabled Convenience Option
+func TestWithSandboxEnabled(t *testing.T) {
+	tests := []struct {
+		name     string
+		enabled  bool
+		expected bool
+	}{
+		{"enabled", true, true},
+		{"disabled", false, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			options := NewOptions(WithSandboxEnabled(tt.enabled))
+			assertOptionsSandboxNotNil(t, options)
+			assertOptionsSandboxEnabled(t, options, tt.expected)
+		})
+	}
+}
+
+// T043: Auto Allow Bash Convenience Option
+func TestWithAutoAllowBashIfSandboxed(t *testing.T) {
+	tests := []struct {
+		name      string
+		autoAllow bool
+		expected  bool
+	}{
+		{"enabled", true, true},
+		{"disabled", false, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			options := NewOptions(WithAutoAllowBashIfSandboxed(tt.autoAllow))
+			assertOptionsSandboxNotNil(t, options)
+			assertOptionsSandboxAutoAllow(t, options, tt.expected)
+		})
+	}
+}
+
+// T044: Sandbox Excluded Commands Option
+func TestWithSandboxExcludedCommands(t *testing.T) {
+	tests := []struct {
+		name     string
+		commands []string
+		expected []string
+	}{
+		{"single_command", []string{"docker"}, []string{"docker"}},
+		{"multiple_commands", []string{"docker", "git", "npm"}, []string{"docker", "git", "npm"}},
+		{"empty_commands", []string{}, []string{}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			options := NewOptions(WithSandboxExcludedCommands(tt.commands...))
+			assertOptionsSandboxNotNil(t, options)
+			assertOptionsSandboxExcludedCommands(t, options, tt.expected)
+		})
+	}
+}
+
+// T045: Sandbox Network Configuration Option
+func TestWithSandboxNetwork(t *testing.T) {
+	tests := []struct {
+		name     string
+		network  *SandboxNetworkConfig
+		validate func(*testing.T, *Options)
+	}{
+		{
+			name: "full_network_config",
+			network: &SandboxNetworkConfig{
+				AllowUnixSockets:    []string{"/var/run/docker.sock", "/tmp/socket"},
+				AllowAllUnixSockets: false,
+				AllowLocalBinding:   true,
+				HTTPProxyPort:       intPtr(8080),
+				SOCKSProxyPort:      intPtr(1080),
+			},
+			validate: func(t *testing.T, options *Options) {
+				t.Helper()
+				assertOptionsSandboxNotNil(t, options)
+				assertOptionsSandboxNetworkNotNil(t, options)
+				assertOptionsSandboxNetworkAllowLocalBinding(t, options, true)
+				assertOptionsSandboxNetworkUnixSockets(t, options, []string{"/var/run/docker.sock", "/tmp/socket"})
+			},
+		},
+		{
+			name:    "nil_network",
+			network: nil,
+			validate: func(t *testing.T, options *Options) {
+				t.Helper()
+				assertOptionsSandboxNotNil(t, options)
+				assertOptionsSandboxNetworkNil(t, options)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			options := NewOptions(WithSandboxNetwork(tt.network))
+			tt.validate(t, options)
+		})
+	}
+}
+
+// T046: Sandbox Options Composition
+func TestSandboxOptionsComposition(t *testing.T) {
+	// Test that multiple sandbox options compose correctly
+	options := NewOptions(
+		WithSandboxEnabled(true),
+		WithAutoAllowBashIfSandboxed(true),
+		WithSandboxExcludedCommands("docker", "git"),
+		WithSandboxNetwork(&SandboxNetworkConfig{
+			AllowLocalBinding: true,
+		}),
+	)
+
+	assertOptionsSandboxNotNil(t, options)
+	assertOptionsSandboxEnabled(t, options, true)
+	assertOptionsSandboxAutoAllow(t, options, true)
+	assertOptionsSandboxExcludedCommands(t, options, []string{"docker", "git"})
+	assertOptionsSandboxNetworkAllowLocalBinding(t, options, true)
+}
+
+// T047: Sandbox Option Override Behavior
+func TestSandboxOptionOverride(t *testing.T) {
+	// Test that WithSandbox replaces previous sandbox settings
+	t.Run("full_replace", func(t *testing.T) {
+		options := NewOptions(
+			WithSandboxEnabled(true),
+			WithSandbox(&SandboxSettings{
+				Enabled:                  false,
+				AutoAllowBashIfSandboxed: true,
+			}),
+		)
+		assertOptionsSandboxEnabled(t, options, false)
+		assertOptionsSandboxAutoAllow(t, options, true)
+	})
+
+	// Test that convenience options initialize nil sandbox
+	t.Run("initialize_nil_sandbox", func(t *testing.T) {
+		options := NewOptions()
+		assertOptionsSandboxNil(t, options)
+
+		options = NewOptions(WithSandboxEnabled(true))
+		assertOptionsSandboxNotNil(t, options)
+		assertOptionsSandboxEnabled(t, options, true)
+	})
+}
+
+// T048: Sandbox Integration with Other Options
+func TestSandboxIntegrationWithOtherOptions(t *testing.T) {
+	options := NewOptions(
+		WithSystemPrompt("You are a helpful assistant"),
+		WithModel("claude-3-5-sonnet-20241022"),
+		WithSandbox(&SandboxSettings{
+			Enabled:                  true,
+			AutoAllowBashIfSandboxed: true,
+		}),
+		WithPermissionMode(PermissionModeAcceptEdits),
+	)
+
+	// Verify sandbox settings preserved alongside other options
+	assertOptionsSystemPrompt(t, options, "You are a helpful assistant")
+	assertOptionsModel(t, options, "claude-3-5-sonnet-20241022")
+	assertOptionsPermissionMode(t, options, PermissionModeAcceptEdits)
+	assertOptionsSandboxNotNil(t, options)
+	assertOptionsSandboxEnabled(t, options, true)
+}
+
+// T049: Sandbox Nil by Default
+func TestSandboxNilByDefault(t *testing.T) {
+	options := NewOptions()
+	assertOptionsSandboxNil(t, options)
+}
+
+// Helper functions for sandbox options
+
+// assertOptionsSandboxNil verifies Sandbox is nil
+func assertOptionsSandboxNil(t *testing.T, options *Options) {
+	t.Helper()
+	if options.Sandbox != nil {
+		t.Errorf("Expected Sandbox = nil, got %+v", options.Sandbox)
+	}
+}
+
+// assertOptionsSandboxNotNil verifies Sandbox is not nil
+func assertOptionsSandboxNotNil(t *testing.T, options *Options) {
+	t.Helper()
+	if options.Sandbox == nil {
+		t.Error("Expected Sandbox to be set, got nil")
+	}
+}
+
+// assertOptionsSandboxEnabled verifies Sandbox.Enabled value
+func assertOptionsSandboxEnabled(t *testing.T, options *Options, expected bool) {
+	t.Helper()
+	if options.Sandbox == nil {
+		t.Error("Expected Sandbox to be set, got nil")
+		return
+	}
+	if options.Sandbox.Enabled != expected {
+		t.Errorf("Expected Sandbox.Enabled = %v, got %v", expected, options.Sandbox.Enabled)
+	}
+}
+
+// assertOptionsSandboxAutoAllow verifies Sandbox.AutoAllowBashIfSandboxed value
+func assertOptionsSandboxAutoAllow(t *testing.T, options *Options, expected bool) {
+	t.Helper()
+	if options.Sandbox == nil {
+		t.Error("Expected Sandbox to be set, got nil")
+		return
+	}
+	if options.Sandbox.AutoAllowBashIfSandboxed != expected {
+		t.Errorf("Expected Sandbox.AutoAllowBashIfSandboxed = %v, got %v", expected, options.Sandbox.AutoAllowBashIfSandboxed)
+	}
+}
+
+// assertOptionsSandboxAllowUnsandboxed verifies Sandbox.AllowUnsandboxedCommands value
+func assertOptionsSandboxAllowUnsandboxed(t *testing.T, options *Options, expected bool) {
+	t.Helper()
+	if options.Sandbox == nil {
+		t.Error("Expected Sandbox to be set, got nil")
+		return
+	}
+	if options.Sandbox.AllowUnsandboxedCommands != expected {
+		t.Errorf("Expected Sandbox.AllowUnsandboxedCommands = %v, got %v", expected, options.Sandbox.AllowUnsandboxedCommands)
+	}
+}
+
+// assertOptionsSandboxExcludedCommands verifies Sandbox.ExcludedCommands slice
+func assertOptionsSandboxExcludedCommands(t *testing.T, options *Options, expected []string) {
+	t.Helper()
+	if options.Sandbox == nil {
+		t.Error("Expected Sandbox to be set, got nil")
+		return
+	}
+	if len(options.Sandbox.ExcludedCommands) != len(expected) {
+		t.Errorf("Expected Sandbox.ExcludedCommands length = %d, got %d", len(expected), len(options.Sandbox.ExcludedCommands))
+		return
+	}
+	for i, exp := range expected {
+		if options.Sandbox.ExcludedCommands[i] != exp {
+			t.Errorf("Expected Sandbox.ExcludedCommands[%d] = %q, got %q", i, exp, options.Sandbox.ExcludedCommands[i])
+		}
+	}
+}
+
+// assertOptionsSandboxNetworkNil verifies Sandbox.Network is nil
+func assertOptionsSandboxNetworkNil(t *testing.T, options *Options) {
+	t.Helper()
+	if options.Sandbox == nil {
+		t.Error("Expected Sandbox to be set, got nil")
+		return
+	}
+	if options.Sandbox.Network != nil {
+		t.Errorf("Expected Sandbox.Network = nil, got %+v", options.Sandbox.Network)
+	}
+}
+
+// assertOptionsSandboxNetworkNotNil verifies Sandbox.Network is not nil
+func assertOptionsSandboxNetworkNotNil(t *testing.T, options *Options) {
+	t.Helper()
+	if options.Sandbox == nil {
+		t.Error("Expected Sandbox to be set, got nil")
+		return
+	}
+	if options.Sandbox.Network == nil {
+		t.Error("Expected Sandbox.Network to be set, got nil")
+	}
+}
+
+// assertOptionsSandboxNetworkAllowLocalBinding verifies Network.AllowLocalBinding
+func assertOptionsSandboxNetworkAllowLocalBinding(t *testing.T, options *Options, expected bool) {
+	t.Helper()
+	if options.Sandbox == nil || options.Sandbox.Network == nil {
+		t.Error("Expected Sandbox.Network to be set, got nil")
+		return
+	}
+	if options.Sandbox.Network.AllowLocalBinding != expected {
+		t.Errorf("Expected Network.AllowLocalBinding = %v, got %v", expected, options.Sandbox.Network.AllowLocalBinding)
+	}
+}
+
+// assertOptionsSandboxNetworkUnixSockets verifies Network.AllowUnixSockets
+func assertOptionsSandboxNetworkUnixSockets(t *testing.T, options *Options, expected []string) {
+	t.Helper()
+	if options.Sandbox == nil || options.Sandbox.Network == nil {
+		t.Error("Expected Sandbox.Network to be set, got nil")
+		return
+	}
+	if len(options.Sandbox.Network.AllowUnixSockets) != len(expected) {
+		t.Errorf("Expected Network.AllowUnixSockets length = %d, got %d", len(expected), len(options.Sandbox.Network.AllowUnixSockets))
+		return
+	}
+	for i, exp := range expected {
+		if options.Sandbox.Network.AllowUnixSockets[i] != exp {
+			t.Errorf("Expected Network.AllowUnixSockets[%d] = %q, got %q", i, exp, options.Sandbox.Network.AllowUnixSockets[i])
+		}
+	}
+}
+
+// assertOptionsSandboxIgnoreViolationsNotNil verifies Sandbox.IgnoreViolations is not nil
+func assertOptionsSandboxIgnoreViolationsNotNil(t *testing.T, options *Options) {
+	t.Helper()
+	if options.Sandbox == nil {
+		t.Error("Expected Sandbox to be set, got nil")
+		return
+	}
+	if options.Sandbox.IgnoreViolations == nil {
+		t.Error("Expected Sandbox.IgnoreViolations to be set, got nil")
+	}
+}
+
+// intPtr creates a pointer to an int
+func intPtr(i int) *int {
+	return &i
+}

@@ -1039,6 +1039,81 @@ func TestPluginsFlagSupport(t *testing.T) {
 	}
 }
 
+// TestSandboxFlagSupport tests --settings flag generation for sandbox configuration
+func TestSandboxFlagSupport(t *testing.T) {
+	tests := []struct {
+		name     string
+		options  *shared.Options
+		validate func(*testing.T, []string)
+	}{
+		{
+			name: "sandbox_enabled",
+			options: &shared.Options{
+				Sandbox: &shared.SandboxSettings{
+					Enabled:                  true,
+					AutoAllowBashIfSandboxed: true,
+				},
+				SettingSources: []shared.SettingSource{},
+			},
+			validate: validateSandboxEnabled,
+		},
+		{
+			name: "sandbox_with_excluded_commands",
+			options: &shared.Options{
+				Sandbox: &shared.SandboxSettings{
+					Enabled:          true,
+					ExcludedCommands: []string{"docker", "git"},
+				},
+				SettingSources: []shared.SettingSource{},
+			},
+			validate: validateSandboxWithExcludedCommands,
+		},
+		{
+			name: "sandbox_with_network_config",
+			options: &shared.Options{
+				Sandbox: &shared.SandboxSettings{
+					Enabled: true,
+					Network: &shared.SandboxNetworkConfig{
+						AllowUnixSockets:  []string{"/var/run/docker.sock"},
+						AllowLocalBinding: true,
+					},
+				},
+				SettingSources: []shared.SettingSource{},
+			},
+			validate: validateSandboxWithNetwork,
+		},
+		{
+			name: "sandbox_nil",
+			options: &shared.Options{
+				Sandbox:        nil,
+				SettingSources: []shared.SettingSource{},
+			},
+			validate: validateNoSandboxSettings,
+		},
+		{
+			name: "sandbox_with_ignore_violations",
+			options: &shared.Options{
+				Sandbox: &shared.SandboxSettings{
+					Enabled: true,
+					IgnoreViolations: &shared.SandboxIgnoreViolations{
+						File:    []string{"/tmp/*"},
+						Network: []string{"localhost"},
+					},
+				},
+				SettingSources: []shared.SettingSource{},
+			},
+			validate: validateSandboxWithIgnoreViolations,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			cmd := BuildCommand("/usr/local/bin/claude", test.options, true)
+			test.validate(t, cmd)
+		})
+	}
+}
+
 // TestPluginsWithOtherFlags tests plugins work alongside other CLI flags
 func TestPluginsWithOtherFlags(t *testing.T) {
 	options := &shared.Options{
@@ -1109,6 +1184,133 @@ func validateMultiplePluginFlags(t *testing.T, cmd []string) {
 func validateNoPluginFlag(t *testing.T, cmd []string) {
 	t.Helper()
 	assertNotContainsArg(t, cmd, "--plugin-dir")
+}
+
+const settingsFlag = "--settings"
+
+// validateSandboxEnabled checks that --settings flag contains sandbox enabled config
+func validateSandboxEnabled(t *testing.T, cmd []string) {
+	t.Helper()
+	// Find the --settings flag and check its value contains sandbox config
+	for i, arg := range cmd {
+		if arg == settingsFlag && i+1 < len(cmd) {
+			value := cmd[i+1]
+			// Should contain sandbox enabled fields
+			if !strings.Contains(value, `"sandbox"`) {
+				t.Errorf("Expected --settings value to contain sandbox config, got %q", value)
+			}
+			if !strings.Contains(value, `"enabled":true`) {
+				t.Errorf("Expected --settings value to contain enabled:true, got %q", value)
+			}
+			return
+		}
+	}
+	t.Error("Expected --settings flag to be present for sandbox configuration")
+}
+
+// validateSandboxWithExcludedCommands checks sandbox with excluded commands
+func validateSandboxWithExcludedCommands(t *testing.T, cmd []string) {
+	t.Helper()
+	for i, arg := range cmd {
+		if arg == settingsFlag && i+1 < len(cmd) {
+			value := cmd[i+1]
+			if !strings.Contains(value, `"excludedCommands"`) {
+				t.Errorf("Expected --settings value to contain excludedCommands, got %q", value)
+			}
+			if !strings.Contains(value, `"docker"`) {
+				t.Errorf("Expected --settings value to contain docker command, got %q", value)
+			}
+			return
+		}
+	}
+	t.Error("Expected --settings flag to be present")
+}
+
+// validateSandboxWithNetwork checks sandbox with network configuration
+func validateSandboxWithNetwork(t *testing.T, cmd []string) {
+	t.Helper()
+	for i, arg := range cmd {
+		if arg == settingsFlag && i+1 < len(cmd) {
+			value := cmd[i+1]
+			if !strings.Contains(value, `"network"`) {
+				t.Errorf("Expected --settings value to contain network config, got %q", value)
+			}
+			if !strings.Contains(value, `"allowLocalBinding":true`) {
+				t.Errorf("Expected --settings value to contain allowLocalBinding:true, got %q", value)
+			}
+			return
+		}
+	}
+	t.Error("Expected --settings flag to be present")
+}
+
+// validateNoSandboxSettings checks that no sandbox-related --settings is added
+func validateNoSandboxSettings(t *testing.T, cmd []string) {
+	t.Helper()
+	// When sandbox is nil, we should not add a --settings flag for sandbox
+	// (unless there's an existing Settings value)
+	for i, arg := range cmd {
+		if arg == settingsFlag && i+1 < len(cmd) {
+			value := cmd[i+1]
+			if strings.Contains(value, `"sandbox"`) {
+				t.Errorf("Expected no sandbox in --settings when Sandbox is nil, got %q", value)
+			}
+		}
+	}
+}
+
+// validateSandboxWithIgnoreViolations checks sandbox with ignore violations
+func validateSandboxWithIgnoreViolations(t *testing.T, cmd []string) {
+	t.Helper()
+	for i, arg := range cmd {
+		if arg == settingsFlag && i+1 < len(cmd) {
+			value := cmd[i+1]
+			if !strings.Contains(value, `"ignoreViolations"`) {
+				t.Errorf("Expected --settings value to contain ignoreViolations, got %q", value)
+			}
+			return
+		}
+	}
+	t.Error("Expected --settings flag to be present")
+}
+
+// TestSandboxWithExistingSettings tests sandbox merging with existing settings
+func TestSandboxWithExistingSettings(t *testing.T) {
+	existingSettings := `{"model":"claude-3-sonnet"}`
+	options := &shared.Options{
+		Settings: &existingSettings,
+		Sandbox: &shared.SandboxSettings{
+			Enabled: true,
+		},
+		SettingSources: []shared.SettingSource{},
+	}
+
+	cmd := BuildCommand("/usr/local/bin/claude", options, true)
+
+	// Count --settings flags - must be exactly 1
+	settingsCount := 0
+	var settingsValue string
+	for i, arg := range cmd {
+		if arg == settingsFlag && i+1 < len(cmd) {
+			settingsCount++
+			settingsValue = cmd[i+1]
+		}
+	}
+
+	if settingsCount != 1 {
+		t.Errorf("Expected exactly 1 --settings flag, got %d", settingsCount)
+	}
+
+	// MUST contain BOTH sandbox AND model in merged JSON
+	if !strings.Contains(settingsValue, `"sandbox"`) {
+		t.Errorf("Expected --settings to contain 'sandbox', got %q", settingsValue)
+	}
+	if !strings.Contains(settingsValue, `"model"`) {
+		t.Errorf("Expected --settings to contain 'model', got %q", settingsValue)
+	}
+	if !strings.Contains(settingsValue, `"enabled":true`) {
+		t.Errorf("Expected --settings to contain sandbox enabled:true, got %q", settingsValue)
+	}
 }
 
 // TestOutputFormatFlagSupport tests --json-schema CLI flag generation for structured output

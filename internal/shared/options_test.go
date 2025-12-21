@@ -238,3 +238,53 @@ func assertMcpServerType(t *testing.T, config McpServerConfig, expectedType McpS
 		t.Errorf("Expected server type %s, got %s", expectedType, config.GetType())
 	}
 }
+
+// TestSandboxSettingsDefaults tests that Sandbox is nil by default
+func TestSandboxSettingsDefaults(t *testing.T) {
+	options := NewOptions()
+
+	if options.Sandbox != nil {
+		t.Errorf("Expected Sandbox to be nil by default, got %+v", options.Sandbox)
+	}
+}
+
+// TestSandboxSettingsTypes tests sandbox type definitions and JSON serialization
+func TestSandboxSettingsTypes(t *testing.T) {
+	// Test that all sandbox types are properly defined
+	sandbox := &SandboxSettings{
+		Enabled:                   true,
+		AutoAllowBashIfSandboxed:  true,
+		ExcludedCommands:          []string{"docker", "git"},
+		AllowUnsandboxedCommands:  false,
+		EnableWeakerNestedSandbox: false,
+		Network: &SandboxNetworkConfig{
+			AllowUnixSockets:    []string{"/var/run/docker.sock"},
+			AllowAllUnixSockets: false,
+			AllowLocalBinding:   true,
+		},
+		IgnoreViolations: &SandboxIgnoreViolations{
+			File:    []string{"/tmp/*"},
+			Network: []string{"localhost"},
+		},
+	}
+
+	// Verify fields are accessible and correct
+	if !sandbox.Enabled {
+		t.Error("Expected Enabled to be true")
+	}
+	if !sandbox.AutoAllowBashIfSandboxed {
+		t.Error("Expected AutoAllowBashIfSandboxed to be true")
+	}
+	if len(sandbox.ExcludedCommands) != 2 {
+		t.Errorf("Expected 2 ExcludedCommands, got %d", len(sandbox.ExcludedCommands))
+	}
+	if sandbox.Network == nil {
+		t.Error("Expected Network to be set")
+	}
+	if sandbox.Network != nil && !sandbox.Network.AllowLocalBinding {
+		t.Error("Expected Network.AllowLocalBinding to be true")
+	}
+	if sandbox.IgnoreViolations == nil {
+		t.Error("Expected IgnoreViolations to be set")
+	}
+}

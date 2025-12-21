@@ -51,6 +51,46 @@ const (
 	SettingSourceLocal SettingSource = "local"
 )
 
+// SandboxNetworkConfig configures network access within sandbox.
+type SandboxNetworkConfig struct {
+	// AllowUnixSockets specifies Unix socket paths accessible in sandbox.
+	AllowUnixSockets []string `json:"allowUnixSockets,omitempty"`
+	// AllowAllUnixSockets allows all Unix sockets (less secure).
+	AllowAllUnixSockets bool `json:"allowAllUnixSockets,omitempty"`
+	// AllowLocalBinding allows binding to localhost ports (macOS only).
+	AllowLocalBinding bool `json:"allowLocalBinding,omitempty"`
+	// HTTPProxyPort is the HTTP proxy port if using custom proxy.
+	HTTPProxyPort *int `json:"httpProxyPort,omitempty"`
+	// SOCKSProxyPort is the SOCKS5 proxy port if using custom proxy.
+	SOCKSProxyPort *int `json:"socksProxyPort,omitempty"`
+}
+
+// SandboxIgnoreViolations specifies patterns to ignore during sandbox violations.
+type SandboxIgnoreViolations struct {
+	// File paths for which violations should be ignored.
+	File []string `json:"file,omitempty"`
+	// Network hosts for which violations should be ignored.
+	Network []string `json:"network,omitempty"`
+}
+
+// SandboxSettings configures sandbox behavior for bash command execution.
+type SandboxSettings struct {
+	// Enabled enables bash sandboxing (macOS/Linux only).
+	Enabled bool `json:"enabled,omitempty"`
+	// AutoAllowBashIfSandboxed auto-approves bash when sandboxed.
+	AutoAllowBashIfSandboxed bool `json:"autoAllowBashIfSandboxed,omitempty"`
+	// ExcludedCommands are commands that always bypass sandbox automatically.
+	ExcludedCommands []string `json:"excludedCommands,omitempty"`
+	// AllowUnsandboxedCommands allows commands to bypass sandbox.
+	AllowUnsandboxedCommands bool `json:"allowUnsandboxedCommands,omitempty"`
+	// Network configures network access in sandbox.
+	Network *SandboxNetworkConfig `json:"network,omitempty"`
+	// IgnoreViolations configures which violations to ignore.
+	IgnoreViolations *SandboxIgnoreViolations `json:"ignoreViolations,omitempty"`
+	// EnableWeakerNestedSandbox for unprivileged Docker (Linux only).
+	EnableWeakerNestedSandbox bool `json:"enableWeakerNestedSandbox,omitempty"`
+}
+
 // SdkPluginType represents the type of SDK plugin.
 type SdkPluginType string
 
@@ -119,6 +159,9 @@ type Options struct {
 
 	// MCP Integration
 	McpServers map[string]McpServerConfig `json:"mcp_servers,omitempty"`
+
+	// Sandbox Configuration
+	Sandbox *SandboxSettings `json:"sandbox,omitempty"`
 
 	// Plugin Configurations
 	Plugins []SdkPluginConfig `json:"plugins,omitempty"`
