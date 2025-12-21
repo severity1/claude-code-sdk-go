@@ -142,8 +142,10 @@ func addOptionsToCommand(cmd []string, options *shared.Options) []string {
 	cmd = addSessionFlags(cmd, options)
 	cmd = addFileSystemFlags(cmd, options)
 	cmd = addMCPFlags(cmd, options)
+	cmd = addPluginsFlag(cmd, options)
 	cmd = addBetasFlag(cmd, options)
 	cmd = addSandboxFlags(cmd, options)
+	cmd = addOutputFormatFlags(cmd, options)
 	cmd = addExtraFlags(cmd, options)
 	return cmd
 }
@@ -271,6 +273,16 @@ func addBetasFlag(cmd []string, options *shared.Options) []string {
 	return cmd
 }
 
+func addPluginsFlag(cmd []string, options *shared.Options) []string {
+	for _, plugin := range options.Plugins {
+		if plugin.Type == shared.SdkPluginTypeLocal {
+			cmd = append(cmd, "--plugin-dir", plugin.Path)
+		}
+		// Note: Future plugin types would be handled here
+	}
+	return cmd
+}
+
 func addSandboxFlags(cmd []string, options *shared.Options) []string {
 	if options.Sandbox == nil {
 		return cmd
@@ -300,6 +312,22 @@ func addSandboxFlags(cmd []string, options *shared.Options) []string {
 	cmd = append(cmd, "--settings", string(data))
 	return cmd
 }
+
+func addOutputFormatFlags(cmd []string, options *shared.Options) []string {
+	if options.OutputFormat == nil || options.OutputFormat.Schema == nil {
+		return cmd
+	}
+
+	// Serialize schema to JSON for CLI flag
+	schemaData, err := json.Marshal(options.OutputFormat.Schema)
+	if err != nil {
+		// Silently skip on marshal error (shouldn't happen with valid schemas)
+		return cmd
+	}
+
+	return append(cmd, "--json-schema", string(schemaData))
+}
+
 
 func addExtraFlags(cmd []string, options *shared.Options) []string {
 	for flag, value := range options.ExtraArgs {

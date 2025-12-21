@@ -1,6 +1,9 @@
 package shared
 
-import "fmt"
+import (
+	"fmt"
+	"io"
+)
 
 const (
 	// DefaultMaxThinkingTokens is the default maximum number of thinking tokens.
@@ -88,6 +91,29 @@ type SandboxSettings struct {
 	EnableWeakerNestedSandbox bool `json:"enableWeakerNestedSandbox,omitempty"`
 }
 
+// SdkPluginType represents the type of SDK plugin.
+type SdkPluginType string
+
+const (
+	// SdkPluginTypeLocal represents a local plugin loaded from the filesystem.
+	SdkPluginTypeLocal SdkPluginType = "local"
+)
+
+// SdkPluginConfig represents a plugin configuration.
+type SdkPluginConfig struct {
+	// Type is the plugin type (currently only "local" is supported).
+	Type SdkPluginType `json:"type"`
+	// Path is the filesystem path to the plugin directory.
+	Path string `json:"path"`
+}
+
+// OutputFormat specifies the format for structured output.
+// Matches the Messages API structure: {"type": "json_schema", "schema": {...}}
+type OutputFormat struct {
+	Type   string         `json:"type"`   // Always "json_schema"
+	Schema map[string]any `json:"schema"` // JSON Schema definition
+}
+
 // Options configures the Claude Code SDK behavior.
 type Options struct {
 	// Tool Control
@@ -137,6 +163,9 @@ type Options struct {
 	// Sandbox Configuration
 	Sandbox *SandboxSettings `json:"sandbox,omitempty"`
 
+	// Plugin Configurations
+	Plugins []SdkPluginConfig `json:"plugins,omitempty"`
+
 	// Extensibility
 	ExtraArgs map[string]*string `json:"extra_args,omitempty"`
 
@@ -144,8 +173,17 @@ type Options struct {
 	// These are merged with the system environment variables.
 	ExtraEnv map[string]string `json:"extra_env,omitempty"`
 
+	// OutputFormat specifies structured output format with JSON schema.
+	// When set, Claude's response will conform to the provided schema.
+	OutputFormat *OutputFormat `json:"output_format,omitempty"`
+
 	// CLI Path (for testing and custom installations)
 	CLIPath *string `json:"cli_path,omitempty"`
+
+	// DebugWriter specifies where to write debug output from the CLI subprocess.
+	// If nil (default), stderr is isolated to a temporary file to prevent deadlocks.
+	// Common values: os.Stderr, io.Discard, or a custom io.Writer.
+	DebugWriter io.Writer `json:"-"` // Not serialized
 }
 
 // McpServerType represents the type of MCP server.
@@ -238,6 +276,7 @@ func NewOptions() *Options {
 		MaxThinkingTokens: DefaultMaxThinkingTokens,
 		AddDirs:           []string{},
 		McpServers:        make(map[string]McpServerConfig),
+		Plugins:           []SdkPluginConfig{},
 		ExtraArgs:         make(map[string]*string),
 		ExtraEnv:          make(map[string]string),
 		SettingSources:    []SettingSource{},

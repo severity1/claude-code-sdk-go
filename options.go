@@ -1,6 +1,9 @@
 package claudecode
 
 import (
+	"io"
+	"os"
+
 	"github.com/severity1/claude-code-sdk-go/internal/shared"
 )
 
@@ -43,6 +46,15 @@ type SandboxNetworkConfig = shared.SandboxNetworkConfig
 // SandboxIgnoreViolations specifies patterns to ignore during sandbox violations.
 type SandboxIgnoreViolations = shared.SandboxIgnoreViolations
 
+// SdkPluginType represents the type of SDK plugin.
+type SdkPluginType = shared.SdkPluginType
+
+// SdkPluginConfig represents a plugin configuration.
+type SdkPluginConfig = shared.SdkPluginConfig
+
+// OutputFormat specifies the format for structured output.
+type OutputFormat = shared.OutputFormat
+
 // Re-export constants
 const (
 	PermissionModeDefault           = shared.PermissionModeDefault
@@ -56,6 +68,7 @@ const (
 	SettingSourceUser               = shared.SettingSourceUser
 	SettingSourceProject            = shared.SettingSourceProject
 	SettingSourceLocal              = shared.SettingSourceLocal
+	SdkPluginTypeLocal              = shared.SdkPluginTypeLocal
 )
 
 // Option configures Options using the functional options pattern.
@@ -332,6 +345,33 @@ func WithSandboxNetwork(network *SandboxNetworkConfig) Option {
 	}
 }
 
+// WithPlugins sets the plugin configurations.
+// This replaces any previously configured plugins.
+func WithPlugins(plugins []SdkPluginConfig) Option {
+	return func(o *Options) {
+		o.Plugins = plugins
+	}
+}
+
+// WithPlugin appends a single plugin configuration.
+// Multiple calls accumulate plugins.
+func WithPlugin(plugin SdkPluginConfig) Option {
+	return func(o *Options) {
+		o.Plugins = append(o.Plugins, plugin)
+	}
+}
+
+// WithLocalPlugin appends a local plugin by path.
+// This is a convenience method for the common case of local plugins.
+func WithLocalPlugin(path string) Option {
+	return func(o *Options) {
+		o.Plugins = append(o.Plugins, SdkPluginConfig{
+			Type: SdkPluginTypeLocal,
+			Path: path,
+		})
+	}
+}
+
 const customTransportMarker = "custom_transport"
 
 // WithTransport sets a custom transport for testing.
@@ -359,4 +399,52 @@ func NewOptions(opts ...Option) *Options {
 	}
 
 	return options
+}
+
+// WithDebugWriter sets the writer for CLI debug output.
+// If not set, stderr is isolated to a temporary file (default behavior).
+// Common values: os.Stderr, io.Discard, or a custom io.Writer like bytes.Buffer.
+func WithDebugWriter(w io.Writer) Option {
+	return func(o *Options) {
+		o.DebugWriter = w
+	}
+}
+
+// WithDebugStderr redirects CLI debug output to os.Stderr.
+// This is useful for seeing debug output in real-time during development.
+func WithDebugStderr() Option {
+	return WithDebugWriter(os.Stderr)
+}
+
+// WithDebugDisabled discards all CLI debug output.
+// This is more explicit than the default nil behavior but has the same effect.
+func WithDebugDisabled() Option {
+	return WithDebugWriter(io.Discard)
+}
+
+// OutputFormatJSONSchema creates an OutputFormat for JSON schema constraints.
+func OutputFormatJSONSchema(schema map[string]any) *OutputFormat {
+	return &OutputFormat{
+		Type:   "json_schema",
+		Schema: schema,
+	}
+}
+
+// WithOutputFormat sets the output format for structured responses.
+func WithOutputFormat(format *OutputFormat) Option {
+	return func(o *Options) {
+		o.OutputFormat = format
+	}
+}
+
+// WithJSONSchema is a convenience function that sets a JSON schema output format.
+// This is equivalent to WithOutputFormat(OutputFormatJSONSchema(schema)).
+func WithJSONSchema(schema map[string]any) Option {
+	return func(o *Options) {
+		if schema == nil {
+			o.OutputFormat = nil
+			return
+		}
+		o.OutputFormat = OutputFormatJSONSchema(schema)
+	}
 }

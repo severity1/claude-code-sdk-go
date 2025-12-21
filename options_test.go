@@ -1,9 +1,15 @@
 package claudecode
 
 import (
+	"bytes"
 	"context"
+	"io"
+	"os"
 	"testing"
 )
+
+// Ensure context is used (for mock transport)
+var _ = context.Background
 
 // T015: Default Options Creation - Test functional options integration
 func TestDefaultOptions(t *testing.T) {
@@ -1413,6 +1419,227 @@ func assertOptionsToolsNil(t *testing.T, options *Options) {
 	}
 }
 
+// TestWithPluginsOption tests plugin configuration functional options
+func TestWithPluginsOption(t *testing.T) {
+	tests := []struct {
+		name     string
+		setup    func() *Options
+		expected []SdkPluginConfig
+	}{
+		{
+			name: "single_local_plugin",
+			setup: func() *Options {
+				return NewOptions(WithPlugins([]SdkPluginConfig{
+					{Type: SdkPluginTypeLocal, Path: "/path/to/plugin"},
+				}))
+			},
+			expected: []SdkPluginConfig{
+				{Type: SdkPluginTypeLocal, Path: "/path/to/plugin"},
+			},
+		},
+		{
+			name: "multiple_plugins",
+			setup: func() *Options {
+				return NewOptions(WithPlugins([]SdkPluginConfig{
+					{Type: SdkPluginTypeLocal, Path: "/path/to/plugin1"},
+					{Type: SdkPluginTypeLocal, Path: "/path/to/plugin2"},
+				}))
+			},
+			expected: []SdkPluginConfig{
+				{Type: SdkPluginTypeLocal, Path: "/path/to/plugin1"},
+				{Type: SdkPluginTypeLocal, Path: "/path/to/plugin2"},
+			},
+		},
+		{
+			name: "empty_plugins",
+			setup: func() *Options {
+				return NewOptions(WithPlugins([]SdkPluginConfig{}))
+			},
+			expected: []SdkPluginConfig{},
+		},
+		{
+			name: "nil_plugins_replaces_with_nil",
+			setup: func() *Options {
+				return NewOptions(WithPlugins(nil))
+			},
+			expected: nil,
+		},
+		{
+			name: "override_plugins",
+			setup: func() *Options {
+				return NewOptions(
+					WithPlugins([]SdkPluginConfig{
+						{Type: SdkPluginTypeLocal, Path: "/first"},
+					}),
+					WithPlugins([]SdkPluginConfig{
+						{Type: SdkPluginTypeLocal, Path: "/second"},
+					}),
+				)
+			},
+			expected: []SdkPluginConfig{
+				{Type: SdkPluginTypeLocal, Path: "/second"},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			options := tt.setup()
+			assertOptionsPlugins(t, options.Plugins, tt.expected)
+		})
+	}
+}
+
+// TestWithPluginOption tests single plugin append functional option
+func TestWithPluginOption(t *testing.T) {
+	tests := []struct {
+		name     string
+		setup    func() *Options
+		expected []SdkPluginConfig
+	}{
+		{
+			name: "append_single_plugin",
+			setup: func() *Options {
+				return NewOptions(WithPlugin(SdkPluginConfig{
+					Type: SdkPluginTypeLocal,
+					Path: "/path/to/plugin",
+				}))
+			},
+			expected: []SdkPluginConfig{
+				{Type: SdkPluginTypeLocal, Path: "/path/to/plugin"},
+			},
+		},
+		{
+			name: "append_multiple_plugins",
+			setup: func() *Options {
+				return NewOptions(
+					WithPlugin(SdkPluginConfig{Type: SdkPluginTypeLocal, Path: "/plugin1"}),
+					WithPlugin(SdkPluginConfig{Type: SdkPluginTypeLocal, Path: "/plugin2"}),
+					WithPlugin(SdkPluginConfig{Type: SdkPluginTypeLocal, Path: "/plugin3"}),
+				)
+			},
+			expected: []SdkPluginConfig{
+				{Type: SdkPluginTypeLocal, Path: "/plugin1"},
+				{Type: SdkPluginTypeLocal, Path: "/plugin2"},
+				{Type: SdkPluginTypeLocal, Path: "/plugin3"},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			options := tt.setup()
+			assertOptionsPlugins(t, options.Plugins, tt.expected)
+		})
+	}
+}
+
+// TestWithLocalPluginOption tests local plugin convenience function
+func TestWithLocalPluginOption(t *testing.T) {
+	tests := []struct {
+		name     string
+		setup    func() *Options
+		expected []SdkPluginConfig
+	}{
+		{
+			name: "single_local_plugin",
+			setup: func() *Options {
+				return NewOptions(WithLocalPlugin("/path/to/plugin"))
+			},
+			expected: []SdkPluginConfig{
+				{Type: SdkPluginTypeLocal, Path: "/path/to/plugin"},
+			},
+		},
+		{
+			name: "multiple_local_plugins",
+			setup: func() *Options {
+				return NewOptions(
+					WithLocalPlugin("/plugin1"),
+					WithLocalPlugin("/plugin2"),
+				)
+			},
+			expected: []SdkPluginConfig{
+				{Type: SdkPluginTypeLocal, Path: "/plugin1"},
+				{Type: SdkPluginTypeLocal, Path: "/plugin2"},
+			},
+		},
+		{
+			name: "empty_path",
+			setup: func() *Options {
+				return NewOptions(WithLocalPlugin(""))
+			},
+			expected: []SdkPluginConfig{
+				{Type: SdkPluginTypeLocal, Path: ""},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			options := tt.setup()
+			assertOptionsPlugins(t, options.Plugins, tt.expected)
+		})
+	}
+}
+
+// TestPluginsDefaultEmpty tests that Plugins is initialized as empty slice
+func TestPluginsDefaultEmpty(t *testing.T) {
+	options := NewOptions()
+	if options.Plugins == nil {
+		t.Error("Expected Plugins to be initialized, got nil")
+	}
+	if len(options.Plugins) != 0 {
+		t.Errorf("Expected empty Plugins, got %v", options.Plugins)
+	}
+}
+
+// TestPluginTypeConstant tests SdkPluginTypeLocal constant value
+func TestPluginTypeConstant(t *testing.T) {
+	if SdkPluginTypeLocal != "local" {
+		t.Errorf("Expected SdkPluginTypeLocal = %q, got %q", "local", SdkPluginTypeLocal)
+	}
+}
+
+// TestPluginsMixedWithOtherOptions tests plugins work with other options
+func TestPluginsMixedWithOtherOptions(t *testing.T) {
+	options := NewOptions(
+		WithSystemPrompt("Test prompt"),
+		WithLocalPlugin("/path/to/plugin1"),
+		WithModel("claude-3-sonnet"),
+		WithLocalPlugin("/path/to/plugin2"),
+		WithBetas(SdkBetaContext1M),
+	)
+
+	// Verify plugins
+	expectedPlugins := []SdkPluginConfig{
+		{Type: SdkPluginTypeLocal, Path: "/path/to/plugin1"},
+		{Type: SdkPluginTypeLocal, Path: "/path/to/plugin2"},
+	}
+	assertOptionsPlugins(t, options.Plugins, expectedPlugins)
+
+	// Verify other options are preserved
+	assertOptionsSystemPrompt(t, options, "Test prompt")
+	assertOptionsModel(t, options, "claude-3-sonnet")
+	assertOptionsBetas(t, options.Betas, []SdkBeta{SdkBetaContext1M})
+}
+
+// assertOptionsPlugins verifies Plugins slice values
+func assertOptionsPlugins(t *testing.T, actual, expected []SdkPluginConfig) {
+	t.Helper()
+	if len(actual) != len(expected) {
+		t.Errorf("Expected Plugins length = %d, got %d. Actual: %v", len(expected), len(actual), actual)
+		return
+	}
+	for i, exp := range expected {
+		if actual[i].Type != exp.Type {
+			t.Errorf("Expected Plugins[%d].Type = %q, got %q", i, exp.Type, actual[i].Type)
+		}
+		if actual[i].Path != exp.Path {
+			t.Errorf("Expected Plugins[%d].Path = %q, got %q", i, exp.Path, actual[i].Path)
+		}
+	}
+}
+
 // TestSessionManagementOptions tests fork_session and setting_sources options
 func TestSessionManagementOptions(t *testing.T) {
 	t.Run("fork_session", func(t *testing.T) {
@@ -1505,7 +1732,324 @@ func assertOptionsSettingSources(t *testing.T, options *Options, expected []Sett
 	}
 }
 
-// T036: Sandbox Settings Option
+// T036: Debug Writer Options - Issue #12
+func TestWithDebugWriter(t *testing.T) {
+	tests := []struct {
+		name     string
+		setup    func() *Options
+		validate func(t *testing.T, options *Options)
+	}{
+		{
+			name: "custom_writer",
+			setup: func() *Options {
+				var buf bytes.Buffer
+				return NewOptions(WithDebugWriter(&buf))
+			},
+			validate: func(t *testing.T, options *Options) {
+				t.Helper()
+				if options.DebugWriter == nil {
+					t.Error("Expected DebugWriter to be set, got nil")
+				}
+			},
+		},
+		{
+			name: "debug_stderr",
+			setup: func() *Options {
+				return NewOptions(WithDebugStderr())
+			},
+			validate: func(t *testing.T, options *Options) {
+				t.Helper()
+				if options.DebugWriter != os.Stderr {
+					t.Errorf("Expected DebugWriter to be os.Stderr, got %v", options.DebugWriter)
+				}
+			},
+		},
+		{
+			name: "debug_disabled",
+			setup: func() *Options {
+				return NewOptions(WithDebugDisabled())
+			},
+			validate: func(t *testing.T, options *Options) {
+				t.Helper()
+				if options.DebugWriter != io.Discard {
+					t.Errorf("Expected DebugWriter to be io.Discard, got %v", options.DebugWriter)
+				}
+			},
+		},
+		{
+			name: "nil_by_default",
+			setup: func() *Options {
+				return NewOptions()
+			},
+			validate: func(t *testing.T, options *Options) {
+				t.Helper()
+				if options.DebugWriter != nil {
+					t.Errorf("Expected DebugWriter to be nil by default, got %v", options.DebugWriter)
+				}
+			},
+		},
+		{
+			name: "override_behavior",
+			setup: func() *Options {
+				var buf1, buf2 bytes.Buffer
+				return NewOptions(
+					WithDebugWriter(&buf1),
+					WithDebugWriter(&buf2), // Should override
+				)
+			},
+			validate: func(t *testing.T, options *Options) {
+				t.Helper()
+				if options.DebugWriter == nil {
+					t.Error("Expected DebugWriter to be set after override")
+				}
+			},
+		},
+		{
+			name: "nil_writer_explicit",
+			setup: func() *Options {
+				return NewOptions(WithDebugWriter(nil))
+			},
+			validate: func(t *testing.T, options *Options) {
+				t.Helper()
+				if options.DebugWriter != nil {
+					t.Errorf("Expected DebugWriter to be nil when explicitly set, got %v", options.DebugWriter)
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			options := tt.setup()
+			tt.validate(t, options)
+		})
+	}
+}
+
+// TestWithDebugWriterIntegration tests debug writer with other options
+func TestWithDebugWriterIntegration(t *testing.T) {
+	var debugBuf bytes.Buffer
+
+	options := NewOptions(
+		WithSystemPrompt("You are a helpful assistant"),
+		WithDebugWriter(&debugBuf),
+		WithModel("claude-3-5-sonnet-20241022"),
+		WithPermissionMode(PermissionModeAcceptEdits),
+	)
+
+	// Verify debug writer is set
+	if options.DebugWriter == nil {
+		t.Error("Expected DebugWriter to be set")
+	}
+
+	// Verify other options are preserved
+	assertOptionsSystemPrompt(t, options, "You are a helpful assistant")
+	assertOptionsModel(t, options, "claude-3-5-sonnet-20241022")
+	assertOptionsPermissionMode(t, options, PermissionModeAcceptEdits)
+}
+
+// TestDebugWriterConvenienceFunctions tests the convenience functions
+func TestDebugWriterConvenienceFunctions(t *testing.T) {
+	t.Run("WithDebugStderr_returns_os_stderr", func(t *testing.T) {
+		options := NewOptions(WithDebugStderr())
+		if options.DebugWriter != os.Stderr {
+			t.Errorf("Expected os.Stderr, got %T", options.DebugWriter)
+		}
+	})
+
+	t.Run("WithDebugDisabled_returns_io_discard", func(t *testing.T) {
+		options := NewOptions(WithDebugDisabled())
+		if options.DebugWriter != io.Discard {
+			t.Errorf("Expected io.Discard, got %T", options.DebugWriter)
+		}
+	})
+}
+
+// T037: OutputFormat Option - Structured Output Support (Issue #29)
+func TestWithOutputFormat(t *testing.T) {
+	tests := []struct {
+		name     string
+		setup    func() *Options
+		validate func(*testing.T, *Options)
+	}{
+		{
+			name: "json_schema_with_full_schema",
+			setup: func() *Options {
+				schema := map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"name":  map[string]any{"type": "string"},
+						"count": map[string]any{"type": "integer"},
+					},
+					"required": []string{"name"},
+				}
+				return NewOptions(WithOutputFormat(OutputFormatJSONSchema(schema)))
+			},
+			validate: func(t *testing.T, opts *Options) {
+				assertOutputFormatType(t, opts, "json_schema")
+				assertOutputFormatHasSchema(t, opts)
+			},
+		},
+		{
+			name: "nil_output_format_by_default",
+			setup: func() *Options {
+				return NewOptions()
+			},
+			validate: func(t *testing.T, opts *Options) {
+				assertOutputFormatNil(t, opts)
+			},
+		},
+		{
+			name: "empty_schema",
+			setup: func() *Options {
+				return NewOptions(WithOutputFormat(OutputFormatJSONSchema(map[string]any{})))
+			},
+			validate: func(t *testing.T, opts *Options) {
+				assertOutputFormatType(t, opts, "json_schema")
+			},
+		},
+		{
+			name: "nil_output_format_option",
+			setup: func() *Options {
+				return NewOptions(WithOutputFormat(nil))
+			},
+			validate: func(t *testing.T, opts *Options) {
+				assertOutputFormatNil(t, opts)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			opts := tt.setup()
+			tt.validate(t, opts)
+		})
+	}
+}
+
+// T038: WithJSONSchema Convenience Function
+func TestWithJSONSchema(t *testing.T) {
+	tests := []struct {
+		name     string
+		schema   map[string]any
+		validate func(*testing.T, *Options)
+	}{
+		{
+			name: "simple_object_schema",
+			schema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"result": map[string]any{"type": "string"},
+				},
+			},
+			validate: func(t *testing.T, opts *Options) {
+				assertOutputFormatType(t, opts, "json_schema")
+				assertOutputFormatHasSchema(t, opts)
+			},
+		},
+		{
+			name:   "nil_schema",
+			schema: nil,
+			validate: func(t *testing.T, opts *Options) {
+				assertOutputFormatNil(t, opts)
+			},
+		},
+		{
+			name:   "empty_schema",
+			schema: map[string]any{},
+			validate: func(t *testing.T, opts *Options) {
+				assertOutputFormatType(t, opts, "json_schema")
+				// Empty schema is valid
+				if opts.OutputFormat.Schema == nil {
+					t.Error("Expected Schema to be set (even if empty)")
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			opts := NewOptions(WithJSONSchema(tt.schema))
+			tt.validate(t, opts)
+		})
+	}
+}
+
+// T039: OutputFormat Override Behavior
+func TestOutputFormatOverride(t *testing.T) {
+	firstSchema := map[string]any{"type": "string"}
+	secondSchema := map[string]any{"type": "object"}
+
+	opts := NewOptions(
+		WithJSONSchema(firstSchema),
+		WithJSONSchema(secondSchema),
+	)
+
+	assertOutputFormatType(t, opts, "json_schema")
+	// Second schema should override first
+	if opts.OutputFormat.Schema["type"] != "object" {
+		t.Errorf("Expected schema type 'object', got %v", opts.OutputFormat.Schema["type"])
+	}
+}
+
+// T040: OutputFormat Integration with Other Options
+func TestOutputFormatIntegration(t *testing.T) {
+	schema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"answer": map[string]any{"type": "string"},
+		},
+	}
+
+	opts := NewOptions(
+		WithSystemPrompt("You are helpful"),
+		WithJSONSchema(schema),
+		WithModel("claude-3-5-sonnet-20241022"),
+		WithPermissionMode(PermissionModeAcceptEdits),
+	)
+
+	// Verify all options are set correctly
+	assertOptionsSystemPrompt(t, opts, "You are helpful")
+	assertOutputFormatType(t, opts, "json_schema")
+	assertOptionsModel(t, opts, "claude-3-5-sonnet-20241022")
+	assertOptionsPermissionMode(t, opts, PermissionModeAcceptEdits)
+}
+
+// Helper functions for OutputFormat tests
+
+// assertOutputFormatNil verifies OutputFormat is nil
+func assertOutputFormatNil(t *testing.T, opts *Options) {
+	t.Helper()
+	if opts.OutputFormat != nil {
+		t.Errorf("Expected OutputFormat = nil, got %v", opts.OutputFormat)
+	}
+}
+
+// assertOutputFormatType verifies OutputFormat.Type value
+func assertOutputFormatType(t *testing.T, opts *Options, expectedType string) {
+	t.Helper()
+	if opts.OutputFormat == nil {
+		t.Error("Expected OutputFormat to be set, got nil")
+		return
+	}
+	if opts.OutputFormat.Type != expectedType {
+		t.Errorf("Expected OutputFormat.Type = %q, got %q", expectedType, opts.OutputFormat.Type)
+	}
+}
+
+// assertOutputFormatHasSchema verifies OutputFormat.Schema is set
+func assertOutputFormatHasSchema(t *testing.T, opts *Options) {
+	t.Helper()
+	if opts.OutputFormat == nil {
+		t.Error("Expected OutputFormat to be set, got nil")
+		return
+	}
+	if opts.OutputFormat.Schema == nil {
+		t.Error("Expected OutputFormat.Schema to be set")
+	}
+}
+
+// T041: Sandbox Settings Option
 func TestWithSandbox(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -1570,7 +2114,7 @@ func TestWithSandbox(t *testing.T) {
 	}
 }
 
-// T037: Sandbox Enabled Convenience Option
+// T042: Sandbox Enabled Convenience Option
 func TestWithSandboxEnabled(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -1590,7 +2134,7 @@ func TestWithSandboxEnabled(t *testing.T) {
 	}
 }
 
-// T038: Auto Allow Bash Convenience Option
+// T043: Auto Allow Bash Convenience Option
 func TestWithAutoAllowBashIfSandboxed(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -1610,7 +2154,7 @@ func TestWithAutoAllowBashIfSandboxed(t *testing.T) {
 	}
 }
 
-// T039: Sandbox Excluded Commands Option
+// T044: Sandbox Excluded Commands Option
 func TestWithSandboxExcludedCommands(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -1631,7 +2175,7 @@ func TestWithSandboxExcludedCommands(t *testing.T) {
 	}
 }
 
-// T040: Sandbox Network Configuration Option
+// T045: Sandbox Network Configuration Option
 func TestWithSandboxNetwork(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -1674,7 +2218,7 @@ func TestWithSandboxNetwork(t *testing.T) {
 	}
 }
 
-// T041: Sandbox Options Composition
+// T046: Sandbox Options Composition
 func TestSandboxOptionsComposition(t *testing.T) {
 	// Test that multiple sandbox options compose correctly
 	options := NewOptions(
@@ -1693,7 +2237,7 @@ func TestSandboxOptionsComposition(t *testing.T) {
 	assertOptionsSandboxNetworkAllowLocalBinding(t, options, true)
 }
 
-// T042: Sandbox Option Override Behavior
+// T047: Sandbox Option Override Behavior
 func TestSandboxOptionOverride(t *testing.T) {
 	// Test that WithSandbox replaces previous sandbox settings
 	t.Run("full_replace", func(t *testing.T) {
@@ -1719,7 +2263,7 @@ func TestSandboxOptionOverride(t *testing.T) {
 	})
 }
 
-// T043: Sandbox Integration with Other Options
+// T048: Sandbox Integration with Other Options
 func TestSandboxIntegrationWithOtherOptions(t *testing.T) {
 	options := NewOptions(
 		WithSystemPrompt("You are a helpful assistant"),
@@ -1739,7 +2283,7 @@ func TestSandboxIntegrationWithOtherOptions(t *testing.T) {
 	assertOptionsSandboxEnabled(t, options, true)
 }
 
-// T044: Sandbox Nil by Default
+// T049: Sandbox Nil by Default
 func TestSandboxNilByDefault(t *testing.T) {
 	options := NewOptions()
 	assertOptionsSandboxNil(t, options)
