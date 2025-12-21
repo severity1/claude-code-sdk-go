@@ -1,6 +1,9 @@
 package shared
 
-import "fmt"
+import (
+	"fmt"
+	"io"
+)
 
 const (
 	// DefaultMaxThinkingTokens is the default maximum number of thinking tokens.
@@ -122,6 +125,11 @@ type Options struct {
 
 	// CLI Path (for testing and custom installations)
 	CLIPath *string `json:"cli_path,omitempty"`
+
+	// DebugWriter specifies where to write debug output from the CLI subprocess.
+	// If nil (default), stderr is isolated to a temporary file to prevent deadlocks.
+	// Common values: os.Stderr, io.Discard, or a custom io.Writer.
+	DebugWriter io.Writer `json:"-"` // Not serialized
 }
 
 // McpServerType represents the type of MCP server.
