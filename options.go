@@ -372,6 +372,25 @@ func WithLocalPlugin(path string) Option {
 	}
 }
 
+// WithAgents sets the programmatic agent definitions.
+// This replaces any existing agents.
+func WithAgents(agents map[string]AgentDefinition) Option {
+	return func(o *Options) {
+		o.Agents = agents
+	}
+}
+
+// WithAgent adds or updates a single agent definition.
+// Multiple calls merge agents (later calls override same-name agents).
+func WithAgent(name string, agent AgentDefinition) Option {
+	return func(o *Options) {
+		if o.Agents == nil {
+			o.Agents = make(map[string]AgentDefinition)
+		}
+		o.Agents[name] = agent
+	}
+}
+
 const customTransportMarker = "custom_transport"
 
 // WithTransport sets a custom transport for testing.

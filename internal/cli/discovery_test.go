@@ -1435,3 +1435,154 @@ func validateNoJSONSchemaFlag(t *testing.T, cmd []string) {
 	t.Helper()
 	assertNotContainsArg(t, cmd, "--json-schema")
 }
+
+const agentsFlag = "--agents"
+
+// TestAgentsFlagSupport tests --agents CLI flag generation
+func TestAgentsFlagSupport(t *testing.T) {
+	tests := []struct {
+		name     string
+		options  *shared.Options
+		validate func(*testing.T, []string)
+	}{
+		{
+			name: "single_agent",
+			options: &shared.Options{
+				Agents: map[string]shared.AgentDefinition{
+					"code-reviewer": {
+						Description: "Reviews code",
+						Prompt:      "You are a reviewer...",
+						Tools:       []string{"Read", "Grep"},
+						Model:       shared.AgentModelSonnet,
+					},
+				},
+			},
+			validate: validateSingleAgentFlag,
+		},
+		{
+			name: "multiple_agents",
+			options: &shared.Options{
+				Agents: map[string]shared.AgentDefinition{
+					"reviewer": {
+						Description: "Reviews",
+						Prompt:      "Reviewer prompt",
+					},
+					"tester": {
+						Description: "Tests",
+						Prompt:      "Tester prompt",
+					},
+				},
+			},
+			validate: validateMultipleAgentsFlag,
+		},
+		{
+			name: "omit_nil_fields",
+			options: &shared.Options{
+				Agents: map[string]shared.AgentDefinition{
+					"minimal": {
+						Description: "Minimal agent",
+						Prompt:      "Minimal prompt",
+						// Tools and Model are empty/nil
+					},
+				},
+			},
+			validate: validateMinimalAgentFlag,
+		},
+		{
+			name: "empty_agents",
+			options: &shared.Options{
+				Agents: map[string]shared.AgentDefinition{},
+			},
+			validate: validateNoAgentsFlag,
+		},
+		{
+			name: "nil_agents",
+			options: &shared.Options{
+				Agents: nil,
+			},
+			validate: validateNoAgentsFlag,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			cmd := BuildCommand("/usr/local/bin/claude", test.options, true)
+			test.validate(t, cmd)
+		})
+	}
+}
+
+func validateSingleAgentFlag(t *testing.T, cmd []string) {
+	t.Helper()
+	// Find the --agents flag and verify JSON content
+	for i, arg := range cmd {
+		if arg == agentsFlag && i+1 < len(cmd) {
+			value := cmd[i+1]
+			// Should contain the agent definition with all fields
+			if !strings.Contains(value, `"code-reviewer"`) {
+				t.Errorf("Expected --agents value to contain code-reviewer, got %q", value)
+			}
+			if !strings.Contains(value, `"description":"Reviews code"`) {
+				t.Errorf("Expected --agents value to contain description, got %q", value)
+			}
+			if !strings.Contains(value, `"prompt":"You are a reviewer..."`) {
+				t.Errorf("Expected --agents value to contain prompt, got %q", value)
+			}
+			if !strings.Contains(value, `"tools"`) {
+				t.Errorf("Expected --agents value to contain tools, got %q", value)
+			}
+			if !strings.Contains(value, `"model":"sonnet"`) {
+				t.Errorf("Expected --agents value to contain model, got %q", value)
+			}
+			return
+		}
+	}
+	t.Error("Expected --agents flag to be present")
+}
+
+func validateMultipleAgentsFlag(t *testing.T, cmd []string) {
+	t.Helper()
+	for i, arg := range cmd {
+		if arg == agentsFlag && i+1 < len(cmd) {
+			value := cmd[i+1]
+			if !strings.Contains(value, `"reviewer"`) {
+				t.Errorf("Expected --agents value to contain reviewer, got %q", value)
+			}
+			if !strings.Contains(value, `"tester"`) {
+				t.Errorf("Expected --agents value to contain tester, got %q", value)
+			}
+			return
+		}
+	}
+	t.Error("Expected --agents flag to be present")
+}
+
+func validateMinimalAgentFlag(t *testing.T, cmd []string) {
+	t.Helper()
+	for i, arg := range cmd {
+		if arg == agentsFlag && i+1 < len(cmd) {
+			value := cmd[i+1]
+			// Should contain description and prompt
+			if !strings.Contains(value, `"description":"Minimal agent"`) {
+				t.Errorf("Expected --agents value to contain description, got %q", value)
+			}
+			if !strings.Contains(value, `"prompt":"Minimal prompt"`) {
+				t.Errorf("Expected --agents value to contain prompt, got %q", value)
+			}
+			// Should NOT contain tools or model (they're empty)
+			if strings.Contains(value, `"tools"`) {
+				t.Errorf("Expected --agents value to NOT contain empty tools, got %q", value)
+			}
+			if strings.Contains(value, `"model"`) {
+				t.Errorf("Expected --agents value to NOT contain empty model, got %q", value)
+			}
+			return
+		}
+	}
+	t.Error("Expected --agents flag to be present")
+}
+
+func validateNoAgentsFlag(t *testing.T, cmd []string) {
+	t.Helper()
+	assertNotContainsArg(t, cmd, agentsFlag)
+}

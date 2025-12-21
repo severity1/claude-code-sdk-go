@@ -140,6 +140,7 @@ func addOptionsToCommand(cmd []string, options *shared.Options) []string {
 	cmd = addModelAndPromptFlags(cmd, options)
 	cmd = addPermissionFlags(cmd, options)
 	cmd = addSessionFlags(cmd, options)
+	cmd = addAgentFlags(cmd, options)
 	cmd = addFileSystemFlags(cmd, options)
 	cmd = addMCPFlags(cmd, options)
 	cmd = addPluginsFlag(cmd, options)
@@ -244,6 +245,36 @@ func addSessionFlags(cmd []string, options *shared.Options) []string {
 	}
 	cmd = append(cmd, "--setting-sources", sourcesValue)
 	return cmd
+}
+
+func addAgentFlags(cmd []string, options *shared.Options) []string {
+	if len(options.Agents) == 0 {
+		return cmd
+	}
+
+	// Convert to map[string]map[string]any, filtering nil/empty fields
+	// This matches Python SDK behavior of omitting None values
+	agentsMap := make(map[string]map[string]any)
+	for name, agent := range options.Agents {
+		agentMap := map[string]any{
+			"description": agent.Description,
+			"prompt":      agent.Prompt,
+		}
+		if len(agent.Tools) > 0 {
+			agentMap["tools"] = agent.Tools
+		}
+		if agent.Model != "" {
+			agentMap["model"] = string(agent.Model)
+		}
+		agentsMap[name] = agentMap
+	}
+
+	data, err := json.Marshal(agentsMap)
+	if err != nil {
+		return cmd // Skip on serialization error
+	}
+
+	return append(cmd, "--agents", string(data))
 }
 
 func addFileSystemFlags(cmd []string, options *shared.Options) []string {
