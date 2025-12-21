@@ -29,6 +29,10 @@ const (
 	windowsOS = "windows"
 )
 
+// ControlHandler processes incoming control messages from the CLI.
+// It receives the raw message as a map for routing to the Query.
+type ControlHandler func(ctx context.Context, msg map[string]any) error
+
 // Transport implements the Transport interface using subprocess communication.
 type Transport struct {
 	// Process management
@@ -56,6 +60,9 @@ type Transport struct {
 
 	// Stream validation
 	validator *shared.StreamValidator
+
+	// Control protocol
+	controlHandler ControlHandler // Handler for control_response messages
 
 	// Channels for communication
 	msgChan chan shared.Message
@@ -270,6 +277,32 @@ func (t *Transport) SendMessage(ctx context.Context, message shared.StreamMessag
 	return nil
 }
 
+// Write sends raw bytes to stdin for control protocol communication.
+// This implements the control.Transport interface.
+func (t *Transport) Write(ctx context.Context, data []byte) error {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+
+	if !t.connected || t.stdin == nil {
+		return fmt.Errorf("transport not connected or stdin closed")
+	}
+
+	// Check context cancellation
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+
+	// Write raw data (caller is responsible for newline if needed)
+	_, err := t.stdin.Write(data)
+	if err != nil {
+		return fmt.Errorf("failed to write data: %w", err)
+	}
+
+	return nil
+}
+
 // ReceiveMessages returns channels for receiving messages and errors.
 func (t *Transport) ReceiveMessages(_ context.Context) (<-chan shared.Message, <-chan error) {
 	t.mu.RLock()
@@ -381,6 +414,18 @@ func (t *Transport) handleStdout() {
 		line := scanner.Text()
 		if line == "" {
 			continue
+		}
+
+		// Check for control protocol messages before regular parsing
+		if t.controlHandler != nil && t.isControlMessage(line) {
+			if err := t.routeControlMessage(line); err != nil {
+				select {
+				case t.errChan <- err:
+				case <-t.ctx.Done():
+					return
+				}
+			}
+			continue // Control message handled, skip regular parsing
 		}
 
 		// Parse line with the parser
@@ -558,4 +603,40 @@ func (t *Transport) generateMcpConfigFile() (string, error) {
 // This allows clients to check for validation issues like missing tool results.
 func (t *Transport) GetValidator() *shared.StreamValidator {
 	return t.validator
+}
+
+// SetControlHandler sets the handler for control protocol messages.
+// This should be called before Connect() to receive control messages.
+func (t *Transport) SetControlHandler(handler ControlHandler) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.controlHandler = handler
+}
+
+// isControlMessage checks if a JSON line is a control protocol message.
+// Control messages have type "control_response" or "control_request".
+func (t *Transport) isControlMessage(line string) bool {
+	// Fast path: check for control message type markers without full JSON parse
+	return strings.Contains(line, `"type":"control_response"`) ||
+		strings.Contains(line, `"type":"control_request"`) ||
+		strings.Contains(line, `"type": "control_response"`) ||
+		strings.Contains(line, `"type": "control_request"`)
+}
+
+// routeControlMessage parses and routes a control message to the handler.
+func (t *Transport) routeControlMessage(line string) error {
+	var msg map[string]any
+	if err := json.Unmarshal([]byte(line), &msg); err != nil {
+		return fmt.Errorf("failed to parse control message: %w", err)
+	}
+
+	t.mu.RLock()
+	handler := t.controlHandler
+	t.mu.RUnlock()
+
+	if handler != nil {
+		return handler(t.ctx, msg)
+	}
+
+	return nil
 }

@@ -1,9 +1,12 @@
 package claudecode
 
 import (
+	"context"
 	"io"
 	"os"
+	"time"
 
+	"github.com/severity1/claude-code-sdk-go/internal/control"
 	"github.com/severity1/claude-code-sdk-go/internal/shared"
 )
 
@@ -465,5 +468,77 @@ func WithJSONSchema(schema map[string]any) Option {
 			return
 		}
 		o.OutputFormat = OutputFormatJSONSchema(schema)
+	}
+}
+
+// Control Protocol Types
+// These provide access to the control protocol types for advanced users.
+
+// CanUseToolRequest is received from CLI for permission callbacks.
+type CanUseToolRequest = shared.CanUseToolRequest
+
+// CanUseToolResponse is sent back to CLI after permission callback.
+type CanUseToolResponse = shared.CanUseToolResponse
+
+// CanUseToolHandler processes incoming can_use_tool requests from CLI.
+// This matches the control.CanUseToolHandler type.
+type CanUseToolHandler = shared.CanUseToolHandler
+
+// HookHandler processes incoming hook_callback requests from CLI.
+// This matches the control.HookHandler type.
+type HookHandler = shared.HookHandler
+
+// HookMatcher configures hook matching for a specific event.
+type HookMatcher = shared.HookMatcher
+
+// InitializeResponse is the response from CLI initialization.
+type InitializeResponse = control.InitializeResponse
+
+// Control Protocol Options
+
+// WithInitTimeout sets the timeout for control protocol initialization handshake.
+// Default is 60 seconds. The timeout can also be set via the
+// CLAUDE_CODE_STREAM_CLOSE_TIMEOUT environment variable (in milliseconds).
+func WithInitTimeout(d time.Duration) Option {
+	return func(o *Options) {
+		o.InitTimeout = d
+	}
+}
+
+// WithCanUseTool sets the handler for tool permission callbacks from CLI.
+// This handler is called when the CLI requests permission to use a tool.
+// The handler can approve, deny, or modify the tool request.
+//
+// Example:
+//
+//	WithCanUseTool(func(ctx context.Context, req CanUseToolRequest) (CanUseToolResponse, error) {
+//	    if req.ToolName == "Bash" {
+//	        return CanUseToolResponse{Behavior: "deny", Message: "Bash disabled"}, nil
+//	    }
+//	    return CanUseToolResponse{Behavior: "allow"}, nil
+//	})
+func WithCanUseTool(handler func(ctx context.Context, req CanUseToolRequest) (CanUseToolResponse, error)) Option {
+	return func(o *Options) {
+		o.CanUseTool = handler
+	}
+}
+
+// WithHooks sets the hook callbacks for events like PreToolUse, PostToolUse.
+// Hooks allow intercepting tool execution at various points.
+//
+// Example:
+//
+//	WithHooks(map[string][]HookMatcher{
+//	    "PreToolUse": {
+//	        {
+//	            Matcher:         nil, // Match all tools
+//	            HookCallbackIDs: []string{"hook_0"},
+//	            Timeout:         intPtr(5000),
+//	        },
+//	    },
+//	})
+func WithHooks(hooks map[string][]HookMatcher) Option {
+	return func(o *Options) {
+		o.Hooks = hooks
 	}
 }

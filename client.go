@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"os"
 	"sync"
+	"time"
 
 	"github.com/severity1/claude-code-sdk-go/internal/cli"
+	"github.com/severity1/claude-code-sdk-go/internal/control"
 	"github.com/severity1/claude-code-sdk-go/internal/subprocess"
 )
 
@@ -24,6 +26,12 @@ type Client interface {
 	Interrupt(ctx context.Context) error
 	GetStreamIssues() []StreamIssue
 	GetStreamStats() StreamStats
+
+	// Control protocol methods (matching Python SDK ClaudeSDKClient)
+	SetPermissionMode(ctx context.Context, mode string) error
+	SetModel(ctx context.Context, model *string) error
+	RewindFiles(ctx context.Context, userMessageID string) error
+	GetServerInfo() *control.InitializeResponse
 }
 
 // ClientImpl implements the Client interface.
@@ -35,6 +43,9 @@ type ClientImpl struct {
 	connected       bool
 	msgChan         <-chan Message
 	errChan         <-chan error
+
+	// Control protocol
+	controlQuery *control.Query // Control protocol handler (nil if not supported by CLI)
 }
 
 // NewClient creates a new Client with the given options.
@@ -218,6 +229,7 @@ func (c *ClientImpl) Connect(ctx context.Context, _ ...StreamMessage) error {
 	}
 
 	// Use custom transport if provided, otherwise create default
+	var subprocessTransport *subprocess.Transport
 	if c.customTransport != nil {
 		c.transport = c.customTransport
 	} else {
@@ -228,7 +240,23 @@ func (c *ClientImpl) Connect(ctx context.Context, _ ...StreamMessage) error {
 		}
 
 		// Create subprocess transport for streaming mode (closeStdin=false)
-		c.transport = subprocess.New(cliPath, c.options, false, "sdk-go-client")
+		subprocessTransport = subprocess.New(cliPath, c.options, false, "sdk-go-client")
+		c.transport = subprocessTransport
+	}
+
+	// Initialize control protocol before connecting (streaming mode only)
+	// The control handler must be set before Connect() so that control messages
+	// can be routed as soon as the transport starts reading stdout
+	if subprocessTransport != nil {
+		c.controlQuery = control.New(subprocessTransport,
+			control.WithInitTimeout(c.getInitTimeout()),
+			control.WithCanUseTool(c.getCanUseToolHandler()),
+		)
+
+		// Set up control message routing
+		subprocessTransport.SetControlHandler(func(ctx context.Context, msg map[string]any) error {
+			return c.controlQuery.HandleIncoming(ctx, msg)
+		})
 	}
 
 	// Connect the transport
@@ -239,6 +267,23 @@ func (c *ClientImpl) Connect(ctx context.Context, _ ...StreamMessage) error {
 	// Get message channels
 	c.msgChan, c.errChan = c.transport.ReceiveMessages(ctx)
 
+	// Initialize control protocol with CLI (if supported)
+	if c.controlQuery != nil {
+		if err := c.controlQuery.Start(ctx); err != nil {
+			// Log but don't fail - control protocol start failure is not fatal
+			c.controlQuery = nil
+		} else {
+			// Perform initialization handshake
+			hooks := c.buildHooksConfig()
+			if _, err := c.controlQuery.Initialize(ctx, hooks); err != nil {
+				// Log but don't fail - CLI may not support control protocol
+				// This ensures backward compatibility with older CLI versions
+				_ = c.controlQuery.Close() // Ignore error during cleanup
+				c.controlQuery = nil
+			}
+		}
+	}
+
 	c.connected = true
 	return nil
 }
@@ -247,6 +292,12 @@ func (c *ClientImpl) Connect(ctx context.Context, _ ...StreamMessage) error {
 func (c *ClientImpl) Disconnect() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
+	// Close control query first
+	if c.controlQuery != nil {
+		_ = c.controlQuery.Close() // Ignore error during cleanup
+		c.controlQuery = nil
+	}
 
 	if c.transport != nil && c.connected {
 		if err := c.transport.Close(); err != nil {
@@ -487,4 +538,130 @@ func (c *ClientImpl) GetStreamStats() StreamStats {
 	}
 
 	return validator.GetStats()
+}
+
+// SetPermissionMode changes the permission mode during conversation.
+// This mirrors Python SDK's ClaudeSDKClient.set_permission_mode.
+func (c *ClientImpl) SetPermissionMode(ctx context.Context, mode string) error {
+	c.mu.RLock()
+	query := c.controlQuery
+	c.mu.RUnlock()
+
+	if query == nil {
+		return fmt.Errorf("control protocol not initialized")
+	}
+
+	return query.SetPermissionMode(ctx, mode)
+}
+
+// SetModel changes the AI model during conversation.
+// Pass nil to reset to the default model.
+// This mirrors Python SDK's ClaudeSDKClient.set_model.
+func (c *ClientImpl) SetModel(ctx context.Context, model *string) error {
+	c.mu.RLock()
+	query := c.controlQuery
+	c.mu.RUnlock()
+
+	if query == nil {
+		return fmt.Errorf("control protocol not initialized")
+	}
+
+	return query.SetModel(ctx, model)
+}
+
+// RewindFiles rewinds tracked files to their state at a specific user message.
+// This mirrors Python SDK's ClaudeSDKClient.rewind_files.
+func (c *ClientImpl) RewindFiles(ctx context.Context, userMessageID string) error {
+	c.mu.RLock()
+	query := c.controlQuery
+	c.mu.RUnlock()
+
+	if query == nil {
+		return fmt.Errorf("control protocol not initialized")
+	}
+
+	return query.RewindFiles(ctx, userMessageID)
+}
+
+// GetServerInfo returns the initialization response from the CLI,
+// which includes supported commands and output style.
+// Returns nil if control protocol was not initialized.
+func (c *ClientImpl) GetServerInfo() *control.InitializeResponse {
+	c.mu.RLock()
+	query := c.controlQuery
+	c.mu.RUnlock()
+
+	if query == nil {
+		return nil
+	}
+
+	return query.GetInitResponse()
+}
+
+// getInitTimeout returns the initialization timeout from options or default.
+func (c *ClientImpl) getInitTimeout() time.Duration {
+	if c.options != nil && c.options.InitTimeout > 0 {
+		return c.options.InitTimeout
+	}
+	return control.DefaultInitTimeout
+}
+
+// getCanUseToolHandler returns the can_use_tool handler from options,
+// adapting from shared types to control types.
+func (c *ClientImpl) getCanUseToolHandler() control.CanUseToolHandler {
+	if c.options == nil || c.options.CanUseTool == nil {
+		return nil
+	}
+
+	// Adapter function that converts between shared and control types
+	// Both types have identical field structures, so this is a direct mapping
+	return func(ctx context.Context, req control.CanUseToolRequest) (control.CanUseToolResponse, error) {
+		// Convert control.CanUseToolRequest to shared.CanUseToolRequest
+		sharedReq := CanUseToolRequest{
+			Subtype:               req.Subtype,
+			ToolName:              req.ToolName,
+			Input:                 req.Input,
+			PermissionSuggestions: req.PermissionSuggestions,
+			BlockedPath:           req.BlockedPath,
+		}
+
+		// Call the user's handler
+		sharedResp, err := c.options.CanUseTool(ctx, sharedReq)
+		if err != nil {
+			return control.CanUseToolResponse{}, err
+		}
+
+		// Convert shared.CanUseToolResponse to control.CanUseToolResponse
+		return control.CanUseToolResponse{
+			Behavior:           sharedResp.Behavior,
+			UpdatedInput:       sharedResp.UpdatedInput,
+			UpdatedPermissions: sharedResp.UpdatedPermissions,
+			Message:            sharedResp.Message,
+			Interrupt:          sharedResp.Interrupt,
+		}, nil
+	}
+}
+
+// buildHooksConfig builds the hooks configuration for control protocol initialization,
+// adapting from shared types to control types.
+func (c *ClientImpl) buildHooksConfig() map[string][]control.HookMatcher {
+	if c.options == nil || c.options.Hooks == nil {
+		return nil
+	}
+
+	// Convert shared.HookMatcher to control.HookMatcher
+	// Both types have identical field structures, so this is a direct mapping
+	result := make(map[string][]control.HookMatcher)
+	for event, matchers := range c.options.Hooks {
+		controlMatchers := make([]control.HookMatcher, len(matchers))
+		for i, m := range matchers {
+			controlMatchers[i] = control.HookMatcher{
+				Matcher:         m.Matcher,
+				HookCallbackIDs: m.HookCallbackIDs,
+				Timeout:         m.Timeout,
+			}
+		}
+		result[event] = controlMatchers
+	}
+	return result
 }

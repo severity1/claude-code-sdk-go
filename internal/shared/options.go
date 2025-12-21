@@ -1,8 +1,10 @@
 package shared
 
 import (
+	"context"
 	"fmt"
 	"io"
+	"time"
 )
 
 const (
@@ -143,6 +145,37 @@ type AgentDefinition struct {
 	Model AgentModel `json:"model,omitempty"`
 }
 
+// CanUseToolRequest is received from CLI for permission callbacks.
+type CanUseToolRequest struct {
+	Subtype               string         `json:"subtype"`
+	ToolName              string         `json:"tool_name"`
+	Input                 map[string]any `json:"input"`
+	PermissionSuggestions []any          `json:"permission_suggestions,omitempty"`
+	BlockedPath           *string        `json:"blocked_path,omitempty"`
+}
+
+// CanUseToolResponse is sent back to CLI after permission callback.
+type CanUseToolResponse struct {
+	Behavior           string         `json:"behavior"` // "allow" or "deny"
+	UpdatedInput       map[string]any `json:"updatedInput,omitempty"`
+	UpdatedPermissions []any          `json:"updatedPermissions,omitempty"`
+	Message            string         `json:"message,omitempty"`
+	Interrupt          bool           `json:"interrupt,omitempty"`
+}
+
+// CanUseToolHandler processes incoming can_use_tool requests from CLI.
+type CanUseToolHandler func(ctx context.Context, req CanUseToolRequest) (CanUseToolResponse, error)
+
+// HookHandler processes incoming hook_callback requests from CLI.
+type HookHandler func(ctx context.Context, input any, toolUseID *string) (map[string]any, error)
+
+// HookMatcher configures hook matching for a specific event.
+type HookMatcher struct {
+	Matcher         any      `json:"matcher,omitempty"`
+	HookCallbackIDs []string `json:"hookCallbackIds"`
+	Timeout         *int     `json:"timeout,omitempty"`
+}
+
 // Options configures the Claude Code SDK behavior.
 type Options struct {
 	// Tool Control
@@ -216,6 +249,14 @@ type Options struct {
 	// If nil (default), stderr is isolated to a temporary file to prevent deadlocks.
 	// Common values: os.Stderr, io.Discard, or a custom io.Writer.
 	DebugWriter io.Writer `json:"-"` // Not serialized
+
+	// Control Protocol Configuration
+	// InitTimeout is the timeout for control protocol initialization handshake.
+	InitTimeout time.Duration `json:"-"` // Not serialized
+	// CanUseTool is the handler for tool permission callbacks from CLI.
+	CanUseTool CanUseToolHandler `json:"-"` // Not serialized
+	// Hooks configures hook callbacks for events like PreToolUse, PostToolUse.
+	Hooks map[string][]HookMatcher `json:"-"` // Not serialized
 }
 
 // McpServerType represents the type of MCP server.
