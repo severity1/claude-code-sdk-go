@@ -144,6 +144,7 @@ func addOptionsToCommand(cmd []string, options *shared.Options) []string {
 	cmd = addMCPFlags(cmd, options)
 	cmd = addPluginsFlag(cmd, options)
 	cmd = addBetasFlag(cmd, options)
+	cmd = addOutputFormatFlags(cmd, options)
 	cmd = addExtraFlags(cmd, options)
 	return cmd
 }
@@ -277,6 +278,21 @@ func addPluginsFlag(cmd []string, options *shared.Options) []string {
 		// Note: Future plugin types would be handled here
 	}
 	return cmd
+}
+
+func addOutputFormatFlags(cmd []string, options *shared.Options) []string {
+	if options.OutputFormat == nil || options.OutputFormat.Schema == nil {
+		return cmd
+	}
+
+	// Serialize schema to JSON for CLI flag
+	schemaData, err := json.Marshal(options.OutputFormat.Schema)
+	if err != nil {
+		// Silently skip on marshal error (shouldn't happen with valid schemas)
+		return cmd
+	}
+
+	return append(cmd, "--json-schema", string(schemaData))
 }
 
 func addExtraFlags(cmd []string, options *shared.Options) []string {

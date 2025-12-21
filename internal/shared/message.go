@@ -154,16 +154,17 @@ func (m *SystemMessage) MarshalJSON() ([]byte, error) {
 
 // ResultMessage represents the final result of a conversation turn.
 type ResultMessage struct {
-	MessageType   string          `json:"type"`
-	Subtype       string          `json:"subtype"`
-	DurationMs    int             `json:"duration_ms"`
-	DurationAPIMs int             `json:"duration_api_ms"`
-	IsError       bool            `json:"is_error"`
-	NumTurns      int             `json:"num_turns"`
-	SessionID     string          `json:"session_id"`
-	TotalCostUSD  *float64        `json:"total_cost_usd,omitempty"`
-	Usage         *map[string]any `json:"usage,omitempty"`
-	Result        *string         `json:"result,omitempty"`
+	MessageType      string          `json:"type"`
+	Subtype          string          `json:"subtype"`
+	DurationMs       int             `json:"duration_ms"`
+	DurationAPIMs    int             `json:"duration_api_ms"`
+	IsError          bool            `json:"is_error"`
+	NumTurns         int             `json:"num_turns"`
+	SessionID        string          `json:"session_id"`
+	TotalCostUSD     *float64        `json:"total_cost_usd,omitempty"`
+	Usage            *map[string]any `json:"usage,omitempty"`
+	Result           *string         `json:"result,omitempty"`
+	StructuredOutput any             `json:"structured_output,omitempty"`
 }
 
 // Type returns the message type for ResultMessage.

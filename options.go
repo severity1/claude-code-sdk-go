@@ -43,6 +43,9 @@ type SdkPluginType = shared.SdkPluginType
 // SdkPluginConfig represents a plugin configuration.
 type SdkPluginConfig = shared.SdkPluginConfig
 
+// OutputFormat specifies the format for structured output.
+type OutputFormat = shared.OutputFormat
+
 // Re-export constants
 const (
 	PermissionModeDefault           = shared.PermissionModeDefault
@@ -357,4 +360,31 @@ func WithDebugStderr() Option {
 // This is more explicit than the default nil behavior but has the same effect.
 func WithDebugDisabled() Option {
 	return WithDebugWriter(io.Discard)
+}
+
+// OutputFormatJSONSchema creates an OutputFormat for JSON schema constraints.
+func OutputFormatJSONSchema(schema map[string]any) *OutputFormat {
+	return &OutputFormat{
+		Type:   "json_schema",
+		Schema: schema,
+	}
+}
+
+// WithOutputFormat sets the output format for structured responses.
+func WithOutputFormat(format *OutputFormat) Option {
+	return func(o *Options) {
+		o.OutputFormat = format
+	}
+}
+
+// WithJSONSchema is a convenience function that sets a JSON schema output format.
+// This is equivalent to WithOutputFormat(OutputFormatJSONSchema(schema)).
+func WithJSONSchema(schema map[string]any) Option {
+	return func(o *Options) {
+		if schema == nil {
+			o.OutputFormat = nil
+			return
+		}
+		o.OutputFormat = OutputFormatJSONSchema(schema)
+	}
 }

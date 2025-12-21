@@ -1864,3 +1864,187 @@ func TestDebugWriterConvenienceFunctions(t *testing.T) {
 		}
 	})
 }
+
+// T037: OutputFormat Option - Structured Output Support (Issue #29)
+func TestWithOutputFormat(t *testing.T) {
+	tests := []struct {
+		name     string
+		setup    func() *Options
+		validate func(*testing.T, *Options)
+	}{
+		{
+			name: "json_schema_with_full_schema",
+			setup: func() *Options {
+				schema := map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"name":  map[string]any{"type": "string"},
+						"count": map[string]any{"type": "integer"},
+					},
+					"required": []string{"name"},
+				}
+				return NewOptions(WithOutputFormat(OutputFormatJSONSchema(schema)))
+			},
+			validate: func(t *testing.T, opts *Options) {
+				assertOutputFormatType(t, opts, "json_schema")
+				assertOutputFormatHasSchema(t, opts)
+			},
+		},
+		{
+			name: "nil_output_format_by_default",
+			setup: func() *Options {
+				return NewOptions()
+			},
+			validate: func(t *testing.T, opts *Options) {
+				assertOutputFormatNil(t, opts)
+			},
+		},
+		{
+			name: "empty_schema",
+			setup: func() *Options {
+				return NewOptions(WithOutputFormat(OutputFormatJSONSchema(map[string]any{})))
+			},
+			validate: func(t *testing.T, opts *Options) {
+				assertOutputFormatType(t, opts, "json_schema")
+			},
+		},
+		{
+			name: "nil_output_format_option",
+			setup: func() *Options {
+				return NewOptions(WithOutputFormat(nil))
+			},
+			validate: func(t *testing.T, opts *Options) {
+				assertOutputFormatNil(t, opts)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			opts := tt.setup()
+			tt.validate(t, opts)
+		})
+	}
+}
+
+// T038: WithJSONSchema Convenience Function
+func TestWithJSONSchema(t *testing.T) {
+	tests := []struct {
+		name     string
+		schema   map[string]any
+		validate func(*testing.T, *Options)
+	}{
+		{
+			name: "simple_object_schema",
+			schema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"result": map[string]any{"type": "string"},
+				},
+			},
+			validate: func(t *testing.T, opts *Options) {
+				assertOutputFormatType(t, opts, "json_schema")
+				assertOutputFormatHasSchema(t, opts)
+			},
+		},
+		{
+			name:   "nil_schema",
+			schema: nil,
+			validate: func(t *testing.T, opts *Options) {
+				assertOutputFormatNil(t, opts)
+			},
+		},
+		{
+			name:   "empty_schema",
+			schema: map[string]any{},
+			validate: func(t *testing.T, opts *Options) {
+				assertOutputFormatType(t, opts, "json_schema")
+				// Empty schema is valid
+				if opts.OutputFormat.Schema == nil {
+					t.Error("Expected Schema to be set (even if empty)")
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			opts := NewOptions(WithJSONSchema(tt.schema))
+			tt.validate(t, opts)
+		})
+	}
+}
+
+// T039: OutputFormat Override Behavior
+func TestOutputFormatOverride(t *testing.T) {
+	firstSchema := map[string]any{"type": "string"}
+	secondSchema := map[string]any{"type": "object"}
+
+	opts := NewOptions(
+		WithJSONSchema(firstSchema),
+		WithJSONSchema(secondSchema),
+	)
+
+	assertOutputFormatType(t, opts, "json_schema")
+	// Second schema should override first
+	if opts.OutputFormat.Schema["type"] != "object" {
+		t.Errorf("Expected schema type 'object', got %v", opts.OutputFormat.Schema["type"])
+	}
+}
+
+// T040: OutputFormat Integration with Other Options
+func TestOutputFormatIntegration(t *testing.T) {
+	schema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"answer": map[string]any{"type": "string"},
+		},
+	}
+
+	opts := NewOptions(
+		WithSystemPrompt("You are helpful"),
+		WithJSONSchema(schema),
+		WithModel("claude-3-5-sonnet-20241022"),
+		WithPermissionMode(PermissionModeAcceptEdits),
+	)
+
+	// Verify all options are set correctly
+	assertOptionsSystemPrompt(t, opts, "You are helpful")
+	assertOutputFormatType(t, opts, "json_schema")
+	assertOptionsModel(t, opts, "claude-3-5-sonnet-20241022")
+	assertOptionsPermissionMode(t, opts, PermissionModeAcceptEdits)
+}
+
+// Helper functions for OutputFormat tests
+
+// assertOutputFormatNil verifies OutputFormat is nil
+func assertOutputFormatNil(t *testing.T, opts *Options) {
+	t.Helper()
+	if opts.OutputFormat != nil {
+		t.Errorf("Expected OutputFormat = nil, got %v", opts.OutputFormat)
+	}
+}
+
+// assertOutputFormatType verifies OutputFormat.Type value
+func assertOutputFormatType(t *testing.T, opts *Options, expectedType string) {
+	t.Helper()
+	if opts.OutputFormat == nil {
+		t.Error("Expected OutputFormat to be set, got nil")
+		return
+	}
+	if opts.OutputFormat.Type != expectedType {
+		t.Errorf("Expected OutputFormat.Type = %q, got %q", expectedType, opts.OutputFormat.Type)
+	}
+}
+
+// assertOutputFormatHasSchema verifies OutputFormat.Schema is set
+func assertOutputFormatHasSchema(t *testing.T, opts *Options) {
+	t.Helper()
+	if opts.OutputFormat == nil {
+		t.Error("Expected OutputFormat to be set, got nil")
+		return
+	}
+	if opts.OutputFormat.Schema == nil {
+		t.Error("Expected OutputFormat.Schema to be set")
+	}
+}
