@@ -324,6 +324,37 @@ err := claudecode.WithClient(ctx, func(client claudecode.Client) error {
 })
 ```
 
+**Programmatic Agents:**
+```go
+// Define custom agents for specialized tasks
+claudecode.Query(ctx, "Review this codebase for security issues",
+    claudecode.WithAgent("security-reviewer", claudecode.AgentDefinition{
+        Description: "Reviews code for security vulnerabilities",
+        Prompt:      "You are a security expert focused on OWASP top 10...",
+        Tools:       []string{"Read", "Grep", "Glob"},
+        Model:       claudecode.AgentModelSonnet,
+    }))
+
+// Multiple agents for complex workflows
+claudecode.Query(ctx, "Analyze and improve this code",
+    claudecode.WithAgents(map[string]claudecode.AgentDefinition{
+        "code-reviewer": {
+            Description: "Reviews code quality and best practices",
+            Prompt:      "You are a senior engineer focused on code quality...",
+            Tools:       []string{"Read", "Grep"},
+            Model:       claudecode.AgentModelSonnet,
+        },
+        "test-writer": {
+            Description: "Writes comprehensive unit tests",
+            Prompt:      "You are a testing expert...",
+            Tools:       []string{"Read", "Write", "Bash"},
+            Model:       claudecode.AgentModelHaiku,
+        },
+    }))
+```
+
+Available agent models: `AgentModelSonnet`, `AgentModelOpus`, `AgentModelHaiku`, `AgentModelInherit`
+
 See [pkg.go.dev](https://pkg.go.dev/github.com/severity1/claude-code-sdk-go) for complete API reference.
 
 ## When to Use Which API
