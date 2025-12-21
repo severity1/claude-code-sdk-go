@@ -1163,20 +1163,28 @@ func TestSandboxWithExistingSettings(t *testing.T) {
 
 	cmd := BuildCommand("/usr/local/bin/claude", options, true)
 
-	// Should have --settings flag
-	foundSettings := false
+	// Count --settings flags - must be exactly 1
+	settingsCount := 0
+	var settingsValue string
 	for i, arg := range cmd {
 		if arg == settingsFlag && i+1 < len(cmd) {
-			foundSettings = true
-			value := cmd[i+1]
-			// When both settings and sandbox are present, sandbox should be added
-			// The exact behavior depends on implementation - this test validates the expected behavior
-			if !strings.Contains(value, `"sandbox"`) && !strings.Contains(value, `"model"`) {
-				t.Errorf("Expected --settings to contain merged config, got %q", value)
-			}
+			settingsCount++
+			settingsValue = cmd[i+1]
 		}
 	}
-	if !foundSettings {
-		t.Error("Expected --settings flag to be present")
+
+	if settingsCount != 1 {
+		t.Errorf("Expected exactly 1 --settings flag, got %d", settingsCount)
+	}
+
+	// MUST contain BOTH sandbox AND model in merged JSON
+	if !strings.Contains(settingsValue, `"sandbox"`) {
+		t.Errorf("Expected --settings to contain 'sandbox', got %q", settingsValue)
+	}
+	if !strings.Contains(settingsValue, `"model"`) {
+		t.Errorf("Expected --settings to contain 'model', got %q", settingsValue)
+	}
+	if !strings.Contains(settingsValue, `"enabled":true`) {
+		t.Errorf("Expected --settings to contain sandbox enabled:true, got %q", settingsValue)
 	}
 }

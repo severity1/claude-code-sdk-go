@@ -222,7 +222,9 @@ func addSessionFlags(cmd []string, options *shared.Options) []string {
 	if options.MaxTurns > 0 {
 		cmd = append(cmd, "--max-turns", fmt.Sprintf("%d", options.MaxTurns))
 	}
-	if options.Settings != nil {
+	// Only add --settings here if Sandbox is nil
+	// When Sandbox is set, addSandboxFlags() handles merging both into one --settings flag
+	if options.Settings != nil && options.Sandbox == nil {
 		cmd = append(cmd, "--settings", *options.Settings)
 	}
 	if options.ForkSession {
@@ -274,14 +276,24 @@ func addSandboxFlags(cmd []string, options *shared.Options) []string {
 		return cmd
 	}
 
-	// Create settings object with sandbox config
-	settings := map[string]interface{}{
-		"sandbox": options.Sandbox,
+	// Start with existing settings if present, otherwise create empty map
+	var settingsMap map[string]interface{}
+	if options.Settings != nil {
+		if err := json.Unmarshal([]byte(*options.Settings), &settingsMap); err != nil {
+			// If existing settings are invalid JSON, start fresh
+			settingsMap = make(map[string]interface{})
+		}
+	} else {
+		settingsMap = make(map[string]interface{})
 	}
 
-	data, err := json.Marshal(settings)
+	// Add sandbox to merged settings
+	settingsMap["sandbox"] = options.Sandbox
+
+	data, err := json.Marshal(settingsMap)
 	if err != nil {
-		// If serialization fails, skip sandbox settings
+		// This should never happen with our simple types
+		// If it does, skip sandbox settings (but existing settings are also skipped in this case)
 		return cmd
 	}
 
