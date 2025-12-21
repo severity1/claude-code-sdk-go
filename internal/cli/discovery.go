@@ -328,7 +328,6 @@ func addOutputFormatFlags(cmd []string, options *shared.Options) []string {
 	return append(cmd, "--json-schema", string(schemaData))
 }
 
-
 func addExtraFlags(cmd []string, options *shared.Options) []string {
 	for flag, value := range options.ExtraArgs {
 		if value == nil {
