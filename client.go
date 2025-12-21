@@ -606,62 +606,20 @@ func (c *ClientImpl) getInitTimeout() time.Duration {
 	return control.DefaultInitTimeout
 }
 
-// getCanUseToolHandler returns the can_use_tool handler from options,
-// adapting from shared types to control types.
+// getCanUseToolHandler returns the can_use_tool handler from options.
+// Since control types are now aliases to shared types, no conversion is needed.
 func (c *ClientImpl) getCanUseToolHandler() control.CanUseToolHandler {
 	if c.options == nil || c.options.CanUseTool == nil {
 		return nil
 	}
-
-	// Adapter function that converts between shared and control types
-	// Both types have identical field structures, so this is a direct mapping
-	return func(ctx context.Context, req control.CanUseToolRequest) (control.CanUseToolResponse, error) {
-		// Convert control.CanUseToolRequest to shared.CanUseToolRequest
-		sharedReq := CanUseToolRequest{
-			Subtype:               req.Subtype,
-			ToolName:              req.ToolName,
-			Input:                 req.Input,
-			PermissionSuggestions: req.PermissionSuggestions,
-			BlockedPath:           req.BlockedPath,
-		}
-
-		// Call the user's handler
-		sharedResp, err := c.options.CanUseTool(ctx, sharedReq)
-		if err != nil {
-			return control.CanUseToolResponse{}, err
-		}
-
-		// Convert shared.CanUseToolResponse to control.CanUseToolResponse
-		return control.CanUseToolResponse{
-			Behavior:           sharedResp.Behavior,
-			UpdatedInput:       sharedResp.UpdatedInput,
-			UpdatedPermissions: sharedResp.UpdatedPermissions,
-			Message:            sharedResp.Message,
-			Interrupt:          sharedResp.Interrupt,
-		}, nil
-	}
+	return c.options.CanUseTool
 }
 
-// buildHooksConfig builds the hooks configuration for control protocol initialization,
-// adapting from shared types to control types.
+// buildHooksConfig builds the hooks configuration for control protocol initialization.
+// Since control.HookMatcher is now an alias to shared.HookMatcher, no conversion is needed.
 func (c *ClientImpl) buildHooksConfig() map[string][]control.HookMatcher {
 	if c.options == nil || c.options.Hooks == nil {
 		return nil
 	}
-
-	// Convert shared.HookMatcher to control.HookMatcher
-	// Both types have identical field structures, so this is a direct mapping
-	result := make(map[string][]control.HookMatcher)
-	for event, matchers := range c.options.Hooks {
-		controlMatchers := make([]control.HookMatcher, len(matchers))
-		for i, m := range matchers {
-			controlMatchers[i] = control.HookMatcher{
-				Matcher:         m.Matcher,
-				HookCallbackIDs: m.HookCallbackIDs,
-				Timeout:         m.Timeout,
-			}
-		}
-		result[event] = controlMatchers
-	}
-	return result
+	return c.options.Hooks
 }

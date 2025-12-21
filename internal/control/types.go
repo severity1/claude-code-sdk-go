@@ -5,6 +5,8 @@ package control
 import (
 	"context"
 	"time"
+
+	"github.com/severity1/claude-code-sdk-go/internal/shared"
 )
 
 // Message type constants matching Python SDK
@@ -91,22 +93,24 @@ type RewindFilesRequest struct {
 }
 
 // CanUseToolRequest is received from CLI for permission callbacks (incoming request).
-type CanUseToolRequest struct {
-	Subtype               string         `json:"subtype"` // Always "can_use_tool"
-	ToolName              string         `json:"tool_name"`
-	Input                 map[string]any `json:"input"`
-	PermissionSuggestions []any          `json:"permission_suggestions,omitempty"`
-	BlockedPath           *string        `json:"blocked_path,omitempty"`
-}
+// This is an alias to the shared package type to avoid import cycles.
+type CanUseToolRequest = shared.CanUseToolRequest
 
 // CanUseToolResponse is sent back to CLI after permission callback.
-type CanUseToolResponse struct {
-	Behavior           string         `json:"behavior"` // "allow" or "deny"
-	UpdatedInput       map[string]any `json:"updatedInput,omitempty"`
-	UpdatedPermissions []any          `json:"updatedPermissions,omitempty"`
-	Message            string         `json:"message,omitempty"`
-	Interrupt          bool           `json:"interrupt,omitempty"`
-}
+// This is an alias to the shared package type to avoid import cycles.
+type CanUseToolResponse = shared.CanUseToolResponse
+
+// CanUseToolHandler processes incoming can_use_tool requests from CLI.
+// This is an alias to the shared package type to avoid import cycles.
+type CanUseToolHandler = shared.CanUseToolHandler
+
+// HookHandler processes incoming hook_callback requests from CLI.
+// This is an alias to the shared package type to avoid import cycles.
+type HookHandler = shared.HookHandler
+
+// HookMatcher configures hook matching for a specific event.
+// This is an alias to the shared package type to avoid import cycles.
+type HookMatcher = shared.HookMatcher
 
 // HookCallbackRequest is received from CLI for hook callbacks (incoming request).
 type HookCallbackRequest struct {
@@ -123,22 +127,9 @@ type McpMessageRequest struct {
 	Message    map[string]any `json:"message"`
 }
 
-// HookMatcher configures hook matching for a specific event.
-type HookMatcher struct {
-	Matcher         any      `json:"matcher,omitempty"`
-	HookCallbackIDs []string `json:"hookCallbackIds"`
-	Timeout         *int     `json:"timeout,omitempty"`
-}
-
 // Transport is the minimal interface required by Query for control protocol communication.
 // This avoids import cycles by not depending on the full Transport interface.
 type Transport interface {
 	// Write sends raw bytes to the CLI subprocess stdin.
 	Write(ctx context.Context, data []byte) error
 }
-
-// CanUseToolHandler processes incoming can_use_tool requests from CLI.
-type CanUseToolHandler func(ctx context.Context, req CanUseToolRequest) (CanUseToolResponse, error)
-
-// HookHandler processes incoming hook_callback requests from CLI.
-type HookHandler func(ctx context.Context, input any, toolUseID *string) (map[string]any, error)
