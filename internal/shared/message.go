@@ -10,6 +10,10 @@ const (
 	MessageTypeAssistant = "assistant"
 	MessageTypeSystem    = "system"
 	MessageTypeResult    = "result"
+
+	// Control protocol message types
+	MessageTypeControlRequest  = "control_request"
+	MessageTypeControlResponse = "control_response"
 )
 
 // Content block type constants
@@ -232,4 +236,17 @@ type ToolResultBlock struct {
 // BlockType returns the content block type for ToolResultBlock.
 func (b *ToolResultBlock) BlockType() string {
 	return ContentBlockTypeToolResult
+}
+
+// RawControlMessage wraps raw control protocol messages for passthrough to the control handler.
+// Control messages are not parsed into typed structs by the parser - they are routed directly
+// to the control protocol handler which performs its own parsing.
+type RawControlMessage struct {
+	MessageType string
+	Data        map[string]any
+}
+
+// Type returns the message type for RawControlMessage.
+func (m *RawControlMessage) Type() string {
+	return m.MessageType
 }

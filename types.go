@@ -3,6 +3,7 @@ package claudecode
 import (
 	"context"
 
+	"github.com/severity1/claude-code-sdk-go/internal/control"
 	"github.com/severity1/claude-code-sdk-go/internal/shared"
 )
 
@@ -60,6 +61,10 @@ const (
 	MessageTypeAssistant = shared.MessageTypeAssistant
 	MessageTypeSystem    = shared.MessageTypeSystem
 	MessageTypeResult    = shared.MessageTypeResult
+
+	// Control protocol message types
+	MessageTypeControlRequest  = shared.MessageTypeControlRequest
+	MessageTypeControlResponse = shared.MessageTypeControlResponse
 )
 
 // Re-export content block type constants
@@ -104,3 +109,44 @@ type Transport interface {
 	Close() error
 	GetValidator() *StreamValidator
 }
+
+// RawControlMessage wraps raw control protocol messages for passthrough.
+type RawControlMessage = shared.RawControlMessage
+
+// Control protocol types for SDK-CLI bidirectional communication.
+
+// SDKControlRequest represents a control request sent to the CLI.
+type SDKControlRequest = control.SDKControlRequest
+
+// SDKControlResponse represents a control response received from the CLI.
+type SDKControlResponse = control.SDKControlResponse
+
+// ControlResponse is the inner response structure.
+type ControlResponse = control.Response
+
+// InitializeRequest for control protocol handshake.
+type InitializeRequest = control.InitializeRequest
+
+// InitializeResponse from CLI with supported capabilities.
+type InitializeResponse = control.InitializeResponse
+
+// InterruptRequest to interrupt current operation via control protocol.
+type InterruptRequest = control.InterruptRequest
+
+// ControlProtocol manages bidirectional control communication with CLI.
+type ControlProtocol = control.Protocol
+
+// Re-export control protocol subtype constants
+const (
+	// Control request subtypes
+	SubtypeInterrupt         = control.SubtypeInterrupt
+	SubtypeCanUseTool        = control.SubtypeCanUseTool
+	SubtypeInitialize        = control.SubtypeInitialize
+	SubtypeSetPermissionMode = control.SubtypeSetPermissionMode
+	SubtypeHookCallback      = control.SubtypeHookCallback
+	SubtypeMcpMessage        = control.SubtypeMcpMessage
+
+	// Control response subtypes
+	ResponseSubtypeSuccess = control.ResponseSubtypeSuccess
+	ResponseSubtypeError   = control.ResponseSubtypeError
+)
