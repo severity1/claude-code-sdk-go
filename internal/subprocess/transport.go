@@ -44,9 +44,10 @@ type Transport struct {
 	mu        sync.RWMutex
 
 	// I/O streams
-	stdin  io.WriteCloser
-	stdout io.ReadCloser
-	stderr *os.File
+	stdin      io.WriteCloser
+	stdout     io.ReadCloser
+	stderr     *os.File      // Temporary file for stderr isolation
+	stderrPipe io.ReadCloser // Pipe for callback-based stderr handling
 
 	// Temporary files (cleaned up on Close)
 	mcpConfigFile *os.File // Temporary MCP config file
@@ -185,11 +186,20 @@ func (t *Transport) Connect(ctx context.Context) error {
 		return fmt.Errorf("failed to create stdout pipe: %w", err)
 	}
 
-	// Handle stderr based on DebugWriter configuration
-	if t.options != nil && t.options.DebugWriter != nil {
+	// Handle stderr based on StderrCallback/DebugWriter configuration
+	// Precedence: StderrCallback > DebugWriter > temp file (default)
+	switch {
+	case t.options != nil && t.options.StderrCallback != nil:
+		// Create pipe for callback-based stderr handling
+		t.stderrPipe, err = t.cmd.StderrPipe()
+		if err != nil {
+			return fmt.Errorf("failed to create stderr pipe: %w", err)
+		}
+		// Note: goroutine will be started after cmd.Start()
+	case t.options != nil && t.options.DebugWriter != nil:
 		// Use custom debug writer provided by user
 		t.cmd.Stderr = t.options.DebugWriter
-	} else {
+	default:
 		// Isolate stderr using temporary file to prevent deadlocks
 		// This matches Python SDK pattern to avoid subprocess pipe deadlocks
 		t.stderr, err = os.CreateTemp("", "claude_stderr_*.log")
@@ -218,6 +228,12 @@ func (t *Transport) Connect(ctx context.Context) error {
 	// Start I/O handling goroutines
 	t.wg.Add(1)
 	go t.handleStdout()
+
+	// Start stderr callback goroutine if callback is configured
+	if t.stderrPipe != nil && t.options != nil && t.options.StderrCallback != nil {
+		t.wg.Add(1)
+		go t.handleStderrCallback()
+	}
 
 	// Note: Do NOT close stdin here for one-shot mode
 	// The CLI still needs stdin to receive the message, even with --print flag
@@ -417,6 +433,41 @@ func (t *Transport) handleStdout() {
 	}
 }
 
+// handleStderrCallback processes stderr in a separate goroutine.
+// Matches Python SDK behavior: line-by-line, strips trailing whitespace,
+// skips empty lines, silently ignores all errors.
+func (t *Transport) handleStderrCallback() {
+	defer t.wg.Done()
+
+	scanner := bufio.NewScanner(t.stderrPipe)
+
+	for scanner.Scan() {
+		select {
+		case <-t.ctx.Done():
+			return
+		default:
+		}
+
+		// Strip trailing whitespace (matches Python's rstrip())
+		line := strings.TrimRight(scanner.Text(), " \t\r\n")
+
+		// Skip empty lines (matches Python SDK behavior)
+		if line == "" {
+			continue
+		}
+
+		// Call the callback synchronously (matches Python SDK)
+		// Recover from panics to prevent crashing the SDK
+		func() {
+			defer func() {
+				_ = recover() // Silently ignore callback panics (matches Python's pass)
+			}()
+			t.options.StderrCallback(line)
+		}()
+	}
+	// Silently ignore scanner errors (matches Python SDK's except Exception: pass)
+}
+
 // isProcessAlreadyFinishedError checks if an error indicates the process has already terminated.
 // This follows the Python SDK pattern of suppressing "process not found" type errors.
 func isProcessAlreadyFinishedError(err error) bool {
@@ -493,6 +544,11 @@ func (t *Transport) cleanup() {
 	if t.stdout != nil {
 		_ = t.stdout.Close()
 		t.stdout = nil
+	}
+
+	if t.stderrPipe != nil {
+		_ = t.stderrPipe.Close()
+		t.stderrPipe = nil
 	}
 
 	if t.stderr != nil {
