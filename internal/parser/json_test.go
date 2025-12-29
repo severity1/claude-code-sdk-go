@@ -1472,3 +1472,163 @@ func TestResultMessageStructuredOutputWithOtherFields(t *testing.T) {
 		t.Errorf("Expected confidence = 0.95, got %v", output["confidence"])
 	}
 }
+
+// TestStreamEventMessageParsing tests parsing of stream_event messages
+// Following established pattern from TestParseValidMessages
+func TestStreamEventMessageParsing(t *testing.T) {
+	tests := []struct {
+		name         string
+		data         map[string]any
+		expectedType string
+		validate     func(*testing.T, shared.Message)
+	}{
+		{
+			name: "stream_event_all_fields",
+			data: map[string]any{
+				"type":               "stream_event",
+				"uuid":               "evt-123",
+				"session_id":         "sess-456",
+				"event":              map[string]any{"type": "content_block_delta"},
+				"parent_tool_use_id": "tool-789",
+			},
+			expectedType: shared.MessageTypeStreamEvent,
+			validate: func(t *testing.T, msg shared.Message) {
+				t.Helper()
+				se := msg.(*shared.StreamEvent)
+				if se.UUID != "evt-123" {
+					t.Errorf("expected UUID 'evt-123', got %q", se.UUID)
+				}
+				if se.SessionID != "sess-456" {
+					t.Errorf("expected SessionID 'sess-456', got %q", se.SessionID)
+				}
+				if se.ParentToolUseID == nil || *se.ParentToolUseID != "tool-789" {
+					t.Errorf("expected ParentToolUseID 'tool-789', got %v", se.ParentToolUseID)
+				}
+				if se.Event == nil {
+					t.Error("expected Event to be set")
+				}
+				if se.Event["type"] != "content_block_delta" {
+					t.Errorf("expected Event type 'content_block_delta', got %v", se.Event["type"])
+				}
+			},
+		},
+		{
+			name: "stream_event_without_parent_tool_use_id",
+			data: map[string]any{
+				"type":       "stream_event",
+				"uuid":       "evt-abc",
+				"session_id": "sess-def",
+				"event":      map[string]any{"type": "message_start"},
+			},
+			expectedType: shared.MessageTypeStreamEvent,
+			validate: func(t *testing.T, msg shared.Message) {
+				t.Helper()
+				se := msg.(*shared.StreamEvent)
+				if se.ParentToolUseID != nil {
+					t.Errorf("expected ParentToolUseID nil, got %v", se.ParentToolUseID)
+				}
+			},
+		},
+		{
+			name: "stream_event_message_stop",
+			data: map[string]any{
+				"type":       "stream_event",
+				"uuid":       "evt-stop",
+				"session_id": "sess-ghi",
+				"event":      map[string]any{"type": "message_stop"},
+			},
+			expectedType: shared.MessageTypeStreamEvent,
+			validate: func(t *testing.T, msg shared.Message) {
+				t.Helper()
+				se := msg.(*shared.StreamEvent)
+				if se.Event["type"] != "message_stop" {
+					t.Errorf("expected Event type 'message_stop', got %v", se.Event["type"])
+				}
+			},
+		},
+		{
+			name: "stream_event_content_block_start",
+			data: map[string]any{
+				"type":       "stream_event",
+				"uuid":       "evt-cbs",
+				"session_id": "sess-jkl",
+				"event": map[string]any{
+					"type":  "content_block_start",
+					"index": 0.0,
+				},
+			},
+			expectedType: shared.MessageTypeStreamEvent,
+			validate: func(t *testing.T, msg shared.Message) {
+				t.Helper()
+				se := msg.(*shared.StreamEvent)
+				if se.Event["type"] != "content_block_start" {
+					t.Errorf("expected Event type 'content_block_start', got %v", se.Event["type"])
+				}
+				if se.Event["index"] != 0.0 {
+					t.Errorf("expected Event index 0, got %v", se.Event["index"])
+				}
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			parser := setupParserTest(t)
+			message, err := parser.ParseMessage(test.data)
+			assertParseSuccess(t, err, message)
+			assertMessageType(t, message, test.expectedType)
+			if test.validate != nil {
+				test.validate(t, message)
+			}
+		})
+	}
+}
+
+// TestStreamEventErrorConditions tests error conditions for stream_event parsing
+// Following established pattern from TestParseErrorConditions
+func TestStreamEventErrorConditions(t *testing.T) {
+	tests := []struct {
+		name        string
+		data        map[string]any
+		expectError string
+	}{
+		{
+			name:        "stream_event_missing_uuid",
+			data:        map[string]any{"type": "stream_event", "session_id": "s1", "event": map[string]any{}},
+			expectError: "stream_event missing uuid field",
+		},
+		{
+			name:        "stream_event_missing_session_id",
+			data:        map[string]any{"type": "stream_event", "uuid": "u1", "event": map[string]any{}},
+			expectError: "stream_event missing session_id field",
+		},
+		{
+			name:        "stream_event_missing_event",
+			data:        map[string]any{"type": "stream_event", "uuid": "u1", "session_id": "s1"},
+			expectError: "stream_event missing event field",
+		},
+		{
+			name:        "stream_event_invalid_uuid_type",
+			data:        map[string]any{"type": "stream_event", "uuid": 123, "session_id": "s1", "event": map[string]any{}},
+			expectError: "stream_event missing uuid field",
+		},
+		{
+			name:        "stream_event_invalid_session_id_type",
+			data:        map[string]any{"type": "stream_event", "uuid": "u1", "session_id": 123, "event": map[string]any{}},
+			expectError: "stream_event missing session_id field",
+		},
+		{
+			name:        "stream_event_invalid_event_type",
+			data:        map[string]any{"type": "stream_event", "uuid": "u1", "session_id": "s1", "event": "not a map"},
+			expectError: "stream_event missing event field",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			parser := setupParserTest(t)
+			_, err := parser.ParseMessage(test.data)
+			assertParseError(t, err, test.expectError)
+		})
+	}
+}

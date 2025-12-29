@@ -1586,3 +1586,64 @@ func validateNoAgentsFlag(t *testing.T, cmd []string) {
 	t.Helper()
 	assertNotContainsArg(t, cmd, agentsFlag)
 }
+
+// TestIncludePartialMessagesFlagSupport tests CLI flag for partial message streaming
+func TestIncludePartialMessagesFlagSupport(t *testing.T) {
+	tests := []struct {
+		name     string
+		options  *shared.Options
+		validate func(*testing.T, []string)
+	}{
+		{
+			name: "flag_added_when_true",
+			options: &shared.Options{
+				IncludePartialMessages: true,
+			},
+			validate: func(t *testing.T, cmd []string) {
+				t.Helper()
+				assertContainsArg(t, cmd, "--include-partial-messages")
+			},
+		},
+		{
+			name: "flag_not_added_when_false",
+			options: &shared.Options{
+				IncludePartialMessages: false,
+			},
+			validate: func(t *testing.T, cmd []string) {
+				t.Helper()
+				assertNotContainsArg(t, cmd, "--include-partial-messages")
+			},
+		},
+		{
+			name:    "flag_not_added_by_default",
+			options: &shared.Options{},
+			validate: func(t *testing.T, cmd []string) {
+				t.Helper()
+				assertNotContainsArg(t, cmd, "--include-partial-messages")
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			cmd := BuildCommand("/usr/local/bin/claude", test.options, false)
+			test.validate(t, cmd)
+		})
+	}
+}
+
+// TestIncludePartialMessagesWithOtherOptions tests flag interaction with other options
+func TestIncludePartialMessagesWithOtherOptions(t *testing.T) {
+	options := &shared.Options{
+		IncludePartialMessages: true,
+		MaxTurns:               5,
+		ContinueConversation:   true,
+	}
+
+	cmd := BuildCommand("/usr/local/bin/claude", options, false)
+
+	// Verify all flags are present
+	assertContainsArg(t, cmd, "--include-partial-messages")
+	assertContainsArgs(t, cmd, "--max-turns", "5")
+	assertContainsArg(t, cmd, "--continue")
+}
