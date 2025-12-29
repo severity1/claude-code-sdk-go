@@ -78,6 +78,16 @@ const (
 	ContentBlockTypeToolResult = shared.ContentBlockTypeToolResult
 )
 
+// Re-export stream event type constants for Event["type"] discrimination.
+const (
+	StreamEventTypeContentBlockStart = shared.StreamEventTypeContentBlockStart
+	StreamEventTypeContentBlockDelta = shared.StreamEventTypeContentBlockDelta
+	StreamEventTypeContentBlockStop  = shared.StreamEventTypeContentBlockStop
+	StreamEventTypeMessageStart      = shared.StreamEventTypeMessageStart
+	StreamEventTypeMessageDelta      = shared.StreamEventTypeMessageDelta
+	StreamEventTypeMessageStop       = shared.StreamEventTypeMessageStop
+)
+
 // Re-export AssistantMessageError constants
 const (
 	AssistantMessageErrorAuthFailed     = shared.AssistantMessageErrorAuthFailed
