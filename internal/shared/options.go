@@ -182,6 +182,9 @@ type Options struct {
 	ForkSession          bool            `json:"fork_session,omitempty"`
 	SettingSources       []SettingSource `json:"setting_sources,omitempty"`
 
+	// Partial Message Streaming
+	IncludePartialMessages bool `json:"include_partial_messages,omitempty"`
+
 	// Agent Definitions
 	Agents map[string]AgentDefinition `json:"agents,omitempty"`
 

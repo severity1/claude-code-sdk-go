@@ -14,6 +14,9 @@ const (
 	// Control protocol message types
 	MessageTypeControlRequest  = "control_request"
 	MessageTypeControlResponse = "control_response"
+
+	// Partial message streaming type
+	MessageTypeStreamEvent = "stream_event"
 )
 
 // Content block type constants
@@ -249,4 +252,46 @@ type RawControlMessage struct {
 // Type returns the message type for RawControlMessage.
 func (m *RawControlMessage) Type() string {
 	return m.MessageType
+}
+
+// Stream event type constants for Event["type"] discrimination.
+// Use these when type-switching on StreamEvent.Event to handle different event types.
+const (
+	StreamEventTypeContentBlockStart = "content_block_start"
+	StreamEventTypeContentBlockDelta = "content_block_delta"
+	StreamEventTypeContentBlockStop  = "content_block_stop"
+	StreamEventTypeMessageStart      = "message_start"
+	StreamEventTypeMessageDelta      = "message_delta"
+	StreamEventTypeMessageStop       = "message_stop"
+)
+
+// StreamEvent represents a partial message update during streaming.
+// Emitted when IncludePartialMessages is enabled in Options.
+//
+// The Event field contains varying structure depending on event type:
+//   - content_block_start: {"type": "content_block_start", "index": <int>, "content_block": {...}}
+//   - content_block_delta: {"type": "content_block_delta", "index": <int>, "delta": {...}}
+//   - content_block_stop: {"type": "content_block_stop", "index": <int>}
+//   - message_start: {"type": "message_start", "message": {...}}
+//   - message_delta: {"type": "message_delta", "delta": {...}, "usage": {...}}
+//   - message_stop: {"type": "message_stop"}
+//
+// Consumer code should type-switch on Event["type"] to handle different event types:
+//
+//	switch event.Event["type"] {
+//	case shared.StreamEventTypeContentBlockDelta:
+//	    // Handle content delta
+//	case shared.StreamEventTypeMessageStop:
+//	    // Handle message completion
+//	}
+type StreamEvent struct {
+	UUID            string         `json:"uuid"`
+	SessionID       string         `json:"session_id"`
+	Event           map[string]any `json:"event"`
+	ParentToolUseID *string        `json:"parent_tool_use_id,omitempty"`
+}
+
+// Type returns the message type for StreamEvent.
+func (m *StreamEvent) Type() string {
+	return MessageTypeStreamEvent
 }

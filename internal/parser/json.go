@@ -87,6 +87,8 @@ func (p *Parser) ParseMessage(data map[string]any) (shared.Message, error) {
 			MessageType: msgType,
 			Data:        data,
 		}, nil
+	case shared.MessageTypeStreamEvent:
+		return p.parseStreamEventMessage(data)
 	default:
 		return nil, shared.NewMessageParseError(
 			fmt.Sprintf("unknown message type: %s", msgType),
@@ -404,6 +406,36 @@ func (p *Parser) parseToolResultBlock(data map[string]any) (shared.ContentBlock,
 		ToolUseID: toolUseID,
 		Content:   data["content"],
 		IsError:   isError,
+	}, nil
+}
+
+// parseStreamEventMessage parses a stream event message from raw JSON data.
+func (p *Parser) parseStreamEventMessage(data map[string]any) (*shared.StreamEvent, error) {
+	uuid, ok := data["uuid"].(string)
+	if !ok {
+		return nil, shared.NewMessageParseError("stream_event missing uuid field", data)
+	}
+
+	sessionID, ok := data["session_id"].(string)
+	if !ok {
+		return nil, shared.NewMessageParseError("stream_event missing session_id field", data)
+	}
+
+	event, ok := data["event"].(map[string]any)
+	if !ok {
+		return nil, shared.NewMessageParseError("stream_event missing event field", data)
+	}
+
+	var parentToolUseID *string
+	if ptid, ok := data["parent_tool_use_id"].(string); ok {
+		parentToolUseID = &ptid
+	}
+
+	return &shared.StreamEvent{
+		UUID:            uuid,
+		SessionID:       sessionID,
+		Event:           event,
+		ParentToolUseID: parentToolUseID,
 	}, nil
 }
 

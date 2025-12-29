@@ -2625,3 +2625,66 @@ func assertAgentDefinition(t *testing.T, agent AgentDefinition, description, pro
 		t.Errorf("Expected Model = %q, got %q", model, agent.Model)
 	}
 }
+
+// TestIncludePartialMessagesOption tests partial message streaming functional option
+func TestIncludePartialMessagesOption(t *testing.T) {
+	tests := []struct {
+		name     string
+		setup    func() *Options
+		expected bool
+	}{
+		{
+			name: "enable_partial_messages",
+			setup: func() *Options {
+				return NewOptions(WithIncludePartialMessages(true))
+			},
+			expected: true,
+		},
+		{
+			name: "disable_partial_messages",
+			setup: func() *Options {
+				return NewOptions(WithIncludePartialMessages(false))
+			},
+			expected: false,
+		},
+		{
+			name: "convenience_function",
+			setup: func() *Options {
+				return NewOptions(WithPartialStreaming())
+			},
+			expected: true,
+		},
+		{
+			name: "default_is_false",
+			setup: func() *Options {
+				return NewOptions()
+			},
+			expected: false,
+		},
+		{
+			name: "override_partial_messages",
+			setup: func() *Options {
+				return NewOptions(
+					WithIncludePartialMessages(true),
+					WithIncludePartialMessages(false), // Should override
+				)
+			},
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			options := tt.setup()
+			assertOptionsIncludePartialMessages(t, options, tt.expected)
+		})
+	}
+}
+
+// assertOptionsIncludePartialMessages verifies IncludePartialMessages field
+func assertOptionsIncludePartialMessages(t *testing.T, options *Options, expected bool) {
+	t.Helper()
+	if options.IncludePartialMessages != expected {
+		t.Errorf("expected IncludePartialMessages = %v, got %v", expected, options.IncludePartialMessages)
+	}
+}
