@@ -1461,11 +1461,12 @@ func TestTransportControlProtocolIntegration(t *testing.T) {
 	defer cancel()
 
 	tests := []struct {
-		name      string
-		setup     func() *Transport
-		operation func(ctx context.Context, t *Transport) error
-		wantErr   bool
-		errSubstr string
+		name        string
+		setup       func() *Transport
+		operation   func(ctx context.Context, t *Transport) error
+		wantErr     bool
+		errSubstr   string
+		skipWindows bool // Skip on Windows due to batch script limitations
 	}{
 		{
 			name: "SetModel_requires_streaming_mode",
@@ -1527,8 +1528,9 @@ func TestTransportControlProtocolIntegration(t *testing.T) {
 				model := testModelName
 				return t.SetModel(ctx, &model)
 			},
-			wantErr:   false, // Should succeed when protocol is wired
-			errSubstr: "",
+			wantErr:     false, // Should succeed when protocol is wired
+			errSubstr:   "",
+			skipWindows: true, // Batch script can't properly parse/respond to control requests
 		},
 		{
 			name: "SetPermissionMode_in_streaming_mode_with_protocol",
@@ -1539,8 +1541,9 @@ func TestTransportControlProtocolIntegration(t *testing.T) {
 			operation: func(ctx context.Context, t *Transport) error {
 				return t.SetPermissionMode(ctx, "accept_edits")
 			},
-			wantErr:   false, // Should succeed when protocol is wired
-			errSubstr: "",
+			wantErr:     false, // Should succeed when protocol is wired
+			errSubstr:   "",
+			skipWindows: true, // Batch script can't properly parse/respond to control requests
 		},
 		{
 			name: "SetModel_nil_resets_to_default",
@@ -1550,13 +1553,18 @@ func TestTransportControlProtocolIntegration(t *testing.T) {
 			operation: func(ctx context.Context, t *Transport) error {
 				return t.SetModel(ctx, nil) // nil means reset to default
 			},
-			wantErr:   false,
-			errSubstr: "",
+			wantErr:     false,
+			errSubstr:   "",
+			skipWindows: true, // Batch script can't properly parse/respond to control requests
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			if tt.skipWindows && runtime.GOOS == windowsOS {
+				t.Skip("Skipped on Windows: batch script cannot properly handle control protocol")
+			}
+
 			transport := tt.setup()
 			defer disconnectTransportSafely(t, transport)
 
@@ -1585,6 +1593,10 @@ func TestTransportControlProtocolIntegration(t *testing.T) {
 // TestTransportControlMessageRouting tests that control messages are properly
 // routed to the protocol and regular messages go to msgChan.
 func TestTransportControlMessageRouting(t *testing.T) {
+	if runtime.GOOS == windowsOS {
+		t.Skip("Skipped on Windows: batch script cannot properly handle control protocol")
+	}
+
 	ctx, cancel := setupTransportTestContext(t, 10*time.Second)
 	defer cancel()
 
