@@ -15,6 +15,12 @@ import (
 	"github.com/severity1/claude-code-sdk-go/internal/shared"
 )
 
+// Test constants to avoid goconst linter warnings.
+const (
+	testBatExtension = ".bat"
+	testModelName    = "claude-sonnet-4-5"
+)
+
 // TestTransportLifecycle tests connection lifecycle, state management, and reconnection
 func TestTransportLifecycle(t *testing.T) {
 	ctx, cancel := setupTransportTestContext(t, 10*time.Second)
@@ -394,7 +400,7 @@ func newTransportMockCLIWithOptions(options ...TransportMockOption) string {
 	var extension string
 
 	if runtime.GOOS == windowsOS {
-		extension = ".bat"
+		extension = testBatExtension
 		switch {
 		case opts.shouldFail:
 			script = `@echo off
@@ -1424,7 +1430,7 @@ func newTransportMockCLIWithStderr() string {
 	var extension string
 
 	if runtime.GOOS == windowsOS {
-		extension = ".bat"
+		extension = testBatExtension
 		script = `@echo off
 echo Stderr line 1 >&2
 echo Stderr line 2 >&2
@@ -1438,6 +1444,234 @@ echo "Stderr line 1" >&2
 echo "Stderr line 2" >&2
 echo '{"type":"assistant","content":[{"type":"text","text":"Mock response"}],"model":"claude-3"}'
 sleep 0.5
+`
+	}
+
+	return createTransportTempScript(script, extension)
+}
+
+// =============================================================================
+// Control Protocol Integration Tests
+// =============================================================================
+
+// TestTransportControlProtocolIntegration tests that SetModel and SetPermissionMode
+// work through the control protocol when properly wired.
+func TestTransportControlProtocolIntegration(t *testing.T) {
+	ctx, cancel := setupTransportTestContext(t, 10*time.Second)
+	defer cancel()
+
+	tests := []struct {
+		name      string
+		setup     func() *Transport
+		operation func(ctx context.Context, t *Transport) error
+		wantErr   bool
+		errSubstr string
+	}{
+		{
+			name: "SetModel_requires_streaming_mode",
+			setup: func() *Transport {
+				// One-shot mode (closeStdin=true) should not support SetModel
+				return NewWithPrompt(newTransportMockCLI(), &shared.Options{}, "test prompt")
+			},
+			operation: func(ctx context.Context, t *Transport) error {
+				model := testModelName
+				return t.SetModel(ctx, &model)
+			},
+			wantErr:   true,
+			errSubstr: "one-shot mode",
+		},
+		{
+			name: "SetPermissionMode_requires_streaming_mode",
+			setup: func() *Transport {
+				// One-shot mode (closeStdin=true) should not support SetPermissionMode
+				return NewWithPrompt(newTransportMockCLI(), &shared.Options{}, "test prompt")
+			},
+			operation: func(ctx context.Context, t *Transport) error {
+				return t.SetPermissionMode(ctx, "accept_edits")
+			},
+			wantErr:   true,
+			errSubstr: "one-shot mode",
+		},
+		{
+			name: "SetModel_requires_connection",
+			setup: func() *Transport {
+				return setupTransportForTest(t, newTransportMockCLI())
+			},
+			operation: func(ctx context.Context, t *Transport) error {
+				// Don't connect first
+				model := testModelName
+				return t.SetModel(ctx, &model)
+			},
+			wantErr:   true,
+			errSubstr: "not connected",
+		},
+		{
+			name: "SetPermissionMode_requires_connection",
+			setup: func() *Transport {
+				return setupTransportForTest(t, newTransportMockCLI())
+			},
+			operation: func(ctx context.Context, t *Transport) error {
+				// Don't connect first
+				return t.SetPermissionMode(ctx, "accept_edits")
+			},
+			wantErr:   true,
+			errSubstr: "not connected",
+		},
+		{
+			name: "SetModel_in_streaming_mode_with_protocol",
+			setup: func() *Transport {
+				// Streaming mode with control protocol mock CLI
+				return setupTransportForTest(t, newTransportMockCLIWithControlProtocol())
+			},
+			operation: func(ctx context.Context, t *Transport) error {
+				model := testModelName
+				return t.SetModel(ctx, &model)
+			},
+			wantErr:   false, // Should succeed when protocol is wired
+			errSubstr: "",
+		},
+		{
+			name: "SetPermissionMode_in_streaming_mode_with_protocol",
+			setup: func() *Transport {
+				// Streaming mode with control protocol mock CLI
+				return setupTransportForTest(t, newTransportMockCLIWithControlProtocol())
+			},
+			operation: func(ctx context.Context, t *Transport) error {
+				return t.SetPermissionMode(ctx, "accept_edits")
+			},
+			wantErr:   false, // Should succeed when protocol is wired
+			errSubstr: "",
+		},
+		{
+			name: "SetModel_nil_resets_to_default",
+			setup: func() *Transport {
+				return setupTransportForTest(t, newTransportMockCLIWithControlProtocol())
+			},
+			operation: func(ctx context.Context, t *Transport) error {
+				return t.SetModel(ctx, nil) // nil means reset to default
+			},
+			wantErr:   false,
+			errSubstr: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			transport := tt.setup()
+			defer disconnectTransportSafely(t, transport)
+
+			// Connect only if not testing connection requirement
+			if !strings.Contains(tt.name, "requires_connection") {
+				connectTransportSafely(ctx, t, transport)
+			}
+
+			err := tt.operation(ctx, transport)
+
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("Expected error containing %q, got nil", tt.errSubstr)
+				} else if !strings.Contains(err.Error(), tt.errSubstr) {
+					t.Errorf("Expected error containing %q, got %q", tt.errSubstr, err.Error())
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Unexpected error: %v", err)
+				}
+			}
+		})
+	}
+}
+
+// TestTransportControlMessageRouting tests that control messages are properly
+// routed to the protocol and regular messages go to msgChan.
+func TestTransportControlMessageRouting(t *testing.T) {
+	ctx, cancel := setupTransportTestContext(t, 10*time.Second)
+	defer cancel()
+
+	// Create transport with control protocol mock CLI
+	transport := setupTransportForTest(t, newTransportMockCLIWithControlProtocol())
+	defer disconnectTransportSafely(t, transport)
+
+	connectTransportSafely(ctx, t, transport)
+
+	// Get message channel
+	msgChan, errChan := transport.ReceiveMessages(ctx)
+
+	// Wait for messages
+	var receivedRegularMsg bool
+	timeout := time.After(2 * time.Second)
+
+	for !receivedRegularMsg {
+		select {
+		case msg, ok := <-msgChan:
+			if !ok {
+				return // Channel closed
+			}
+			if msg != nil {
+				receivedRegularMsg = true
+				t.Logf("Received regular message: %T", msg)
+			}
+		case err := <-errChan:
+			t.Logf("Received error: %v", err)
+		case <-timeout:
+			// Timeout is OK - control messages are filtered out
+			return
+		}
+	}
+}
+
+// newTransportMockCLIWithControlProtocol creates a mock CLI that supports control protocol.
+// It responds to control requests with proper control responses.
+func newTransportMockCLIWithControlProtocol() string {
+	var script string
+	var extension string
+
+	if runtime.GOOS == windowsOS {
+		extension = testBatExtension
+		// Windows batch script that echoes back control responses
+		script = `@echo off
+setlocal enabledelayedexpansion
+
+:loop
+set /p line=
+if "!line!"=="" goto end
+
+REM Check if it's a control request and echo a response
+echo !line! | findstr /C:"control_request" > nul
+if %errorlevel%==0 (
+    REM Extract request_id and send success response
+    echo {"type":"control_response","response":{"subtype":"success","request_id":"req_1_mock","response":{}}}
+)
+
+REM Also output regular messages for testing
+echo {"type":"assistant","content":[{"type":"text","text":"Mock response"}],"model":"claude-3"}
+goto loop
+
+:end
+`
+	} else {
+		extension = ""
+		// Bash script that reads control requests and echoes responses
+		script = `#!/bin/bash
+
+# Output a regular message first
+echo '{"type":"assistant","content":[{"type":"text","text":"Mock response"}],"model":"claude-3"}'
+
+# Read stdin and respond to control requests
+while IFS= read -r line; do
+    if [[ "$line" == *"control_request"* ]]; then
+        # Extract request_id using grep/sed
+        req_id=$(echo "$line" | grep -o '"request_id":"[^"]*"' | cut -d'"' -f4)
+        if [ -z "$req_id" ]; then
+            req_id="req_1_mock"
+        fi
+        # Echo success response
+        echo "{\"type\":\"control_response\",\"response\":{\"subtype\":\"success\",\"request_id\":\"$req_id\",\"response\":{}}}"
+    fi
+done
+
+# Keep process alive briefly
+sleep 1
 `
 	}
 

@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/severity1/claude-code-sdk-go/internal/cli"
+	"github.com/severity1/claude-code-sdk-go/internal/control"
 	"github.com/severity1/claude-code-sdk-go/internal/parser"
 	"github.com/severity1/claude-code-sdk-go/internal/shared"
 )
@@ -61,6 +62,10 @@ type Transport struct {
 	// Channels for communication
 	msgChan chan shared.Message
 	errChan chan error
+
+	// Control protocol (for streaming mode only)
+	protocol        *control.Protocol
+	protocolAdapter *ProtocolAdapter
 
 	// Control and cleanup
 	ctx    context.Context
@@ -239,6 +244,21 @@ func (t *Transport) Connect(ctx context.Context) error {
 	// The CLI still needs stdin to receive the message, even with --print flag
 	// stdin will be closed after sending the message in SendMessage()
 
+	// Set up control protocol for streaming mode only
+	// One-shot mode (closeStdin=true) doesn't need control protocol
+	if !t.closeStdin {
+		t.protocolAdapter = NewProtocolAdapter(t.stdin)
+		t.protocol = control.NewProtocol(t.protocolAdapter)
+
+		// Start the protocol's background goroutine
+		// Note: The protocol's readLoop will block on the closed channel from the adapter,
+		// which is intentional - we route messages via handleStdout() -> HandleIncomingMessage()
+		if err := t.protocol.Start(t.ctx); err != nil {
+			t.cleanup()
+			return fmt.Errorf("failed to start control protocol: %w", err)
+		}
+	}
+
 	t.connected = true
 	return nil
 }
@@ -332,6 +352,16 @@ func (t *Transport) Close() error {
 
 	t.connected = false
 
+	// Close control protocol first (before cancelling context)
+	if t.protocol != nil {
+		_ = t.protocol.Close()
+		t.protocol = nil
+	}
+	if t.protocolAdapter != nil {
+		_ = t.protocolAdapter.Close()
+		t.protocolAdapter = nil
+	}
+
 	// Cancel context to stop goroutines
 	if t.cancel != nil {
 		t.cancel()
@@ -412,15 +442,29 @@ func (t *Transport) handleStdout() {
 
 		// Send parsed messages and track for validation
 		for _, msg := range messages {
-			if msg != nil {
-				// Track message for stream validation
-				t.validator.TrackMessage(msg)
+			if msg == nil {
+				continue
+			}
 
-				select {
-				case t.msgChan <- msg:
-				case <-t.ctx.Done():
-					return
+			// Check if this is a control message that should be routed to the protocol
+			if rawCtrl, ok := msg.(*shared.RawControlMessage); ok {
+				// Route control messages to the protocol for request/response correlation
+				if t.protocol != nil {
+					// HandleIncomingMessage routes control responses to pending requests
+					// and forwards non-control messages to the protocol's message stream
+					_ = t.protocol.HandleIncomingMessage(t.ctx, rawCtrl.Data)
 				}
+				// Don't send control messages to msgChan - they're internal to the protocol
+				continue
+			}
+
+			// Track regular message for stream validation
+			t.validator.TrackMessage(msg)
+
+			select {
+			case t.msgChan <- msg:
+			case <-t.ctx.Done():
+				return
 			}
 		}
 	}
@@ -619,7 +663,7 @@ func (t *Transport) GetValidator() *shared.StreamValidator {
 // SetModel changes the AI model during a streaming session.
 // This method requires control protocol integration which is only available
 // in streaming mode (when closeStdin is false).
-func (t *Transport) SetModel(_ context.Context, _ *string) error {
+func (t *Transport) SetModel(ctx context.Context, model *string) error {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 
@@ -632,16 +676,18 @@ func (t *Transport) SetModel(_ context.Context, _ *string) error {
 		return fmt.Errorf("SetModel not available in one-shot mode")
 	}
 
-	// TODO: Integrate with control.Protocol when subprocess transport
-	// fully supports bidirectional control protocol communication.
-	// For now, this is a placeholder that will be connected in future work.
-	return fmt.Errorf("control protocol integration not yet implemented in subprocess transport")
+	// Delegate to control protocol
+	if t.protocol == nil {
+		return fmt.Errorf("control protocol not initialized")
+	}
+
+	return t.protocol.SetModel(ctx, model)
 }
 
 // SetPermissionMode changes the permission mode during a streaming session.
 // This method requires control protocol integration which is only available
 // in streaming mode (when closeStdin is false).
-func (t *Transport) SetPermissionMode(_ context.Context, _ string) error {
+func (t *Transport) SetPermissionMode(ctx context.Context, mode string) error {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 
@@ -654,8 +700,10 @@ func (t *Transport) SetPermissionMode(_ context.Context, _ string) error {
 		return fmt.Errorf("SetPermissionMode not available in one-shot mode")
 	}
 
-	// TODO: Integrate with control.Protocol when subprocess transport
-	// fully supports bidirectional control protocol communication.
-	// For now, this is a placeholder that will be connected in future work.
-	return fmt.Errorf("control protocol integration not yet implemented in subprocess transport")
+	// Delegate to control protocol
+	if t.protocol == nil {
+		return fmt.Errorf("control protocol not initialized")
+	}
+
+	return t.protocol.SetPermissionMode(ctx, mode)
 }

@@ -11,8 +11,8 @@ import (
 )
 
 const (
-	userMessageType    = "user"
-	testModelSonnet    = "claude-sonnet-4-5"
+	userMessageType = "user"
+	testModelSonnet = "claude-sonnet-4-5"
 )
 
 // TestClientLifecycleManagement tests connection, resource cleanup, and transport integration

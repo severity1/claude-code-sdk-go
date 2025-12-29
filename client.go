@@ -431,6 +431,15 @@ func (c *ClientImpl) Interrupt(ctx context.Context) error {
 // SetModel changes the AI model during a streaming session.
 // Pass nil to reset to the default model.
 // Returns error if not connected or if the control request fails.
+//
+// Example - Change to a specific model:
+//
+//	model := "claude-sonnet-4-5"
+//	err := client.SetModel(ctx, &model)
+//
+// Example - Reset to default model:
+//
+//	err := client.SetModel(ctx, nil)
 func (c *ClientImpl) SetModel(ctx context.Context, model *string) error {
 	// Check context before proceeding (Go idiom: fail fast)
 	if ctx.Err() != nil {
@@ -454,6 +463,14 @@ func (c *ClientImpl) SetModel(ctx context.Context, model *string) error {
 // Valid modes: PermissionModeDefault, PermissionModeAcceptEdits,
 // PermissionModePlan, PermissionModeBypassPermissions.
 // Returns error if not connected or if the control request fails.
+//
+// Example - Enable auto-accept for edits:
+//
+//	err := client.SetPermissionMode(ctx, claudecode.PermissionModeAcceptEdits)
+//
+// Example - Switch to plan mode:
+//
+//	err := client.SetPermissionMode(ctx, claudecode.PermissionModePlan)
 func (c *ClientImpl) SetPermissionMode(ctx context.Context, mode PermissionMode) error {
 	// Check context before proceeding (Go idiom: fail fast)
 	if ctx.Err() != nil {
