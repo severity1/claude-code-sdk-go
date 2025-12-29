@@ -1290,7 +1290,7 @@ func TestStderrCallbackPanicRecovery(t *testing.T) {
 	panicCount := 0
 	var mu sync.Mutex
 
-	callback := func(line string) {
+	callback := func(_ string) {
 		mu.Lock()
 		panicCount++
 		mu.Unlock()
@@ -1338,7 +1338,7 @@ func TestStderrCallbackPrecedence(t *testing.T) {
 
 			callbackCalled := false
 			if tt.hasCallback {
-				options.StderrCallback = func(line string) {
+				options.StderrCallback = func(_ string) {
 					callbackCalled = true
 				}
 			}
@@ -1397,7 +1397,7 @@ func TestStderrCallbackWithMockCLI(t *testing.T) {
 
 	// Create a mock CLI that outputs to stderr
 	cliPath := newTransportMockCLIWithStderr()
-	defer os.Remove(cliPath)
+	defer func() { _ = os.Remove(cliPath) }()
 
 	transport := New(cliPath, options, false, "sdk-go")
 	defer disconnectTransportSafely(t, transport)

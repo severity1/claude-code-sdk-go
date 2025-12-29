@@ -2699,7 +2699,7 @@ func TestWithStderrCallback(t *testing.T) {
 		{
 			name: "callback_set",
 			setup: func() *Options {
-				return NewOptions(WithStderrCallback(func(line string) {}))
+				return NewOptions(WithStderrCallback(func(_ string) {}))
 			},
 			validate: func(t *testing.T, options *Options) {
 				t.Helper()
@@ -2716,14 +2716,14 @@ func TestWithStderrCallback(t *testing.T) {
 			validate: func(t *testing.T, options *Options) {
 				t.Helper()
 				if options.StderrCallback != nil {
-					t.Errorf("Expected StderrCallback to be nil by default, got %v", options.StderrCallback)
+					t.Error("Expected StderrCallback to be nil by default")
 				}
 			},
 		},
 		{
 			name: "callback_invocation",
 			setup: func() *Options {
-				return NewOptions(WithStderrCallback(func(line string) {
+				return NewOptions(WithStderrCallback(func(_ string) {
 					// Verify callback is invocable by checking it compiles
 				}))
 			},
@@ -2758,11 +2758,9 @@ func TestWithStderrCallback(t *testing.T) {
 		{
 			name: "override_previous_callback",
 			setup: func() *Options {
-				firstCalled := false
-				secondCalled := false
 				return NewOptions(
-					WithStderrCallback(func(line string) { firstCalled = true }),
-					WithStderrCallback(func(line string) { secondCalled = true }), // Should win
+					WithStderrCallback(func(_ string) { /* first */ }),
+					WithStderrCallback(func(_ string) { /* second wins */ }),
 				)
 			},
 			validate: func(t *testing.T, options *Options) {
@@ -2780,7 +2778,7 @@ func TestWithStderrCallback(t *testing.T) {
 			validate: func(t *testing.T, options *Options) {
 				t.Helper()
 				if options.StderrCallback != nil {
-					t.Errorf("Expected StderrCallback to be nil when explicitly set, got %v", options.StderrCallback)
+					t.Error("Expected StderrCallback to be nil when explicitly set")
 				}
 			},
 		},
@@ -2801,7 +2799,7 @@ func TestStderrCallbackIntegration(t *testing.T) {
 	options := NewOptions(
 		WithSystemPrompt("You are a helpful assistant"),
 		WithDebugWriter(&debugBuf),
-		WithStderrCallback(func(line string) {}),
+		WithStderrCallback(func(_ string) {}),
 		WithModel("claude-3-5-sonnet-20241022"),
 		WithPermissionMode(PermissionModeAcceptEdits),
 	)
@@ -2828,7 +2826,7 @@ func TestStderrCallbackIndependentOfDebugWriter(t *testing.T) {
 		var buf bytes.Buffer
 		options := NewOptions(
 			WithDebugWriter(&buf),
-			WithStderrCallback(func(line string) {}),
+			WithStderrCallback(func(_ string) {}),
 		)
 
 		if options.DebugWriter == nil {
@@ -2840,7 +2838,7 @@ func TestStderrCallbackIndependentOfDebugWriter(t *testing.T) {
 	})
 
 	t.Run("only_callback", func(t *testing.T) {
-		options := NewOptions(WithStderrCallback(func(line string) {}))
+		options := NewOptions(WithStderrCallback(func(_ string) {}))
 
 		if options.DebugWriter != nil {
 			t.Error("Expected DebugWriter to be nil")

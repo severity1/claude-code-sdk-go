@@ -219,6 +219,13 @@ type Options struct {
 	// If nil (default), stderr is isolated to a temporary file to prevent deadlocks.
 	// Common values: os.Stderr, io.Discard, or a custom io.Writer.
 	DebugWriter io.Writer `json:"-"` // Not serialized
+
+	// StderrCallback receives CLI stderr output line-by-line.
+	// If set, takes precedence over DebugWriter for stderr handling.
+	// Each line is stripped of trailing whitespace and empty lines are skipped.
+	// Callback panics are silently recovered to prevent crashing the SDK.
+	// Matches Python SDK's stderr callback behavior.
+	StderrCallback func(string) `json:"-"` // Not serialized
 }
 
 // McpServerType represents the type of MCP server.

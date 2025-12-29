@@ -441,6 +441,18 @@ func WithDebugDisabled() Option {
 	return WithDebugWriter(io.Discard)
 }
 
+// WithStderrCallback sets a callback for receiving CLI stderr output.
+// The callback is invoked for each non-empty line of stderr output.
+// Lines are stripped of trailing whitespace before being passed to the callback.
+// This takes precedence over WithDebugWriter if both are set.
+// Callback panics are silently recovered to prevent crashing the SDK.
+// Matches Python SDK's stderr callback behavior.
+func WithStderrCallback(callback func(string)) Option {
+	return func(o *Options) {
+		o.StderrCallback = callback
+	}
+}
+
 // OutputFormatJSONSchema creates an OutputFormat for JSON schema constraints.
 func OutputFormatJSONSchema(schema map[string]any) *OutputFormat {
 	return &OutputFormat{
