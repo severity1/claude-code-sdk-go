@@ -24,6 +24,7 @@ type Client interface {
 	Interrupt(ctx context.Context) error
 	GetStreamIssues() []StreamIssue
 	GetStreamStats() StreamStats
+	GetServerInfo(ctx context.Context) (map[string]interface{}, error)
 }
 
 // ClientImpl implements the Client interface.
@@ -487,4 +488,40 @@ func (c *ClientImpl) GetStreamStats() StreamStats {
 	}
 
 	return validator.GetStats()
+}
+
+// GetServerInfo returns diagnostic information about the client and its connection.
+// This provides useful information for debugging, health checks, and support scenarios.
+//
+// This method is thread-safe and can be called concurrently from multiple goroutines.
+//
+// Returns a map containing:
+//   - "connected": bool - Whether the client is currently connected
+//   - "transport_type": string - The type of transport being used (e.g., "subprocess")
+//
+// Returns an error if the client is not connected.
+//
+// Example:
+//
+//	info, err := client.GetServerInfo(ctx)
+//	if err != nil {
+//	    log.Printf("Client not connected: %v", err)
+//	    return
+//	}
+//	fmt.Printf("Connected: %v, Transport: %s\n",
+//	    info["connected"], info["transport_type"])
+func (c *ClientImpl) GetServerInfo(_ context.Context) (map[string]interface{}, error) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	if !c.connected || c.transport == nil {
+		return nil, fmt.Errorf("client not connected")
+	}
+
+	info := map[string]interface{}{
+		"connected":      true,
+		"transport_type": "subprocess",
+	}
+
+	return info, nil
 }
