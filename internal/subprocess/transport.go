@@ -615,3 +615,47 @@ func (t *Transport) generateMcpConfigFile() (string, error) {
 func (t *Transport) GetValidator() *shared.StreamValidator {
 	return t.validator
 }
+
+// SetModel changes the AI model during a streaming session.
+// This method requires control protocol integration which is only available
+// in streaming mode (when closeStdin is false).
+func (t *Transport) SetModel(_ context.Context, _ *string) error {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+
+	if !t.connected {
+		return fmt.Errorf("transport not connected")
+	}
+
+	// Control protocol integration is only available in streaming mode
+	if t.closeStdin {
+		return fmt.Errorf("SetModel not available in one-shot mode")
+	}
+
+	// TODO: Integrate with control.Protocol when subprocess transport
+	// fully supports bidirectional control protocol communication.
+	// For now, this is a placeholder that will be connected in future work.
+	return fmt.Errorf("control protocol integration not yet implemented in subprocess transport")
+}
+
+// SetPermissionMode changes the permission mode during a streaming session.
+// This method requires control protocol integration which is only available
+// in streaming mode (when closeStdin is false).
+func (t *Transport) SetPermissionMode(_ context.Context, _ string) error {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+
+	if !t.connected {
+		return fmt.Errorf("transport not connected")
+	}
+
+	// Control protocol integration is only available in streaming mode
+	if t.closeStdin {
+		return fmt.Errorf("SetPermissionMode not available in one-shot mode")
+	}
+
+	// TODO: Integrate with control.Protocol when subprocess transport
+	// fully supports bidirectional control protocol communication.
+	// For now, this is a placeholder that will be connected in future work.
+	return fmt.Errorf("control protocol integration not yet implemented in subprocess transport")
+}

@@ -885,9 +885,11 @@ func (m *mockTransportForOptions) SendMessage(_ context.Context, _ StreamMessage
 func (m *mockTransportForOptions) ReceiveMessages(_ context.Context) (<-chan Message, <-chan error) {
 	return nil, nil
 }
-func (m *mockTransportForOptions) Interrupt(_ context.Context) error { return nil }
-func (m *mockTransportForOptions) Close() error                      { return nil }
-func (m *mockTransportForOptions) GetValidator() *StreamValidator    { return &StreamValidator{} }
+func (m *mockTransportForOptions) Interrupt(_ context.Context) error                   { return nil }
+func (m *mockTransportForOptions) SetModel(_ context.Context, _ *string) error         { return nil }
+func (m *mockTransportForOptions) SetPermissionMode(_ context.Context, _ string) error { return nil }
+func (m *mockTransportForOptions) Close() error                                        { return nil }
+func (m *mockTransportForOptions) GetValidator() *StreamValidator                      { return &StreamValidator{} }
 
 // TestWithEnvOptions tests environment variable functional options following table-driven pattern
 func TestWithEnvOptions(t *testing.T) {

@@ -11,7 +11,8 @@ import (
 )
 
 const (
-	userMessageType = "user"
+	userMessageType    = "user"
+	testModelSonnet    = "claude-sonnet-4-5"
 )
 
 // TestClientLifecycleManagement tests connection, resource cleanup, and transport integration
@@ -983,11 +984,13 @@ type clientMockTransport struct {
 	errChan      chan error
 
 	// Error injection for testing
-	connectError   error
-	sendError      error
-	interruptError error
-	closeError     error
-	asyncError     error // For async error testing
+	connectError           error
+	sendError              error
+	interruptError         error
+	closeError             error
+	asyncError             error // For async error testing
+	setModelError          error
+	setPermissionModeError error
 }
 
 func (c *clientMockTransport) Connect(ctx context.Context) error {
@@ -1146,6 +1149,24 @@ func (c *clientMockTransport) GetValidator() *StreamValidator {
 	return &StreamValidator{}
 }
 
+func (c *clientMockTransport) SetModel(_ context.Context, _ *string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.setModelError != nil {
+		return c.setModelError
+	}
+	return nil
+}
+
+func (c *clientMockTransport) SetPermissionMode(_ context.Context, _ string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.setPermissionModeError != nil {
+		return c.setPermissionModeError
+	}
+	return nil
+}
+
 // Streamlined Mock Transport Options - reduced from 11 to 6 essential functions
 type ClientMockTransportOption func(*clientMockTransport)
 
@@ -1167,6 +1188,14 @@ func WithClientAsyncError(err error) ClientMockTransportOption {
 
 func WithClientResponseMessages(messages []Message) ClientMockTransportOption {
 	return func(t *clientMockTransport) { t.testMessages = messages }
+}
+
+func WithClientSetModelError(err error) ClientMockTransportOption {
+	return func(t *clientMockTransport) { t.setModelError = err }
+}
+
+func WithClientSetPermissionModeError(err error) ClientMockTransportOption {
+	return func(t *clientMockTransport) { t.setPermissionModeError = err }
 }
 
 // Factory Functions - streamlined creation methods
@@ -2439,5 +2468,194 @@ func TestGetServerInfoConcurrent(t *testing.T) {
 		} else if connected != prevConnected {
 			t.Error("Inconsistent connected state across concurrent calls")
 		}
+	}
+}
+
+// =============================================================================
+// Dynamic Control Methods Tests (SetModel, SetPermissionMode) - Issues #51, #52
+// =============================================================================
+
+func TestClientDynamicControl(t *testing.T) {
+	t.Run("set_model", testClientSetModel)
+	t.Run("set_permission_mode", testClientSetPermissionMode)
+}
+
+func testClientSetModel(t *testing.T) {
+	t.Run("success", testClientSetModelSuccess)
+	t.Run("not_connected", testClientSetModelNotConnected)
+	t.Run("context_cancelled", testClientSetModelContextCancelled)
+	t.Run("transport_error", testClientSetModelTransportError)
+}
+
+func testClientSetModelSuccess(t *testing.T) {
+	t.Helper()
+
+	ctx, cancel := setupClientTestContext(t, 5*time.Second)
+	defer cancel()
+
+	transport := newClientMockTransport()
+	client := setupClientForTest(t, transport)
+	defer disconnectClientSafely(t, client)
+
+	connectClientSafely(ctx, t, client)
+
+	model := testModelSonnet
+	err := client.SetModel(ctx, &model)
+	assertNoError(t, err)
+}
+
+func testClientSetModelNotConnected(t *testing.T) {
+	t.Helper()
+
+	ctx, cancel := setupClientTestContext(t, 5*time.Second)
+	defer cancel()
+
+	transport := newClientMockTransport()
+	client := setupClientForTest(t, transport)
+	// Note: NOT connecting the client
+
+	model := testModelSonnet
+	err := client.SetModel(ctx, &model)
+
+	if err == nil {
+		t.Fatal("expected error when not connected, got nil")
+	}
+	if !strings.Contains(err.Error(), "not connected") {
+		t.Errorf("expected 'not connected' error, got: %v", err)
+	}
+}
+
+func testClientSetModelContextCancelled(t *testing.T) {
+	t.Helper()
+
+	ctx, cancel := setupClientTestContext(t, 5*time.Second)
+	transport := newClientMockTransport()
+	client := setupClientForTest(t, transport)
+	defer disconnectClientSafely(t, client)
+
+	connectClientSafely(ctx, t, client)
+
+	// Cancel context before calling SetModel
+	cancel()
+
+	model := testModelSonnet
+	err := client.SetModel(ctx, &model)
+
+	if err == nil {
+		t.Fatal("expected error when context cancelled, got nil")
+	}
+}
+
+func testClientSetModelTransportError(t *testing.T) {
+	t.Helper()
+
+	ctx, cancel := setupClientTestContext(t, 5*time.Second)
+	defer cancel()
+
+	expectedErr := errors.New("transport set model error")
+	transport := newClientMockTransportWithOptions(
+		WithClientSetModelError(expectedErr),
+	)
+	client := setupClientForTest(t, transport)
+	defer disconnectClientSafely(t, client)
+
+	connectClientSafely(ctx, t, client)
+
+	model := testModelSonnet
+	err := client.SetModel(ctx, &model)
+
+	if err == nil {
+		t.Fatal("expected error from transport, got nil")
+	}
+	if !strings.Contains(err.Error(), "transport set model error") {
+		t.Errorf("expected transport error, got: %v", err)
+	}
+}
+
+func testClientSetPermissionMode(t *testing.T) {
+	t.Run("success", testClientSetPermissionModeSuccess)
+	t.Run("not_connected", testClientSetPermissionModeNotConnected)
+	t.Run("context_cancelled", testClientSetPermissionModeContextCancelled)
+	t.Run("transport_error", testClientSetPermissionModeTransportError)
+}
+
+func testClientSetPermissionModeSuccess(t *testing.T) {
+	t.Helper()
+
+	ctx, cancel := setupClientTestContext(t, 5*time.Second)
+	defer cancel()
+
+	transport := newClientMockTransport()
+	client := setupClientForTest(t, transport)
+	defer disconnectClientSafely(t, client)
+
+	connectClientSafely(ctx, t, client)
+
+	err := client.SetPermissionMode(ctx, PermissionModeAcceptEdits)
+	assertNoError(t, err)
+}
+
+func testClientSetPermissionModeNotConnected(t *testing.T) {
+	t.Helper()
+
+	ctx, cancel := setupClientTestContext(t, 5*time.Second)
+	defer cancel()
+
+	transport := newClientMockTransport()
+	client := setupClientForTest(t, transport)
+	// Note: NOT connecting the client
+
+	err := client.SetPermissionMode(ctx, PermissionModeAcceptEdits)
+
+	if err == nil {
+		t.Fatal("expected error when not connected, got nil")
+	}
+	if !strings.Contains(err.Error(), "not connected") {
+		t.Errorf("expected 'not connected' error, got: %v", err)
+	}
+}
+
+func testClientSetPermissionModeContextCancelled(t *testing.T) {
+	t.Helper()
+
+	ctx, cancel := setupClientTestContext(t, 5*time.Second)
+	transport := newClientMockTransport()
+	client := setupClientForTest(t, transport)
+	defer disconnectClientSafely(t, client)
+
+	connectClientSafely(ctx, t, client)
+
+	// Cancel context before calling SetPermissionMode
+	cancel()
+
+	err := client.SetPermissionMode(ctx, PermissionModeAcceptEdits)
+
+	if err == nil {
+		t.Fatal("expected error when context cancelled, got nil")
+	}
+}
+
+func testClientSetPermissionModeTransportError(t *testing.T) {
+	t.Helper()
+
+	ctx, cancel := setupClientTestContext(t, 5*time.Second)
+	defer cancel()
+
+	expectedErr := errors.New("transport set permission mode error")
+	transport := newClientMockTransportWithOptions(
+		WithClientSetPermissionModeError(expectedErr),
+	)
+	client := setupClientForTest(t, transport)
+	defer disconnectClientSafely(t, client)
+
+	connectClientSafely(ctx, t, client)
+
+	err := client.SetPermissionMode(ctx, PermissionModeAcceptEdits)
+
+	if err == nil {
+		t.Fatal("expected error from transport, got nil")
+	}
+	if !strings.Contains(err.Error(), "transport set permission mode error") {
+		t.Errorf("expected transport error, got: %v", err)
 	}
 }

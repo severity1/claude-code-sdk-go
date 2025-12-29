@@ -20,6 +20,8 @@ const (
 	SubtypeInitialize = "initialize"
 	// SubtypeSetPermissionMode changes the permission mode at runtime.
 	SubtypeSetPermissionMode = "set_permission_mode"
+	// SubtypeSetModel changes the AI model at runtime.
+	SubtypeSetModel = "set_model"
 	// SubtypeHookCallback invokes a registered hook callback.
 	SubtypeHookCallback = "hook_callback"
 	// SubtypeMcpMessage routes an MCP message to an SDK MCP server.
@@ -93,4 +95,14 @@ type SetPermissionModeRequest struct {
 	Subtype string `json:"subtype"`
 	// Mode is the new permission mode to set.
 	Mode string `json:"mode"`
+}
+
+// SetModelRequest changes the AI model at runtime.
+// This matches Python SDK's set_model() behavior exactly.
+type SetModelRequest struct {
+	// Subtype is always SubtypeSetModel.
+	Subtype string `json:"subtype"`
+	// Model is the new model to use. Use nil to reset to default.
+	// Examples: "claude-sonnet-4-5", "claude-opus-4-1-20250805"
+	Model *string `json:"model"`
 }
