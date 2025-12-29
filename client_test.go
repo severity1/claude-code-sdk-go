@@ -2249,3 +2249,195 @@ func TestClientQueryNotConnectedError(t *testing.T) {
 		t.Errorf("Expected 'not connected' error, got: %v", err)
 	}
 }
+
+// TestGetServerInfo tests the GetServerInfo method for diagnostic information retrieval
+// Covers Issue #13: Add GetServerInfo Method for Diagnostics
+func TestGetServerInfo(t *testing.T) {
+	tests := []struct {
+		name     string
+		setup    func() (*clientMockTransport, Client)
+		connect  bool
+		wantErr  bool
+		validate func(*testing.T, map[string]interface{}, error)
+	}{
+		{
+			name: "returns_error_when_not_connected",
+			setup: func() (*clientMockTransport, Client) {
+				transport := newClientMockTransport()
+				client := setupClientForTest(t, transport)
+				return transport, client
+			},
+			connect: false,
+			wantErr: true,
+			validate: func(t *testing.T, info map[string]interface{}, err error) {
+				t.Helper()
+				if err == nil {
+					t.Error("Expected error when not connected")
+					return
+				}
+				if !strings.Contains(err.Error(), "not connected") {
+					t.Errorf("Expected error to contain 'not connected', got: %v", err)
+				}
+				if info != nil {
+					t.Errorf("Expected nil info when not connected, got: %v", info)
+				}
+			},
+		},
+		{
+			name: "returns_info_when_connected",
+			setup: func() (*clientMockTransport, Client) {
+				transport := newClientMockTransport()
+				client := setupClientForTest(t, transport)
+				return transport, client
+			},
+			connect: true,
+			wantErr: false,
+			validate: func(t *testing.T, info map[string]interface{}, err error) {
+				t.Helper()
+				if err != nil {
+					t.Errorf("Expected no error, got: %v", err)
+					return
+				}
+				if info == nil {
+					t.Error("Expected info map, got nil")
+					return
+				}
+				// Verify expected fields
+				if connected, ok := info["connected"].(bool); !ok || !connected {
+					t.Errorf("Expected connected=true, got: %v", info["connected"])
+				}
+				if transportType, ok := info["transport_type"].(string); !ok || transportType != "subprocess" {
+					t.Errorf("Expected transport_type='subprocess', got: %v", info["transport_type"])
+				}
+			},
+		},
+		{
+			name: "returns_info_after_query",
+			setup: func() (*clientMockTransport, Client) {
+				transport := newClientMockTransport()
+				client := setupClientForTest(t, transport)
+				return transport, client
+			},
+			connect: true,
+			wantErr: false,
+			validate: func(t *testing.T, info map[string]interface{}, err error) {
+				t.Helper()
+				if err != nil {
+					t.Errorf("Expected no error after query, got: %v", err)
+					return
+				}
+				if info == nil {
+					t.Error("Expected info map after query, got nil")
+					return
+				}
+				// Should still show connected after operations
+				if connected, ok := info["connected"].(bool); !ok || !connected {
+					t.Errorf("Expected connected=true after query, got: %v", info["connected"])
+				}
+			},
+		},
+		{
+			name: "returns_error_after_disconnect",
+			setup: func() (*clientMockTransport, Client) {
+				transport := newClientMockTransport()
+				client := setupClientForTest(t, transport)
+				return transport, client
+			},
+			connect: true, // Will connect then disconnect before calling GetServerInfo
+			wantErr: true,
+			validate: func(t *testing.T, info map[string]interface{}, err error) {
+				t.Helper()
+				if err == nil {
+					t.Error("Expected error after disconnect")
+					return
+				}
+				if !strings.Contains(err.Error(), "not connected") {
+					t.Errorf("Expected error to contain 'not connected', got: %v", err)
+				}
+				if info != nil {
+					t.Errorf("Expected nil info after disconnect, got: %v", info)
+				}
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			ctx, cancel := setupClientTestContext(t, 5*time.Second)
+			defer cancel()
+
+			_, client := test.setup()
+			defer disconnectClientSafely(t, client)
+
+			if test.connect {
+				connectClientSafely(ctx, t, client)
+			}
+
+			// For the "after query" test, send a query first
+			if test.name == "returns_info_after_query" {
+				err := client.Query(ctx, "test message")
+				assertNoError(t, err)
+			}
+
+			// For the "after disconnect" test, disconnect before calling GetServerInfo
+			if test.name == "returns_error_after_disconnect" {
+				disconnectClientSafely(t, client)
+			}
+
+			info, err := client.GetServerInfo(ctx)
+			test.validate(t, info, err)
+		})
+	}
+}
+
+// TestGetServerInfoConcurrent tests thread-safety of GetServerInfo
+func TestGetServerInfoConcurrent(t *testing.T) {
+	ctx, cancel := setupClientTestContext(t, 15*time.Second)
+	defer cancel()
+
+	transport := newClientMockTransport()
+	client := setupClientForTest(t, transport)
+	defer disconnectClientSafely(t, client)
+
+	connectClientSafely(ctx, t, client)
+
+	const numGoroutines = 10
+	errors := make(chan error, numGoroutines)
+	results := make(chan map[string]interface{}, numGoroutines)
+
+	var wg sync.WaitGroup
+	for i := 0; i < numGoroutines; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			info, err := client.GetServerInfo(ctx)
+			if err != nil {
+				errors <- err
+				return
+			}
+			results <- info
+		}()
+	}
+
+	wg.Wait()
+	close(errors)
+	close(results)
+
+	// Check for errors
+	for err := range errors {
+		t.Errorf("Concurrent GetServerInfo error: %v", err)
+	}
+
+	// Verify all results are consistent
+	var prevConnected bool
+	first := true
+	for info := range results {
+		connected := info["connected"].(bool)
+		if first {
+			prevConnected = connected
+			first = false
+		} else if connected != prevConnected {
+			t.Error("Inconsistent connected state across concurrent calls")
+		}
+	}
+}
