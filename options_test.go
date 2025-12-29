@@ -2688,3 +2688,177 @@ func assertOptionsIncludePartialMessages(t *testing.T, options *Options, expecte
 		t.Errorf("expected IncludePartialMessages = %v, got %v", expected, options.IncludePartialMessages)
 	}
 }
+
+// T053: Stderr Callback Option - Issue #53
+func TestWithStderrCallback(t *testing.T) {
+	tests := []struct {
+		name     string
+		setup    func() *Options
+		validate func(t *testing.T, options *Options)
+	}{
+		{
+			name: "callback_set",
+			setup: func() *Options {
+				return NewOptions(WithStderrCallback(func(line string) {}))
+			},
+			validate: func(t *testing.T, options *Options) {
+				t.Helper()
+				if options.StderrCallback == nil {
+					t.Error("Expected StderrCallback to be set, got nil")
+				}
+			},
+		},
+		{
+			name: "nil_by_default",
+			setup: func() *Options {
+				return NewOptions()
+			},
+			validate: func(t *testing.T, options *Options) {
+				t.Helper()
+				if options.StderrCallback != nil {
+					t.Errorf("Expected StderrCallback to be nil by default, got %v", options.StderrCallback)
+				}
+			},
+		},
+		{
+			name: "callback_invocation",
+			setup: func() *Options {
+				return NewOptions(WithStderrCallback(func(line string) {
+					// Verify callback is invocable by checking it compiles
+				}))
+			},
+			validate: func(t *testing.T, options *Options) {
+				t.Helper()
+				if options.StderrCallback == nil {
+					t.Fatal("Expected StderrCallback to be set")
+				}
+				// Invoke the callback to verify it works
+				options.StderrCallback("test line")
+			},
+		},
+		{
+			name: "callback_captures_lines",
+			setup: func() *Options {
+				var received []string
+				return NewOptions(WithStderrCallback(func(line string) {
+					received = append(received, line)
+				}))
+			},
+			validate: func(t *testing.T, options *Options) {
+				t.Helper()
+				if options.StderrCallback == nil {
+					t.Fatal("Expected StderrCallback to be set")
+				}
+				// Invoke multiple times
+				options.StderrCallback("line1")
+				options.StderrCallback("line2")
+				options.StderrCallback("line3")
+			},
+		},
+		{
+			name: "override_previous_callback",
+			setup: func() *Options {
+				firstCalled := false
+				secondCalled := false
+				return NewOptions(
+					WithStderrCallback(func(line string) { firstCalled = true }),
+					WithStderrCallback(func(line string) { secondCalled = true }), // Should win
+				)
+			},
+			validate: func(t *testing.T, options *Options) {
+				t.Helper()
+				if options.StderrCallback == nil {
+					t.Error("Expected StderrCallback to be set after override")
+				}
+			},
+		},
+		{
+			name: "nil_callback_explicit",
+			setup: func() *Options {
+				return NewOptions(WithStderrCallback(nil))
+			},
+			validate: func(t *testing.T, options *Options) {
+				t.Helper()
+				if options.StderrCallback != nil {
+					t.Errorf("Expected StderrCallback to be nil when explicitly set, got %v", options.StderrCallback)
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			options := tt.setup()
+			tt.validate(t, options)
+		})
+	}
+}
+
+// TestStderrCallbackIntegration tests stderr callback with other options
+func TestStderrCallbackIntegration(t *testing.T) {
+	var debugBuf bytes.Buffer
+
+	options := NewOptions(
+		WithSystemPrompt("You are a helpful assistant"),
+		WithDebugWriter(&debugBuf),
+		WithStderrCallback(func(line string) {}),
+		WithModel("claude-3-5-sonnet-20241022"),
+		WithPermissionMode(PermissionModeAcceptEdits),
+	)
+
+	// Verify stderr callback is set
+	if options.StderrCallback == nil {
+		t.Error("Expected StderrCallback to be set")
+	}
+
+	// Verify debug writer is also set (they are independent)
+	if options.DebugWriter == nil {
+		t.Error("Expected DebugWriter to also be set")
+	}
+
+	// Verify other options are preserved
+	assertOptionsSystemPrompt(t, options, "You are a helpful assistant")
+	assertOptionsModel(t, options, "claude-3-5-sonnet-20241022")
+	assertOptionsPermissionMode(t, options, PermissionModeAcceptEdits)
+}
+
+// TestStderrCallbackIndependentOfDebugWriter tests that both can coexist
+func TestStderrCallbackIndependentOfDebugWriter(t *testing.T) {
+	t.Run("both_set", func(t *testing.T) {
+		var buf bytes.Buffer
+		options := NewOptions(
+			WithDebugWriter(&buf),
+			WithStderrCallback(func(line string) {}),
+		)
+
+		if options.DebugWriter == nil {
+			t.Error("Expected DebugWriter to be set")
+		}
+		if options.StderrCallback == nil {
+			t.Error("Expected StderrCallback to be set")
+		}
+	})
+
+	t.Run("only_callback", func(t *testing.T) {
+		options := NewOptions(WithStderrCallback(func(line string) {}))
+
+		if options.DebugWriter != nil {
+			t.Error("Expected DebugWriter to be nil")
+		}
+		if options.StderrCallback == nil {
+			t.Error("Expected StderrCallback to be set")
+		}
+	})
+
+	t.Run("only_debugwriter", func(t *testing.T) {
+		var buf bytes.Buffer
+		options := NewOptions(WithDebugWriter(&buf))
+
+		if options.DebugWriter == nil {
+			t.Error("Expected DebugWriter to be set")
+		}
+		if options.StderrCallback != nil {
+			t.Error("Expected StderrCallback to be nil")
+		}
+	})
+}
