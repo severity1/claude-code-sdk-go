@@ -65,6 +65,9 @@ const (
 	// Control protocol message types
 	MessageTypeControlRequest  = shared.MessageTypeControlRequest
 	MessageTypeControlResponse = shared.MessageTypeControlResponse
+
+	// Partial message streaming type
+	MessageTypeStreamEvent = shared.MessageTypeStreamEvent
 )
 
 // Re-export content block type constants
@@ -112,6 +115,9 @@ type Transport interface {
 
 // RawControlMessage wraps raw control protocol messages for passthrough.
 type RawControlMessage = shared.RawControlMessage
+
+// StreamEvent represents a partial message update during streaming.
+type StreamEvent = shared.StreamEvent
 
 // Control protocol types for SDK-CLI bidirectional communication.
 

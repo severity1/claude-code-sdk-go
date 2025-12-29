@@ -467,3 +467,18 @@ func WithJSONSchema(schema map[string]any) Option {
 		o.OutputFormat = OutputFormatJSONSchema(schema)
 	}
 }
+
+// WithIncludePartialMessages enables streaming of partial message updates.
+// When true, StreamEvent messages are emitted during response generation,
+// providing real-time progress as the model generates content.
+func WithIncludePartialMessages(include bool) Option {
+	return func(o *Options) {
+		o.IncludePartialMessages = include
+	}
+}
+
+// WithPartialStreaming is a convenience function that enables partial message streaming.
+// Equivalent to WithIncludePartialMessages(true).
+func WithPartialStreaming() Option {
+	return WithIncludePartialMessages(true)
+}

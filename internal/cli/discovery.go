@@ -244,6 +244,9 @@ func addSessionFlags(cmd []string, options *shared.Options) []string {
 		sourcesValue = strings.Join(strs, ",")
 	}
 	cmd = append(cmd, "--setting-sources", sourcesValue)
+	if options.IncludePartialMessages {
+		cmd = append(cmd, "--include-partial-messages")
+	}
 	return cmd
 }
 

@@ -14,6 +14,9 @@ const (
 	// Control protocol message types
 	MessageTypeControlRequest  = "control_request"
 	MessageTypeControlResponse = "control_response"
+
+	// Partial message streaming type
+	MessageTypeStreamEvent = "stream_event"
 )
 
 // Content block type constants
@@ -249,4 +252,18 @@ type RawControlMessage struct {
 // Type returns the message type for RawControlMessage.
 func (m *RawControlMessage) Type() string {
 	return m.MessageType
+}
+
+// StreamEvent represents a partial message update during streaming.
+// Emitted when IncludePartialMessages is enabled in Options.
+type StreamEvent struct {
+	UUID            string         `json:"uuid"`
+	SessionID       string         `json:"session_id"`
+	Event           map[string]any `json:"event"`
+	ParentToolUseID *string        `json:"parent_tool_use_id,omitempty"`
+}
+
+// Type returns the message type for StreamEvent.
+func (m *StreamEvent) Type() string {
+	return MessageTypeStreamEvent
 }
