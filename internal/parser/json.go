@@ -81,6 +81,12 @@ func (p *Parser) ParseMessage(data map[string]any) (shared.Message, error) {
 		return p.parseSystemMessage(data)
 	case shared.MessageTypeResult:
 		return p.parseResultMessage(data)
+	case shared.MessageTypeControlRequest, shared.MessageTypeControlResponse:
+		// Control messages are passed through as raw data for the control protocol handler
+		return &shared.RawControlMessage{
+			MessageType: msgType,
+			Data:        data,
+		}, nil
 	default:
 		return nil, shared.NewMessageParseError(
 			fmt.Sprintf("unknown message type: %s", msgType),

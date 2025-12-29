@@ -1263,6 +1263,167 @@ func TestResultMessageStructuredOutput(t *testing.T) {
 	}
 }
 
+// TestControlMessageParsing tests parsing of control protocol messages
+func TestControlMessageParsing(t *testing.T) {
+	parser := setupParserTest(t)
+
+	tests := []struct {
+		name         string
+		data         map[string]any
+		expectedType string
+		validate     func(*testing.T, shared.Message)
+	}{
+		{
+			name: "control_request_message",
+			data: map[string]any{
+				"type":       "control_request",
+				"request_id": "req_1_abc123",
+				"request": map[string]any{
+					"subtype": "interrupt",
+				},
+			},
+			expectedType: shared.MessageTypeControlRequest,
+			validate: func(t *testing.T, msg shared.Message) {
+				t.Helper()
+				rawMsg, ok := msg.(*shared.RawControlMessage)
+				if !ok {
+					t.Fatalf("Expected RawControlMessage, got %T", msg)
+				}
+				if rawMsg.Data["request_id"] != "req_1_abc123" {
+					t.Errorf("Expected request_id 'req_1_abc123', got %v", rawMsg.Data["request_id"])
+				}
+				request, ok := rawMsg.Data["request"].(map[string]any)
+				if !ok {
+					t.Fatal("Expected request to be a map")
+				}
+				if request["subtype"] != "interrupt" {
+					t.Errorf("Expected subtype 'interrupt', got %v", request["subtype"])
+				}
+			},
+		},
+		{
+			name: "control_response_success",
+			data: map[string]any{
+				"type": "control_response",
+				"response": map[string]any{
+					"subtype":    "success",
+					"request_id": "req_2_def456",
+					"response":   map[string]any{"status": "ok"},
+				},
+			},
+			expectedType: shared.MessageTypeControlResponse,
+			validate: func(t *testing.T, msg shared.Message) {
+				t.Helper()
+				rawMsg, ok := msg.(*shared.RawControlMessage)
+				if !ok {
+					t.Fatalf("Expected RawControlMessage, got %T", msg)
+				}
+				response, ok := rawMsg.Data["response"].(map[string]any)
+				if !ok {
+					t.Fatal("Expected response to be a map")
+				}
+				if response["subtype"] != "success" {
+					t.Errorf("Expected subtype 'success', got %v", response["subtype"])
+				}
+				if response["request_id"] != "req_2_def456" {
+					t.Errorf("Expected request_id 'req_2_def456', got %v", response["request_id"])
+				}
+			},
+		},
+		{
+			name: "control_response_error",
+			data: map[string]any{
+				"type": "control_response",
+				"response": map[string]any{
+					"subtype":    "error",
+					"request_id": "req_3_ghi789",
+					"error":      "initialization failed",
+				},
+			},
+			expectedType: shared.MessageTypeControlResponse,
+			validate: func(t *testing.T, msg shared.Message) {
+				t.Helper()
+				rawMsg, ok := msg.(*shared.RawControlMessage)
+				if !ok {
+					t.Fatalf("Expected RawControlMessage, got %T", msg)
+				}
+				response, ok := rawMsg.Data["response"].(map[string]any)
+				if !ok {
+					t.Fatal("Expected response to be a map")
+				}
+				if response["error"] != "initialization failed" {
+					t.Errorf("Expected error 'initialization failed', got %v", response["error"])
+				}
+			},
+		},
+		{
+			name: "control_request_initialize",
+			data: map[string]any{
+				"type":       "control_request",
+				"request_id": "req_4_jkl012",
+				"request": map[string]any{
+					"subtype": "initialize",
+				},
+			},
+			expectedType: shared.MessageTypeControlRequest,
+			validate: func(t *testing.T, msg shared.Message) {
+				t.Helper()
+				rawMsg, ok := msg.(*shared.RawControlMessage)
+				if !ok {
+					t.Fatalf("Expected RawControlMessage, got %T", msg)
+				}
+				request, ok := rawMsg.Data["request"].(map[string]any)
+				if !ok {
+					t.Fatal("Expected request to be a map")
+				}
+				if request["subtype"] != "initialize" {
+					t.Errorf("Expected subtype 'initialize', got %v", request["subtype"])
+				}
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			message, err := parser.ParseMessage(test.data)
+			assertParseSuccess(t, err, message)
+			assertMessageType(t, message, test.expectedType)
+			if test.validate != nil {
+				test.validate(t, message)
+			}
+		})
+	}
+}
+
+// TestControlMessageMixedWithRegular tests parsing control messages alongside regular messages
+func TestControlMessageMixedWithRegular(t *testing.T) {
+	parser := setupParserTest(t)
+
+	// Test a line with a regular message followed by a control message
+	obj1 := `{"type": "user", "message": {"content": "Hello"}}`
+	obj2 := `{"type": "control_response", "response": {"subtype": "success", "request_id": "req_1", "response": {}}}`
+	line := obj1 + "\n" + obj2
+
+	messages, err := parser.ProcessLine(line)
+	assertNoParseError(t, err)
+	assertMessageCount(t, messages, 2)
+
+	// First should be user message
+	_, ok := messages[0].(*shared.UserMessage)
+	if !ok {
+		t.Fatalf("Expected UserMessage, got %T", messages[0])
+	}
+
+	// Second should be control message
+	rawMsg, ok := messages[1].(*shared.RawControlMessage)
+	if !ok {
+		t.Fatalf("Expected RawControlMessage, got %T", messages[1])
+	}
+	if rawMsg.Type() != shared.MessageTypeControlResponse {
+		t.Errorf("Expected control_response type, got %s", rawMsg.Type())
+	}
+}
+
 // TestResultMessageStructuredOutputWithOtherFields tests structured_output works with other optional fields
 func TestResultMessageStructuredOutputWithOtherFields(t *testing.T) {
 	parser := setupParserTest(t)
