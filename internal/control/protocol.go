@@ -363,6 +363,8 @@ func (p *Protocol) sendErrorResponse(ctx context.Context, requestID string, errM
 }
 
 // parsePermissionSuggestions converts raw JSON to PermissionUpdate slice.
+// Invalid or unrecognized items are silently skipped for forward compatibility
+// with future CLI versions that may introduce new fields or formats.
 func parsePermissionSuggestions(raw []any) []PermissionUpdate {
 	var suggestions []PermissionUpdate
 	for _, item := range raw {
