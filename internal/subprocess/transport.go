@@ -741,5 +741,13 @@ func (t *Transport) buildProtocolOptions() []control.ProtocolOption {
 			}))
 	}
 
+	// Wire hooks if configured
+	if t.options != nil && t.options.Hooks != nil {
+		// Convert from any to strongly-typed hooks map
+		if hooks, ok := t.options.Hooks.(map[control.HookEvent][]control.HookMatcher); ok {
+			opts = append(opts, control.WithHooks(hooks))
+		}
+	}
+
 	return opts
 }

@@ -3203,3 +3203,287 @@ func TestPermissionUpdateTypeConstants(t *testing.T) {
 		}
 	}
 }
+
+// =============================================================================
+// Hook Options Tests (Issue #9)
+// =============================================================================
+
+// TestHookEventConstants tests that hook event constants are correctly exported
+func TestHookEventConstants(t *testing.T) {
+	tests := []struct {
+		name     string
+		constant HookEvent
+		expected string
+	}{
+		{"pre_tool_use", HookEventPreToolUse, "PreToolUse"},
+		{"post_tool_use", HookEventPostToolUse, "PostToolUse"},
+		{"user_prompt_submit", HookEventUserPromptSubmit, "UserPromptSubmit"},
+		{"stop", HookEventStop, "Stop"},
+		{"subagent_stop", HookEventSubagentStop, "SubagentStop"},
+		{"pre_compact", HookEventPreCompact, "PreCompact"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if string(tt.constant) != tt.expected {
+				t.Errorf("HookEvent constant %s = %q, want %q", tt.name, tt.constant, tt.expected)
+			}
+		})
+	}
+}
+
+// TestWithHooks tests bulk hook registration
+func TestWithHooks(t *testing.T) {
+	callback := func(
+		_ context.Context,
+		_ any,
+		_ *string,
+		_ HookContext,
+	) (HookJSONOutput, error) {
+		return HookJSONOutput{}, nil
+	}
+
+	hooks := map[HookEvent][]HookMatcher{
+		HookEventPreToolUse: {
+			{Matcher: "Bash", Hooks: []HookCallback{callback}},
+			{Matcher: "Write|Edit", Hooks: []HookCallback{callback}},
+		},
+		HookEventPostToolUse: {
+			{Matcher: "", Hooks: []HookCallback{callback}},
+		},
+	}
+
+	options := NewOptions(WithHooks(hooks))
+
+	// Verify hooks are stored correctly
+	if options.Hooks == nil {
+		t.Fatal("Expected Hooks to be set")
+	}
+
+	storedHooks, ok := options.Hooks.(map[HookEvent][]HookMatcher)
+	if !ok {
+		t.Fatalf("Expected Hooks to be map[HookEvent][]HookMatcher, got %T", options.Hooks)
+	}
+
+	if len(storedHooks[HookEventPreToolUse]) != 2 {
+		t.Errorf("Expected 2 PreToolUse matchers, got %d", len(storedHooks[HookEventPreToolUse]))
+	}
+
+	if len(storedHooks[HookEventPostToolUse]) != 1 {
+		t.Errorf("Expected 1 PostToolUse matcher, got %d", len(storedHooks[HookEventPostToolUse]))
+	}
+}
+
+// TestWithHook tests incremental hook addition
+func TestWithHook(t *testing.T) {
+	callback := func(
+		_ context.Context,
+		_ any,
+		_ *string,
+		_ HookContext,
+	) (HookJSONOutput, error) {
+		return HookJSONOutput{}, nil
+	}
+
+	options := NewOptions(
+		WithHook(HookEventPreToolUse, "Bash", callback),
+		WithHook(HookEventPreToolUse, "Write", callback),
+		WithHook(HookEventPostToolUse, "", callback), // Empty matcher = all tools
+	)
+
+	if options.Hooks == nil {
+		t.Fatal("Expected Hooks to be set")
+	}
+
+	storedHooks, ok := options.Hooks.(map[HookEvent][]HookMatcher)
+	if !ok {
+		t.Fatalf("Expected Hooks to be map[HookEvent][]HookMatcher, got %T", options.Hooks)
+	}
+
+	// Both Bash and Write hooks should be added to PreToolUse
+	if len(storedHooks[HookEventPreToolUse]) != 2 {
+		t.Errorf("Expected 2 PreToolUse matchers, got %d", len(storedHooks[HookEventPreToolUse]))
+	}
+
+	// PostToolUse should have 1 matcher
+	if len(storedHooks[HookEventPostToolUse]) != 1 {
+		t.Errorf("Expected 1 PostToolUse matcher, got %d", len(storedHooks[HookEventPostToolUse]))
+	}
+
+	// Verify matcher values
+	if storedHooks[HookEventPreToolUse][0].Matcher != "Bash" {
+		t.Errorf("First PreToolUse matcher = %q, want %q", storedHooks[HookEventPreToolUse][0].Matcher, "Bash")
+	}
+	if storedHooks[HookEventPreToolUse][1].Matcher != "Write" {
+		t.Errorf("Second PreToolUse matcher = %q, want %q", storedHooks[HookEventPreToolUse][1].Matcher, "Write")
+	}
+	if storedHooks[HookEventPostToolUse][0].Matcher != "" {
+		t.Errorf("PostToolUse matcher = %q, want empty string", storedHooks[HookEventPostToolUse][0].Matcher)
+	}
+}
+
+// TestWithPreToolUseHook tests the convenience function
+func TestWithPreToolUseHook(t *testing.T) {
+	callback := func(
+		_ context.Context,
+		_ any,
+		_ *string,
+		_ HookContext,
+	) (HookJSONOutput, error) {
+		return HookJSONOutput{}, nil
+	}
+
+	options := NewOptions(WithPreToolUseHook("Bash", callback))
+
+	if options.Hooks == nil {
+		t.Fatal("Expected Hooks to be set")
+	}
+
+	storedHooks, ok := options.Hooks.(map[HookEvent][]HookMatcher)
+	if !ok {
+		t.Fatalf("Expected Hooks to be map[HookEvent][]HookMatcher, got %T", options.Hooks)
+	}
+
+	if len(storedHooks[HookEventPreToolUse]) != 1 {
+		t.Errorf("Expected 1 PreToolUse matcher, got %d", len(storedHooks[HookEventPreToolUse]))
+	}
+
+	if storedHooks[HookEventPreToolUse][0].Matcher != "Bash" {
+		t.Errorf("Matcher = %q, want %q", storedHooks[HookEventPreToolUse][0].Matcher, "Bash")
+	}
+}
+
+// TestWithPostToolUseHook tests the convenience function
+func TestWithPostToolUseHook(t *testing.T) {
+	callback := func(
+		_ context.Context,
+		_ any,
+		_ *string,
+		_ HookContext,
+	) (HookJSONOutput, error) {
+		return HookJSONOutput{}, nil
+	}
+
+	options := NewOptions(WithPostToolUseHook("", callback)) // Empty = all tools
+
+	if options.Hooks == nil {
+		t.Fatal("Expected Hooks to be set")
+	}
+
+	storedHooks, ok := options.Hooks.(map[HookEvent][]HookMatcher)
+	if !ok {
+		t.Fatalf("Expected Hooks to be map[HookEvent][]HookMatcher, got %T", options.Hooks)
+	}
+
+	if len(storedHooks[HookEventPostToolUse]) != 1 {
+		t.Errorf("Expected 1 PostToolUse matcher, got %d", len(storedHooks[HookEventPostToolUse]))
+	}
+}
+
+// TestHookOptionsWithOtherOptions tests that hook options work with other options
+func TestHookOptionsWithOtherOptions(t *testing.T) {
+	callback := func(
+		_ context.Context,
+		_ any,
+		_ *string,
+		_ HookContext,
+	) (HookJSONOutput, error) {
+		return HookJSONOutput{}, nil
+	}
+
+	options := NewOptions(
+		WithSystemPrompt("You are a helpful assistant"),
+		WithModel("claude-3-5-sonnet-20241022"),
+		WithHook(HookEventPreToolUse, "Bash", callback),
+		WithPermissionMode(PermissionModeAcceptEdits),
+	)
+
+	// Verify hooks are set
+	if options.Hooks == nil {
+		t.Error("Expected Hooks to be set")
+	}
+
+	// Verify other options are preserved
+	assertOptionsSystemPrompt(t, options, "You are a helpful assistant")
+	assertOptionsModel(t, options, "claude-3-5-sonnet-20241022")
+	assertOptionsPermissionMode(t, options, PermissionModeAcceptEdits)
+}
+
+// TestHookMatcherWithTimeout tests HookMatcher with timeout
+func TestHookMatcherWithTimeout(t *testing.T) {
+	callback := func(
+		_ context.Context,
+		_ any,
+		_ *string,
+		_ HookContext,
+	) (HookJSONOutput, error) {
+		return HookJSONOutput{}, nil
+	}
+
+	timeout := 30.0
+	hooks := map[HookEvent][]HookMatcher{
+		HookEventPreToolUse: {
+			{Matcher: "Bash", Hooks: []HookCallback{callback}, Timeout: &timeout},
+		},
+	}
+
+	options := NewOptions(WithHooks(hooks))
+
+	storedHooks, ok := options.Hooks.(map[HookEvent][]HookMatcher)
+	if !ok {
+		t.Fatalf("Expected Hooks to be map[HookEvent][]HookMatcher, got %T", options.Hooks)
+	}
+
+	if storedHooks[HookEventPreToolUse][0].Timeout == nil {
+		t.Fatal("Expected Timeout to be set")
+	}
+
+	if *storedHooks[HookEventPreToolUse][0].Timeout != 30.0 {
+		t.Errorf("Timeout = %v, want 30.0", *storedHooks[HookEventPreToolUse][0].Timeout)
+	}
+}
+
+// TestEmptyHooks tests empty hooks map
+func TestEmptyHooks(t *testing.T) {
+	options := NewOptions(WithHooks(map[HookEvent][]HookMatcher{}))
+
+	if options.Hooks == nil {
+		t.Fatal("Expected Hooks to be set (even if empty)")
+	}
+
+	storedHooks, ok := options.Hooks.(map[HookEvent][]HookMatcher)
+	if !ok {
+		t.Fatalf("Expected Hooks to be map[HookEvent][]HookMatcher, got %T", options.Hooks)
+	}
+
+	if len(storedHooks) != 0 {
+		t.Errorf("Expected empty hooks map, got %d entries", len(storedHooks))
+	}
+}
+
+// TestMultipleCallbacksPerMatcher tests multiple callbacks in a single matcher
+func TestMultipleCallbacksPerMatcher(t *testing.T) {
+	callback1 := func(_ context.Context, _ any, _ *string, _ HookContext) (HookJSONOutput, error) {
+		return HookJSONOutput{}, nil
+	}
+	callback2 := func(_ context.Context, _ any, _ *string, _ HookContext) (HookJSONOutput, error) {
+		return HookJSONOutput{}, nil
+	}
+
+	hooks := map[HookEvent][]HookMatcher{
+		HookEventPreToolUse: {
+			{Matcher: "Bash", Hooks: []HookCallback{callback1, callback2}},
+		},
+	}
+
+	options := NewOptions(WithHooks(hooks))
+
+	storedHooks, ok := options.Hooks.(map[HookEvent][]HookMatcher)
+	if !ok {
+		t.Fatalf("Expected Hooks to be map[HookEvent][]HookMatcher, got %T", options.Hooks)
+	}
+
+	if len(storedHooks[HookEventPreToolUse][0].Hooks) != 2 {
+		t.Errorf("Expected 2 callbacks, got %d", len(storedHooks[HookEventPreToolUse][0].Hooks))
+	}
+}

@@ -82,7 +82,9 @@ type InterruptRequest struct {
 type InitializeRequest struct {
 	// Subtype is always SubtypeInitialize.
 	Subtype string `json:"subtype"`
-	// Hooks will be added in Issue #9 for hook registration.
+	// Hooks contains hook registrations keyed by event type.
+	// Format: {"PreToolUse": [...], "PostToolUse": [...]}
+	Hooks map[string][]HookMatcherConfig `json:"hooks,omitempty"`
 }
 
 // InitializeResponse contains the CLI's response to initialization.
