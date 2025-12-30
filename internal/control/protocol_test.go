@@ -4,6 +4,7 @@ package control
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -1366,4 +1367,553 @@ func testMarshalSetModelWithNil(t *testing.T) {
 	if request["model"] != nil {
 		t.Errorf("expected model to be nil, got %v", request["model"])
 	}
+}
+
+// =============================================================================
+// Phase 8: Permission Callback Tests (Issue #8)
+// =============================================================================
+
+func TestPermissionCallback(t *testing.T) {
+	t.Run("allow_callback", testPermissionAllowCallback)
+	t.Run("deny_callback", testPermissionDenyCallback)
+	t.Run("deny_with_interrupt", testPermissionDenyWithInterrupt)
+	t.Run("allow_with_updated_input", testPermissionAllowWithUpdatedInput)
+	t.Run("allow_with_updated_permissions", testPermissionAllowWithUpdatedPermissions)
+	t.Run("callback_error", testPermissionCallbackError)
+	t.Run("no_callback_registered", testPermissionNoCallbackRegistered)
+	t.Run("callback_panic_recovery", testPermissionCallbackPanicRecovery)
+}
+
+func testPermissionAllowCallback(t *testing.T) {
+	t.Helper()
+
+	ctx, cancel := setupControlTestContext(t, 5*time.Second)
+	defer cancel()
+
+	transport := newControlMockTransport()
+
+	// Create callback that allows all tools
+	callback := func(_ context.Context, toolName string, _ map[string]any, _ ToolPermissionContext) (PermissionResult, error) {
+		if toolName != "Read" {
+			t.Errorf("expected tool name 'Read', got '%s'", toolName)
+		}
+		return NewPermissionResultAllow(), nil
+	}
+
+	protocol := NewProtocol(transport, WithCanUseToolCallback(callback))
+
+	err := protocol.Start(ctx)
+	assertControlNoError(t, err)
+	defer func() { _ = protocol.Close() }()
+
+	// Simulate incoming can_use_tool request from CLI
+	request := map[string]any{
+		"type":       MessageTypeControlRequest,
+		"request_id": "req_perm_1",
+		"request": map[string]any{
+			"subtype":   SubtypeCanUseTool,
+			"tool_name": "Read",
+			"input":     map[string]any{"file_path": "/tmp/test.txt"},
+		},
+	}
+
+	err = protocol.HandleIncomingMessage(ctx, request)
+	assertControlNoError(t, err)
+
+	// Verify response was sent
+	transport.mu.Lock()
+	defer transport.mu.Unlock()
+
+	if len(transport.writtenData) == 0 {
+		t.Fatal("expected permission response to be sent")
+	}
+
+	var resp SDKControlResponse
+	err = json.Unmarshal(transport.writtenData[0], &resp)
+	assertControlNoError(t, err)
+
+	assertControlEqual(t, MessageTypeControlResponse, resp.Type)
+	assertControlEqual(t, ResponseSubtypeSuccess, resp.Response.Subtype)
+	assertControlEqual(t, "req_perm_1", resp.Response.RequestID)
+
+	// Verify response content has behavior: allow
+	respData, ok := resp.Response.Response.(map[string]any)
+	if !ok {
+		t.Fatal("response should be a map")
+	}
+	assertControlEqual(t, "allow", respData["behavior"])
+}
+
+func testPermissionDenyCallback(t *testing.T) {
+	t.Helper()
+
+	ctx, cancel := setupControlTestContext(t, 5*time.Second)
+	defer cancel()
+
+	transport := newControlMockTransport()
+
+	// Create callback that denies with a message
+	callback := func(_ context.Context, _ string, _ map[string]any, _ ToolPermissionContext) (PermissionResult, error) {
+		return NewPermissionResultDeny("tool not allowed"), nil
+	}
+
+	protocol := NewProtocol(transport, WithCanUseToolCallback(callback))
+
+	err := protocol.Start(ctx)
+	assertControlNoError(t, err)
+	defer func() { _ = protocol.Close() }()
+
+	// Simulate incoming can_use_tool request
+	request := map[string]any{
+		"type":       MessageTypeControlRequest,
+		"request_id": "req_perm_2",
+		"request": map[string]any{
+			"subtype":   SubtypeCanUseTool,
+			"tool_name": "Write",
+			"input":     map[string]any{},
+		},
+	}
+
+	err = protocol.HandleIncomingMessage(ctx, request)
+	assertControlNoError(t, err)
+
+	// Verify response was sent with deny
+	transport.mu.Lock()
+	defer transport.mu.Unlock()
+
+	if len(transport.writtenData) == 0 {
+		t.Fatal("expected permission response to be sent")
+	}
+
+	var resp SDKControlResponse
+	err = json.Unmarshal(transport.writtenData[0], &resp)
+	assertControlNoError(t, err)
+
+	respData, ok := resp.Response.Response.(map[string]any)
+	if !ok {
+		t.Fatal("response should be a map")
+	}
+	assertControlEqual(t, "deny", respData["behavior"])
+	assertControlEqual(t, "tool not allowed", respData["message"])
+}
+
+func testPermissionDenyWithInterrupt(t *testing.T) {
+	t.Helper()
+
+	ctx, cancel := setupControlTestContext(t, 5*time.Second)
+	defer cancel()
+
+	transport := newControlMockTransport()
+
+	// Create callback that denies with interrupt flag
+	callback := func(_ context.Context, _ string, _ map[string]any, _ ToolPermissionContext) (PermissionResult, error) {
+		return PermissionResultDeny{
+			Behavior:  "deny",
+			Message:   "dangerous operation blocked",
+			Interrupt: true,
+		}, nil
+	}
+
+	protocol := NewProtocol(transport, WithCanUseToolCallback(callback))
+
+	err := protocol.Start(ctx)
+	assertControlNoError(t, err)
+	defer func() { _ = protocol.Close() }()
+
+	request := map[string]any{
+		"type":       MessageTypeControlRequest,
+		"request_id": "req_perm_3",
+		"request": map[string]any{
+			"subtype":   SubtypeCanUseTool,
+			"tool_name": "Bash",
+			"input":     map[string]any{"command": "rm -rf /"},
+		},
+	}
+
+	err = protocol.HandleIncomingMessage(ctx, request)
+	assertControlNoError(t, err)
+
+	transport.mu.Lock()
+	defer transport.mu.Unlock()
+
+	var resp SDKControlResponse
+	err = json.Unmarshal(transport.writtenData[0], &resp)
+	assertControlNoError(t, err)
+
+	respData, ok := resp.Response.Response.(map[string]any)
+	if !ok {
+		t.Fatal("response should be a map")
+	}
+	assertControlEqual(t, "deny", respData["behavior"])
+	assertControlEqual(t, true, respData["interrupt"])
+}
+
+func testPermissionAllowWithUpdatedInput(t *testing.T) {
+	t.Helper()
+
+	ctx, cancel := setupControlTestContext(t, 5*time.Second)
+	defer cancel()
+
+	transport := newControlMockTransport()
+
+	// Create callback that modifies the input
+	callback := func(_ context.Context, _ string, input map[string]any, _ ToolPermissionContext) (PermissionResult, error) {
+		// Modify the file path to a safe location
+		modifiedInput := make(map[string]any)
+		for k, v := range input {
+			modifiedInput[k] = v
+		}
+		modifiedInput["file_path"] = "/tmp/safe/test.txt"
+
+		return PermissionResultAllow{
+			Behavior:     "allow",
+			UpdatedInput: modifiedInput,
+		}, nil
+	}
+
+	protocol := NewProtocol(transport, WithCanUseToolCallback(callback))
+
+	err := protocol.Start(ctx)
+	assertControlNoError(t, err)
+	defer func() { _ = protocol.Close() }()
+
+	request := map[string]any{
+		"type":       MessageTypeControlRequest,
+		"request_id": "req_perm_4",
+		"request": map[string]any{
+			"subtype":   SubtypeCanUseTool,
+			"tool_name": "Write",
+			"input":     map[string]any{"file_path": "/etc/passwd", "content": "test"},
+		},
+	}
+
+	err = protocol.HandleIncomingMessage(ctx, request)
+	assertControlNoError(t, err)
+
+	transport.mu.Lock()
+	defer transport.mu.Unlock()
+
+	var resp SDKControlResponse
+	err = json.Unmarshal(transport.writtenData[0], &resp)
+	assertControlNoError(t, err)
+
+	respData, ok := resp.Response.Response.(map[string]any)
+	if !ok {
+		t.Fatal("response should be a map")
+	}
+	assertControlEqual(t, "allow", respData["behavior"])
+
+	updatedInput, ok := respData["updatedInput"].(map[string]any)
+	if !ok {
+		t.Fatal("updatedInput should be a map")
+	}
+	assertControlEqual(t, "/tmp/safe/test.txt", updatedInput["file_path"])
+}
+
+func testPermissionAllowWithUpdatedPermissions(t *testing.T) {
+	t.Helper()
+
+	ctx, cancel := setupControlTestContext(t, 5*time.Second)
+	defer cancel()
+
+	transport := newControlMockTransport()
+
+	// Create callback that returns updated permissions
+	callback := func(_ context.Context, _ string, _ map[string]any, _ ToolPermissionContext) (PermissionResult, error) {
+		return PermissionResultAllow{
+			Behavior: "allow",
+			UpdatedPermissions: []PermissionUpdate{
+				{
+					Type: PermissionUpdateTypeAddRules,
+					Rules: []PermissionRuleValue{
+						{ToolName: "Read", RuleContent: ptrString("/tmp/*")},
+					},
+				},
+			},
+		}, nil
+	}
+
+	protocol := NewProtocol(transport, WithCanUseToolCallback(callback))
+
+	err := protocol.Start(ctx)
+	assertControlNoError(t, err)
+	defer func() { _ = protocol.Close() }()
+
+	request := map[string]any{
+		"type":       MessageTypeControlRequest,
+		"request_id": "req_perm_5",
+		"request": map[string]any{
+			"subtype":   SubtypeCanUseTool,
+			"tool_name": "Read",
+			"input":     map[string]any{},
+		},
+	}
+
+	err = protocol.HandleIncomingMessage(ctx, request)
+	assertControlNoError(t, err)
+
+	transport.mu.Lock()
+	defer transport.mu.Unlock()
+
+	var resp SDKControlResponse
+	err = json.Unmarshal(transport.writtenData[0], &resp)
+	assertControlNoError(t, err)
+
+	respData, ok := resp.Response.Response.(map[string]any)
+	if !ok {
+		t.Fatal("response should be a map")
+	}
+	assertControlEqual(t, "allow", respData["behavior"])
+
+	// Verify updatedPermissions is present
+	updatedPerms, ok := respData["updatedPermissions"].([]any)
+	if !ok {
+		t.Fatal("updatedPermissions should be an array")
+	}
+	if len(updatedPerms) != 1 {
+		t.Fatalf("expected 1 permission update, got %d", len(updatedPerms))
+	}
+}
+
+func testPermissionCallbackError(t *testing.T) {
+	t.Helper()
+
+	ctx, cancel := setupControlTestContext(t, 5*time.Second)
+	defer cancel()
+
+	transport := newControlMockTransport()
+
+	// Create callback that returns an error
+	callback := func(_ context.Context, _ string, _ map[string]any, _ ToolPermissionContext) (PermissionResult, error) {
+		return nil, fmt.Errorf("callback error: database connection failed")
+	}
+
+	protocol := NewProtocol(transport, WithCanUseToolCallback(callback))
+
+	err := protocol.Start(ctx)
+	assertControlNoError(t, err)
+	defer func() { _ = protocol.Close() }()
+
+	request := map[string]any{
+		"type":       MessageTypeControlRequest,
+		"request_id": "req_perm_6",
+		"request": map[string]any{
+			"subtype":   SubtypeCanUseTool,
+			"tool_name": "Query",
+			"input":     map[string]any{},
+		},
+	}
+
+	err = protocol.HandleIncomingMessage(ctx, request)
+	assertControlNoError(t, err)
+
+	transport.mu.Lock()
+	defer transport.mu.Unlock()
+
+	var resp SDKControlResponse
+	err = json.Unmarshal(transport.writtenData[0], &resp)
+	assertControlNoError(t, err)
+
+	// Should be an error response
+	assertControlEqual(t, ResponseSubtypeError, resp.Response.Subtype)
+	if resp.Response.Error == "" {
+		t.Error("expected error message in response")
+	}
+}
+
+func testPermissionNoCallbackRegistered(t *testing.T) {
+	t.Helper()
+
+	ctx, cancel := setupControlTestContext(t, 5*time.Second)
+	defer cancel()
+
+	transport := newControlMockTransport()
+
+	// Create protocol WITHOUT a callback
+	protocol := NewProtocol(transport)
+
+	err := protocol.Start(ctx)
+	assertControlNoError(t, err)
+	defer func() { _ = protocol.Close() }()
+
+	request := map[string]any{
+		"type":       MessageTypeControlRequest,
+		"request_id": "req_perm_7",
+		"request": map[string]any{
+			"subtype":   SubtypeCanUseTool,
+			"tool_name": "AnyTool",
+			"input":     map[string]any{},
+		},
+	}
+
+	err = protocol.HandleIncomingMessage(ctx, request)
+	assertControlNoError(t, err)
+
+	transport.mu.Lock()
+	defer transport.mu.Unlock()
+
+	var resp SDKControlResponse
+	err = json.Unmarshal(transport.writtenData[0], &resp)
+	assertControlNoError(t, err)
+
+	// Should deny by default (secure default)
+	respData, ok := resp.Response.Response.(map[string]any)
+	if !ok {
+		t.Fatal("response should be a map")
+	}
+	assertControlEqual(t, "deny", respData["behavior"])
+}
+
+func testPermissionCallbackPanicRecovery(t *testing.T) {
+	t.Helper()
+
+	ctx, cancel := setupControlTestContext(t, 5*time.Second)
+	defer cancel()
+
+	transport := newControlMockTransport()
+
+	// Create callback that panics
+	callback := func(_ context.Context, _ string, _ map[string]any, _ ToolPermissionContext) (PermissionResult, error) {
+		panic("unexpected panic in callback")
+	}
+
+	protocol := NewProtocol(transport, WithCanUseToolCallback(callback))
+
+	err := protocol.Start(ctx)
+	assertControlNoError(t, err)
+	defer func() { _ = protocol.Close() }()
+
+	request := map[string]any{
+		"type":       MessageTypeControlRequest,
+		"request_id": "req_perm_8",
+		"request": map[string]any{
+			"subtype":   SubtypeCanUseTool,
+			"tool_name": "PanicTool",
+			"input":     map[string]any{},
+		},
+	}
+
+	// Should not panic - should recover and return error response
+	err = protocol.HandleIncomingMessage(ctx, request)
+	assertControlNoError(t, err)
+
+	transport.mu.Lock()
+	defer transport.mu.Unlock()
+
+	var resp SDKControlResponse
+	err = json.Unmarshal(transport.writtenData[0], &resp)
+	assertControlNoError(t, err)
+
+	// Should be an error response due to panic
+	assertControlEqual(t, ResponseSubtypeError, resp.Response.Subtype)
+}
+
+// TestPermissionTypeSerialization tests JSON serialization of permission types.
+func TestPermissionTypeSerialization(t *testing.T) {
+	t.Run("marshal_allow_result", testMarshalPermissionAllowResult)
+	t.Run("marshal_deny_result", testMarshalPermissionDenyResult)
+	t.Run("marshal_permission_update", testMarshalPermissionUpdate)
+	t.Run("marshal_permission_rule_value", testMarshalPermissionRuleValue)
+}
+
+func testMarshalPermissionAllowResult(t *testing.T) {
+	t.Helper()
+
+	result := PermissionResultAllow{
+		Behavior:     "allow",
+		UpdatedInput: map[string]any{"file_path": "/safe/path"},
+	}
+
+	data, err := json.Marshal(result)
+	assertControlNoError(t, err)
+
+	var parsed map[string]any
+	err = json.Unmarshal(data, &parsed)
+	assertControlNoError(t, err)
+
+	assertControlEqual(t, "allow", parsed["behavior"])
+
+	// Verify camelCase field name
+	if _, ok := parsed["updatedInput"]; !ok {
+		t.Error("expected 'updatedInput' field (camelCase)")
+	}
+}
+
+func testMarshalPermissionDenyResult(t *testing.T) {
+	t.Helper()
+
+	result := PermissionResultDeny{
+		Behavior:  "deny",
+		Message:   "not allowed",
+		Interrupt: true,
+	}
+
+	data, err := json.Marshal(result)
+	assertControlNoError(t, err)
+
+	var parsed map[string]any
+	err = json.Unmarshal(data, &parsed)
+	assertControlNoError(t, err)
+
+	assertControlEqual(t, "deny", parsed["behavior"])
+	assertControlEqual(t, "not allowed", parsed["message"])
+	assertControlEqual(t, true, parsed["interrupt"])
+}
+
+func testMarshalPermissionUpdate(t *testing.T) {
+	t.Helper()
+
+	update := PermissionUpdate{
+		Type: PermissionUpdateTypeAddRules,
+		Rules: []PermissionRuleValue{
+			{ToolName: "Read", RuleContent: ptrString("/tmp/*")},
+		},
+	}
+
+	data, err := json.Marshal(update)
+	assertControlNoError(t, err)
+
+	var parsed map[string]any
+	err = json.Unmarshal(data, &parsed)
+	assertControlNoError(t, err)
+
+	assertControlEqual(t, "addRules", parsed["type"])
+
+	rules, ok := parsed["rules"].([]any)
+	if !ok {
+		t.Fatal("rules should be an array")
+	}
+	if len(rules) != 1 {
+		t.Fatalf("expected 1 rule, got %d", len(rules))
+	}
+
+	rule := rules[0].(map[string]any)
+	// Verify camelCase field names
+	assertControlEqual(t, "Read", rule["toolName"])
+	assertControlEqual(t, "/tmp/*", rule["ruleContent"])
+}
+
+func testMarshalPermissionRuleValue(t *testing.T) {
+	t.Helper()
+
+	rule := PermissionRuleValue{
+		ToolName:    "Write",
+		RuleContent: ptrString("allow /home/*"),
+	}
+
+	data, err := json.Marshal(rule)
+	assertControlNoError(t, err)
+
+	var parsed map[string]any
+	err = json.Unmarshal(data, &parsed)
+	assertControlNoError(t, err)
+
+	// Verify camelCase field names in JSON
+	assertControlEqual(t, "Write", parsed["toolName"])
+	assertControlEqual(t, "allow /home/*", parsed["ruleContent"])
+}
+
+// ptrString is a helper to create a pointer to a string.
+func ptrString(s string) *string {
+	return &s
 }

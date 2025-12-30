@@ -1,0 +1,7 @@
+This is public data that can be freely read.
+
+Project: Demo Web Server
+Version: 1.0.0
+Status: Active
+
+This file demonstrates allowed file access with permission callbacks.

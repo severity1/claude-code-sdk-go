@@ -1,6 +1,7 @@
 package shared
 
 import (
+	"context"
 	"fmt"
 	"io"
 )
@@ -226,6 +227,21 @@ type Options struct {
 	// Callback panics are silently recovered to prevent crashing the SDK.
 	// Matches Python SDK's stderr callback behavior.
 	StderrCallback func(string) `json:"-"` // Not serialized
+
+	// CanUseTool is invoked when CLI requests permission to use a tool.
+	// The callback receives the tool name, input parameters, and permission context.
+	// Return PermissionResultAllow to permit, PermissionResultDeny to deny.
+	// If nil, all tool requests are denied (secure default).
+	// Callback panics are recovered to prevent crashing the SDK.
+	// Matches Python SDK's can_use_tool callback behavior.
+	// Note: The actual types are defined in internal/control to avoid import cycles.
+	// Use the claudecode package's WithCanUseTool option for type-safe configuration.
+	CanUseTool func(
+		ctx context.Context,
+		toolName string,
+		input map[string]any,
+		permCtx any, // Actually control.ToolPermissionContext
+	) (any, error) `json:"-"` // Not serialized
 }
 
 // McpServerType represents the type of MCP server.
