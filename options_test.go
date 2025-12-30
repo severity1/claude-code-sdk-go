@@ -2862,3 +2862,344 @@ func TestStderrCallbackIndependentOfDebugWriter(t *testing.T) {
 		}
 	})
 }
+
+// =============================================================================
+// Permission Callback Option Tests (Issue #8)
+// =============================================================================
+
+// TestWithCanUseTool tests the permission callback option
+func TestWithCanUseTool(t *testing.T) {
+	tests := []struct {
+		name     string
+		setup    func() *Options
+		validate func(t *testing.T, options *Options)
+	}{
+		{
+			name: "callback_set",
+			setup: func() *Options {
+				return NewOptions(WithCanUseTool(func(
+					_ context.Context,
+					_ string,
+					_ map[string]any,
+					_ ToolPermissionContext,
+				) (PermissionResult, error) {
+					return NewPermissionResultAllow(), nil
+				}))
+			},
+			validate: func(t *testing.T, options *Options) {
+				t.Helper()
+				if options.CanUseTool == nil {
+					t.Error("Expected CanUseTool to be set, got nil")
+				}
+			},
+		},
+		{
+			name: "nil_by_default",
+			setup: func() *Options {
+				return NewOptions()
+			},
+			validate: func(t *testing.T, options *Options) {
+				t.Helper()
+				if options.CanUseTool != nil {
+					t.Error("Expected CanUseTool to be nil by default")
+				}
+			},
+		},
+		{
+			name: "callback_invocation_allow",
+			setup: func() *Options {
+				return NewOptions(WithCanUseTool(func(
+					_ context.Context,
+					toolName string,
+					_ map[string]any,
+					_ ToolPermissionContext,
+				) (PermissionResult, error) {
+					if toolName == "Read" {
+						return NewPermissionResultAllow(), nil
+					}
+					return NewPermissionResultDeny("denied"), nil
+				}))
+			},
+			validate: func(t *testing.T, options *Options) {
+				t.Helper()
+				if options.CanUseTool == nil {
+					t.Fatal("Expected CanUseTool to be set")
+				}
+				// Invoke the callback wrapper
+				result, err := options.CanUseTool(
+					context.Background(),
+					"Read",
+					map[string]any{"file_path": "/test.txt"},
+					ToolPermissionContext{},
+				)
+				if err != nil {
+					t.Errorf("Unexpected error: %v", err)
+				}
+				if result == nil {
+					t.Error("Expected result, got nil")
+				}
+				// Check result is Allow type
+				if allow, ok := result.(PermissionResultAllow); !ok {
+					t.Errorf("Expected PermissionResultAllow, got %T", result)
+				} else if allow.Behavior != "allow" {
+					t.Errorf("Expected behavior 'allow', got %q", allow.Behavior)
+				}
+			},
+		},
+		{
+			name: "callback_invocation_deny",
+			setup: func() *Options {
+				return NewOptions(WithCanUseTool(func(
+					_ context.Context,
+					_ string,
+					_ map[string]any,
+					_ ToolPermissionContext,
+				) (PermissionResult, error) {
+					return NewPermissionResultDeny("not allowed"), nil
+				}))
+			},
+			validate: func(t *testing.T, options *Options) {
+				t.Helper()
+				if options.CanUseTool == nil {
+					t.Fatal("Expected CanUseTool to be set")
+				}
+				result, err := options.CanUseTool(
+					context.Background(),
+					"Write",
+					map[string]any{},
+					ToolPermissionContext{},
+				)
+				if err != nil {
+					t.Errorf("Unexpected error: %v", err)
+				}
+				// Check result is Deny type
+				if deny, ok := result.(PermissionResultDeny); !ok {
+					t.Errorf("Expected PermissionResultDeny, got %T", result)
+				} else {
+					if deny.Behavior != "deny" {
+						t.Errorf("Expected behavior 'deny', got %q", deny.Behavior)
+					}
+					if deny.Message != "not allowed" {
+						t.Errorf("Expected message 'not allowed', got %q", deny.Message)
+					}
+				}
+			},
+		},
+		{
+			name: "callback_receives_parameters",
+			setup: func() *Options {
+				var receivedTool string
+				var receivedInput map[string]any
+				return NewOptions(WithCanUseTool(func(
+					_ context.Context,
+					toolName string,
+					input map[string]any,
+					_ ToolPermissionContext,
+				) (PermissionResult, error) {
+					receivedTool = toolName
+					receivedInput = input
+					// Verify parameters were passed correctly
+					if receivedTool != "Edit" {
+						return NewPermissionResultDeny("wrong tool"), nil
+					}
+					if receivedInput["file_path"] != "/test.go" {
+						return NewPermissionResultDeny("wrong input"), nil
+					}
+					return NewPermissionResultAllow(), nil
+				}))
+			},
+			validate: func(t *testing.T, options *Options) {
+				t.Helper()
+				if options.CanUseTool == nil {
+					t.Fatal("Expected CanUseTool to be set")
+				}
+				result, err := options.CanUseTool(
+					context.Background(),
+					"Edit",
+					map[string]any{"file_path": "/test.go"},
+					ToolPermissionContext{},
+				)
+				if err != nil {
+					t.Errorf("Unexpected error: %v", err)
+				}
+				if _, ok := result.(PermissionResultAllow); !ok {
+					t.Errorf("Expected PermissionResultAllow (params matched), got %T", result)
+				}
+			},
+		},
+		{
+			name: "override_previous_callback",
+			setup: func() *Options {
+				return NewOptions(
+					WithCanUseTool(func(
+						_ context.Context,
+						_ string,
+						_ map[string]any,
+						_ ToolPermissionContext,
+					) (PermissionResult, error) {
+						return NewPermissionResultDeny("first"), nil
+					}),
+					WithCanUseTool(func(
+						_ context.Context,
+						_ string,
+						_ map[string]any,
+						_ ToolPermissionContext,
+					) (PermissionResult, error) {
+						return NewPermissionResultAllow(), nil // second wins
+					}),
+				)
+			},
+			validate: func(t *testing.T, options *Options) {
+				t.Helper()
+				if options.CanUseTool == nil {
+					t.Fatal("Expected CanUseTool to be set after override")
+				}
+				result, _ := options.CanUseTool(
+					context.Background(),
+					"Test",
+					nil,
+					ToolPermissionContext{},
+				)
+				// Second callback should win (returns Allow)
+				if _, ok := result.(PermissionResultAllow); !ok {
+					t.Errorf("Expected second callback to win (Allow), got %T", result)
+				}
+			},
+		},
+		{
+			name: "nil_callback_explicit",
+			setup: func() *Options {
+				return NewOptions(WithCanUseTool(nil))
+			},
+			validate: func(t *testing.T, options *Options) {
+				t.Helper()
+				if options.CanUseTool != nil {
+					t.Error("Expected CanUseTool to be nil when explicitly set")
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			options := tt.setup()
+			tt.validate(t, options)
+		})
+	}
+}
+
+// TestCanUseToolIntegration tests permission callback with other options
+func TestCanUseToolIntegration(t *testing.T) {
+	options := NewOptions(
+		WithSystemPrompt("You are a helpful assistant"),
+		WithModel("claude-3-5-sonnet-20241022"),
+		WithPermissionMode(PermissionModeAcceptEdits),
+		WithCanUseTool(func(
+			_ context.Context,
+			_ string,
+			_ map[string]any,
+			_ ToolPermissionContext,
+		) (PermissionResult, error) {
+			return NewPermissionResultAllow(), nil
+		}),
+	)
+
+	// Verify permission callback is set
+	if options.CanUseTool == nil {
+		t.Error("Expected CanUseTool to be set")
+	}
+
+	// Verify other options are preserved
+	assertOptionsSystemPrompt(t, options, "You are a helpful assistant")
+	assertOptionsModel(t, options, "claude-3-5-sonnet-20241022")
+	assertOptionsPermissionMode(t, options, PermissionModeAcceptEdits)
+}
+
+// TestPermissionResultConstructors tests the permission result helper functions
+func TestPermissionResultConstructors(t *testing.T) {
+	t.Run("NewPermissionResultAllow", func(t *testing.T) {
+		result := NewPermissionResultAllow()
+		if result.Behavior != "allow" {
+			t.Errorf("Expected behavior 'allow', got %q", result.Behavior)
+		}
+		if result.UpdatedInput != nil {
+			t.Error("Expected UpdatedInput to be nil by default")
+		}
+		if len(result.UpdatedPermissions) != 0 {
+			t.Error("Expected UpdatedPermissions to be empty by default")
+		}
+	})
+
+	t.Run("NewPermissionResultDeny", func(t *testing.T) {
+		result := NewPermissionResultDeny("access denied")
+		if result.Behavior != "deny" {
+			t.Errorf("Expected behavior 'deny', got %q", result.Behavior)
+		}
+		if result.Message != "access denied" {
+			t.Errorf("Expected message 'access denied', got %q", result.Message)
+		}
+		if result.Interrupt {
+			t.Error("Expected Interrupt to be false by default")
+		}
+	})
+}
+
+// TestCanUseToolTypeConversion tests the type conversion fallback in WithCanUseTool
+func TestCanUseToolTypeConversion(t *testing.T) {
+	t.Run("non_matching_permCtx_type", func(t *testing.T) {
+		// This tests the fallback when permCtx is not a ToolPermissionContext
+		options := NewOptions(WithCanUseTool(func(
+			_ context.Context,
+			_ string,
+			_ map[string]any,
+			permCtx ToolPermissionContext,
+		) (PermissionResult, error) {
+			// Should receive empty ToolPermissionContext when type doesn't match
+			if len(permCtx.Suggestions) != 0 {
+				return NewPermissionResultDeny("unexpected suggestions"), nil
+			}
+			return NewPermissionResultAllow(), nil
+		}))
+
+		if options.CanUseTool == nil {
+			t.Fatal("Expected CanUseTool to be set")
+		}
+
+		// Pass a non-matching type (string instead of ToolPermissionContext)
+		// The wrapper should convert it to empty ToolPermissionContext
+		result, err := options.CanUseTool(
+			context.Background(),
+			"Read",
+			nil,
+			"invalid_type", // Not a ToolPermissionContext
+		)
+		if err != nil {
+			t.Errorf("Unexpected error: %v", err)
+		}
+		if _, ok := result.(PermissionResultAllow); !ok {
+			t.Errorf("Expected PermissionResultAllow, got %T", result)
+		}
+	})
+}
+
+// TestPermissionUpdateTypeConstants tests that constants are correctly exported
+func TestPermissionUpdateTypeConstants(t *testing.T) {
+	// Verify constants are accessible and have expected values
+	tests := []struct {
+		constant PermissionUpdateType
+		expected string
+	}{
+		{PermissionUpdateTypeAddRules, "addRules"},
+		{PermissionUpdateTypeReplaceRules, "replaceRules"},
+		{PermissionUpdateTypeRemoveRules, "removeRules"},
+		{PermissionUpdateTypeSetMode, "setMode"},
+		{PermissionUpdateTypeAddDirectories, "addDirectories"},
+		{PermissionUpdateTypeRemoveDirectories, "removeDirectories"},
+	}
+
+	for _, tt := range tests {
+		if string(tt.constant) != tt.expected {
+			t.Errorf("Expected %q, got %q", tt.expected, string(tt.constant))
+		}
+	}
+}

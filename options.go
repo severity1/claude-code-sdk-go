@@ -587,6 +587,11 @@ var NewPermissionResultDeny = control.NewPermissionResultDeny
 // Matches Python SDK's can_use_tool callback behavior.
 func WithCanUseTool(callback CanUseToolCallback) Option {
 	return func(o *Options) {
+		// Handle nil callback explicitly
+		if callback == nil {
+			o.CanUseTool = nil
+			return
+		}
 		// Store a wrapper that converts between control types and any types
 		// to bridge the type boundary between shared.Options and control package
 		o.CanUseTool = func(
