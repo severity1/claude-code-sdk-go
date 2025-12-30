@@ -2,6 +2,8 @@
 // This package enables features like tool permission callbacks, hook callbacks, and MCP message routing.
 package control
 
+import "context"
+
 // Message type constants for control protocol discrimination.
 const (
 	// MessageTypeControlRequest is sent TO the CLI to request an action.
@@ -106,3 +108,126 @@ type SetModelRequest struct {
 	// Examples: "claude-sonnet-4-5", "claude-opus-4-1-20250805"
 	Model *string `json:"model"`
 }
+
+// =============================================================================
+// Permission Callback Types (Issue #8)
+// =============================================================================
+
+// PermissionUpdateType specifies the type of permission update.
+// Matches Python SDK's Literal type exactly for 100% parity.
+type PermissionUpdateType string
+
+const (
+	// PermissionUpdateTypeAddRules adds new permission rules.
+	PermissionUpdateTypeAddRules PermissionUpdateType = "addRules"
+	// PermissionUpdateTypeReplaceRules replaces all permission rules.
+	PermissionUpdateTypeReplaceRules PermissionUpdateType = "replaceRules"
+	// PermissionUpdateTypeRemoveRules removes specified permission rules.
+	PermissionUpdateTypeRemoveRules PermissionUpdateType = "removeRules"
+	// PermissionUpdateTypeSetMode sets the permission mode.
+	PermissionUpdateTypeSetMode PermissionUpdateType = "setMode"
+	// PermissionUpdateTypeAddDirectories adds directories to allowed list.
+	PermissionUpdateTypeAddDirectories PermissionUpdateType = "addDirectories"
+	// PermissionUpdateTypeRemoveDirectories removes directories from allowed list.
+	PermissionUpdateTypeRemoveDirectories PermissionUpdateType = "removeDirectories"
+)
+
+// PermissionRuleValue represents a permission rule.
+// JSON tags use camelCase to match CLI protocol.
+type PermissionRuleValue struct {
+	// ToolName is the name of the tool this rule applies to.
+	ToolName string `json:"toolName"`
+	// RuleContent is the optional rule content (e.g., path pattern).
+	RuleContent *string `json:"ruleContent,omitempty"`
+}
+
+// PermissionUpdate represents a dynamic permission rule update.
+// Matches Python SDK's PermissionUpdate dataclass.
+type PermissionUpdate struct {
+	// Type is the kind of permission update.
+	Type PermissionUpdateType `json:"type"`
+	// Rules are the permission rules to add/replace/remove.
+	Rules []PermissionRuleValue `json:"rules,omitempty"`
+	// Behavior is the permission behavior (allow/deny).
+	Behavior *string `json:"behavior,omitempty"`
+	// Mode is the permission mode to set.
+	Mode *string `json:"mode,omitempty"`
+	// Directories are the directories to add/remove.
+	Directories []string `json:"directories,omitempty"`
+	// Destination specifies where the update applies (session/user/project).
+	Destination *string `json:"destination,omitempty"`
+}
+
+// ToolPermissionContext provides context for permission callbacks.
+// Matches Python SDK's ToolPermissionContext dataclass.
+type ToolPermissionContext struct {
+	// Signal is reserved for future abort signal support (currently unused).
+	Signal any `json:"-"`
+	// Suggestions contains permission suggestions from CLI.
+	Suggestions []PermissionUpdate `json:"suggestions,omitempty"`
+}
+
+// PermissionResult is the interface for permission callback results.
+// Go idiom: unexported marker method for sealed interface pattern.
+type PermissionResult interface {
+	permissionResult() // Marker method - unexported, lowercase
+}
+
+// PermissionResultAllow permits tool execution with optional modifications.
+// Behavior field is always "allow" - this is the discriminator for CLI.
+type PermissionResultAllow struct {
+	// Behavior is always "allow".
+	Behavior string `json:"behavior"`
+	// UpdatedInput contains the modified tool input (optional).
+	UpdatedInput map[string]any `json:"updatedInput,omitempty"`
+	// UpdatedPermissions contains dynamic permission updates (optional).
+	UpdatedPermissions []PermissionUpdate `json:"updatedPermissions,omitempty"`
+}
+
+// permissionResult implements PermissionResult marker interface.
+func (PermissionResultAllow) permissionResult() {}
+
+// NewPermissionResultAllow creates an Allow result with proper defaults.
+// Go idiom: constructor functions for types with required fields.
+func NewPermissionResultAllow() PermissionResultAllow {
+	return PermissionResultAllow{Behavior: "allow"}
+}
+
+// PermissionResultDeny prevents tool execution.
+// Behavior field is always "deny" - this is the discriminator for CLI.
+type PermissionResultDeny struct {
+	// Behavior is always "deny".
+	Behavior string `json:"behavior"`
+	// Message is the reason for denial.
+	Message string `json:"message,omitempty"`
+	// Interrupt indicates whether to interrupt the session.
+	Interrupt bool `json:"interrupt,omitempty"`
+}
+
+// permissionResult implements PermissionResult marker interface.
+func (PermissionResultDeny) permissionResult() {}
+
+// NewPermissionResultDeny creates a Deny result with proper defaults.
+func NewPermissionResultDeny(message string) PermissionResultDeny {
+	return PermissionResultDeny{Behavior: "deny", Message: message}
+}
+
+// CanUseToolCallback is invoked when CLI requests permission to use a tool.
+// Go idiom: context.Context as first parameter, (result, error) return.
+// The callback must be thread-safe as it may be invoked concurrently.
+//
+// Parameters:
+//   - ctx: Context for cancellation and timeouts
+//   - toolName: Name of the tool being requested (e.g., "Read", "Write", "Bash")
+//   - input: Tool input parameters as a map
+//   - permCtx: Context with permission suggestions from CLI
+//
+// Returns:
+//   - PermissionResult: Either PermissionResultAllow or PermissionResultDeny
+//   - error: Non-nil if the callback encounters an error
+type CanUseToolCallback func(
+	ctx context.Context,
+	toolName string,
+	input map[string]any,
+	permCtx ToolPermissionContext,
+) (PermissionResult, error)

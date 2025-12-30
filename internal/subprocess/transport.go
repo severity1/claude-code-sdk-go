@@ -248,7 +248,7 @@ func (t *Transport) Connect(ctx context.Context) error {
 	// One-shot mode (closeStdin=true) doesn't need control protocol
 	if !t.closeStdin {
 		t.protocolAdapter = NewProtocolAdapter(t.stdin)
-		t.protocol = control.NewProtocol(t.protocolAdapter)
+		t.protocol = control.NewProtocol(t.protocolAdapter, t.buildProtocolOptions()...)
 
 		// Start the protocol's background goroutine
 		// Note: The protocol's readLoop will block on the closed channel from the adapter,
@@ -706,4 +706,40 @@ func (t *Transport) SetPermissionMode(ctx context.Context, mode string) error {
 	}
 
 	return t.protocol.SetPermissionMode(ctx, mode)
+}
+
+// buildProtocolOptions constructs control protocol options from transport configuration.
+// This extracts callback wiring logic from Connect to reduce cyclomatic complexity.
+func (t *Transport) buildProtocolOptions() []control.ProtocolOption {
+	var opts []control.ProtocolOption
+
+	// Wire permission callback if configured
+	if t.options != nil && t.options.CanUseTool != nil {
+		// Create adapter that converts between shared.Options (any types)
+		// and control package (strongly-typed) to avoid import cycles
+		optionsCallback := t.options.CanUseTool
+		opts = append(opts,
+			control.WithCanUseToolCallback(func(
+				ctx context.Context,
+				toolName string,
+				input map[string]any,
+				permCtx control.ToolPermissionContext,
+			) (control.PermissionResult, error) {
+				// Call the Options callback with any-typed permCtx
+				result, err := optionsCallback(ctx, toolName, input, permCtx)
+				if err != nil {
+					return nil, err
+				}
+
+				// Convert result back to strongly-typed PermissionResult
+				if pr, ok := result.(control.PermissionResult); ok {
+					return pr, nil
+				}
+
+				// Fallback: deny if result type is unexpected
+				return control.NewPermissionResultDeny("invalid permission result type"), nil
+			}))
+	}
+
+	return opts
 }

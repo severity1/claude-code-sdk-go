@@ -45,6 +45,9 @@ type Protocol struct {
 	// Configuration
 	initTimeout time.Duration
 
+	// Permission callback (Issue #8)
+	canUseToolCallback CanUseToolCallback
+
 	// Background goroutine management
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -58,6 +61,14 @@ type ProtocolOption func(*Protocol)
 func WithInitTimeout(timeout time.Duration) ProtocolOption {
 	return func(p *Protocol) {
 		p.initTimeout = timeout
+	}
+}
+
+// WithCanUseToolCallback sets the permission callback for tool usage requests.
+// The callback is invoked when CLI requests permission to use a tool.
+func WithCanUseToolCallback(callback CanUseToolCallback) ProtocolOption {
+	return func(p *Protocol) {
+		p.canUseToolCallback = callback
 	}
 }
 
@@ -212,12 +223,188 @@ func (p *Protocol) HandleIncomingMessage(ctx context.Context, msg map[string]any
 		return p.handleControlResponse(ctx, msg)
 	case MessageTypeControlRequest:
 		// Incoming control request from CLI (e.g., hook callback, permission check)
-		// For now, just log - handlers will be added in issues #8, #9
-		return nil
+		return p.handleIncomingControlRequest(ctx, msg)
 	default:
 		// Regular SDK message - forward to stream
 		return p.forwardToStream(ctx, msg)
 	}
+}
+
+// handleIncomingControlRequest routes incoming control requests from CLI.
+func (p *Protocol) handleIncomingControlRequest(ctx context.Context, msg map[string]any) error {
+	request, ok := msg["request"].(map[string]any)
+	if !ok {
+		return fmt.Errorf("invalid control request: missing request field")
+	}
+
+	subtype, _ := request["subtype"].(string)
+	requestID, _ := msg["request_id"].(string)
+
+	switch subtype {
+	case SubtypeCanUseTool:
+		return p.handleCanUseToolRequest(ctx, requestID, request)
+	case SubtypeHookCallback:
+		// Issue #9 placeholder - hook callbacks
+		return nil
+	default:
+		// Unknown subtype - ignore for forward compatibility
+		return nil
+	}
+}
+
+// handleCanUseToolRequest processes a permission check request from CLI.
+// Follows StderrCallback pattern: synchronous with panic recovery.
+func (p *Protocol) handleCanUseToolRequest(ctx context.Context, requestID string, request map[string]any) error {
+	// Parse request fields
+	toolName, _ := request["tool_name"].(string)
+	if toolName == "" {
+		return p.sendErrorResponse(ctx, requestID, "missing tool_name")
+	}
+
+	input, _ := request["input"].(map[string]any)
+	if input == nil {
+		input = make(map[string]any)
+	}
+
+	// Parse suggestions from context
+	var permCtx ToolPermissionContext
+	if suggestions, ok := request["permission_suggestions"].([]any); ok {
+		permCtx.Suggestions = parsePermissionSuggestions(suggestions)
+	}
+
+	// Get callback (thread-safe read)
+	p.mu.Lock()
+	callback := p.canUseToolCallback
+	p.mu.Unlock()
+
+	// No callback = deny (secure default)
+	if callback == nil {
+		return p.sendPermissionResponse(ctx, requestID, NewPermissionResultDeny("no permission callback registered"))
+	}
+
+	// Invoke callback synchronously with panic recovery (matches StderrCallback pattern)
+	var result PermissionResult
+	var err error
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				err = fmt.Errorf("permission callback panicked: %v", r)
+			}
+		}()
+		result, err = callback(ctx, toolName, input, permCtx)
+	}()
+
+	if err != nil {
+		return p.sendErrorResponse(ctx, requestID, fmt.Sprintf("callback error: %v", err))
+	}
+
+	return p.sendPermissionResponse(ctx, requestID, result)
+}
+
+// sendPermissionResponse sends a permission result back to CLI.
+func (p *Protocol) sendPermissionResponse(ctx context.Context, requestID string, result PermissionResult) error {
+	// Build response based on result type
+	var responseData map[string]any
+	switch r := result.(type) {
+	case PermissionResultAllow:
+		responseData = map[string]any{"behavior": "allow"}
+		if r.UpdatedInput != nil {
+			responseData["updatedInput"] = r.UpdatedInput
+		}
+		if len(r.UpdatedPermissions) > 0 {
+			responseData["updatedPermissions"] = r.UpdatedPermissions
+		}
+	case PermissionResultDeny:
+		responseData = map[string]any{"behavior": "deny"}
+		if r.Message != "" {
+			responseData["message"] = r.Message
+		}
+		if r.Interrupt {
+			responseData["interrupt"] = r.Interrupt
+		}
+	default:
+		return fmt.Errorf("unknown permission result type: %T", result)
+	}
+
+	response := SDKControlResponse{
+		Type: MessageTypeControlResponse,
+		Response: Response{
+			Subtype:   ResponseSubtypeSuccess,
+			RequestID: requestID,
+			Response:  responseData,
+		},
+	}
+
+	data, err := json.Marshal(response)
+	if err != nil {
+		return fmt.Errorf("failed to marshal permission response: %w", err)
+	}
+
+	return p.transport.Write(ctx, append(data, '\n'))
+}
+
+// sendErrorResponse sends an error response back to CLI.
+func (p *Protocol) sendErrorResponse(ctx context.Context, requestID string, errMsg string) error {
+	response := SDKControlResponse{
+		Type: MessageTypeControlResponse,
+		Response: Response{
+			Subtype:   ResponseSubtypeError,
+			RequestID: requestID,
+			Error:     errMsg,
+		},
+	}
+
+	data, err := json.Marshal(response)
+	if err != nil {
+		return fmt.Errorf("failed to marshal error response: %w", err)
+	}
+
+	return p.transport.Write(ctx, append(data, '\n'))
+}
+
+// parsePermissionSuggestions converts raw JSON to PermissionUpdate slice.
+func parsePermissionSuggestions(raw []any) []PermissionUpdate {
+	var suggestions []PermissionUpdate
+	for _, item := range raw {
+		if m, ok := item.(map[string]any); ok {
+			update := PermissionUpdate{}
+			if t, ok := m["type"].(string); ok {
+				update.Type = PermissionUpdateType(t)
+			}
+			if rules, ok := m["rules"].([]any); ok {
+				for _, rule := range rules {
+					if ruleMap, ok := rule.(map[string]any); ok {
+						rv := PermissionRuleValue{}
+						if tn, ok := ruleMap["toolName"].(string); ok {
+							rv.ToolName = tn
+						}
+						if rc, ok := ruleMap["ruleContent"].(string); ok {
+							rv.RuleContent = &rc
+						}
+						update.Rules = append(update.Rules, rv)
+					}
+				}
+			}
+			if b, ok := m["behavior"].(string); ok {
+				update.Behavior = &b
+			}
+			if mode, ok := m["mode"].(string); ok {
+				update.Mode = &mode
+			}
+			if dirs, ok := m["directories"].([]any); ok {
+				for _, d := range dirs {
+					if ds, ok := d.(string); ok {
+						update.Directories = append(update.Directories, ds)
+					}
+				}
+			}
+			if dest, ok := m["destination"].(string); ok {
+				update.Destination = &dest
+			}
+			suggestions = append(suggestions, update)
+		}
+	}
+	return suggestions
 }
 
 // handleControlResponse routes a control response to the waiting request.

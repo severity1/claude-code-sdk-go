@@ -1,9 +1,11 @@
 package claudecode
 
 import (
+	"context"
 	"io"
 	"os"
 
+	"github.com/severity1/claude-code-sdk-go/internal/control"
 	"github.com/severity1/claude-code-sdk-go/internal/shared"
 )
 
@@ -55,6 +57,41 @@ type SdkPluginConfig = shared.SdkPluginConfig
 // OutputFormat specifies the format for structured output.
 type OutputFormat = shared.OutputFormat
 
+// =============================================================================
+// Permission Callback Types (Issue #8)
+// =============================================================================
+
+// CanUseToolCallback is invoked when CLI requests permission to use a tool.
+// The callback receives tool name, input parameters, and permission context.
+// Return PermissionResultAllow to permit, PermissionResultDeny to deny.
+// The callback must be thread-safe as it may be invoked concurrently.
+type CanUseToolCallback = control.CanUseToolCallback
+
+// PermissionResult is the interface for permission callback results.
+// Implementations are PermissionResultAllow and PermissionResultDeny.
+type PermissionResult = control.PermissionResult
+
+// PermissionResultAllow permits tool execution with optional modifications.
+// Use NewPermissionResultAllow() to create with proper defaults.
+type PermissionResultAllow = control.PermissionResultAllow
+
+// PermissionResultDeny prevents tool execution.
+// Use NewPermissionResultDeny(message) to create with proper defaults.
+type PermissionResultDeny = control.PermissionResultDeny
+
+// ToolPermissionContext provides context for permission callbacks.
+// Contains suggestions from CLI for permission decisions.
+type ToolPermissionContext = control.ToolPermissionContext
+
+// PermissionUpdate represents a dynamic permission rule update.
+type PermissionUpdate = control.PermissionUpdate
+
+// PermissionRuleValue represents a permission rule.
+type PermissionRuleValue = control.PermissionRuleValue
+
+// PermissionUpdateType specifies the type of permission update.
+type PermissionUpdateType = control.PermissionUpdateType
+
 // Re-export constants
 const (
 	PermissionModeDefault           = shared.PermissionModeDefault
@@ -69,6 +106,16 @@ const (
 	SettingSourceProject            = shared.SettingSourceProject
 	SettingSourceLocal              = shared.SettingSourceLocal
 	SdkPluginTypeLocal              = shared.SdkPluginTypeLocal
+)
+
+// Permission update type constants
+const (
+	PermissionUpdateTypeAddRules          = control.PermissionUpdateTypeAddRules
+	PermissionUpdateTypeReplaceRules      = control.PermissionUpdateTypeReplaceRules
+	PermissionUpdateTypeRemoveRules       = control.PermissionUpdateTypeRemoveRules
+	PermissionUpdateTypeSetMode           = control.PermissionUpdateTypeSetMode
+	PermissionUpdateTypeAddDirectories    = control.PermissionUpdateTypeAddDirectories
+	PermissionUpdateTypeRemoveDirectories = control.PermissionUpdateTypeRemoveDirectories
 )
 
 // Option configures Options using the functional options pattern.
@@ -493,4 +540,67 @@ func WithIncludePartialMessages(include bool) Option {
 // Equivalent to WithIncludePartialMessages(true).
 func WithPartialStreaming() Option {
 	return WithIncludePartialMessages(true)
+}
+
+// =============================================================================
+// Permission Callback Constructors and Options (Issue #8)
+// =============================================================================
+
+// NewPermissionResultAllow creates an Allow result with proper defaults.
+// Use this to permit tool execution.
+//
+// Example:
+//
+//	return claudecode.NewPermissionResultAllow(), nil
+var NewPermissionResultAllow = control.NewPermissionResultAllow
+
+// NewPermissionResultDeny creates a Deny result with proper defaults.
+// Use this to deny tool execution with a reason message.
+//
+// Example:
+//
+//	return claudecode.NewPermissionResultDeny("Only Read tool is allowed"), nil
+var NewPermissionResultDeny = control.NewPermissionResultDeny
+
+// WithCanUseTool sets the permission callback for tool usage requests.
+// The callback is invoked when Claude CLI requests permission to use a tool.
+// It receives the tool name, input parameters, and context for decision-making.
+//
+// Example - Allow all Read tool calls, deny others:
+//
+//	client := claudecode.NewClient(
+//	    claudecode.WithCanUseTool(func(
+//	        ctx context.Context,
+//	        toolName string,
+//	        input map[string]any,
+//	        permCtx claudecode.ToolPermissionContext,
+//	    ) (claudecode.PermissionResult, error) {
+//	        if toolName == "Read" {
+//	            return claudecode.NewPermissionResultAllow(), nil
+//	        }
+//	        return claudecode.NewPermissionResultDeny("Only Read tool is allowed"), nil
+//	    }),
+//	)
+//
+// The callback must be thread-safe as it may be invoked concurrently.
+// If no callback is set, all tool requests are denied (secure default).
+// Matches Python SDK's can_use_tool callback behavior.
+func WithCanUseTool(callback CanUseToolCallback) Option {
+	return func(o *Options) {
+		// Store a wrapper that converts between control types and any types
+		// to bridge the type boundary between shared.Options and control package
+		o.CanUseTool = func(
+			ctx context.Context,
+			toolName string,
+			input map[string]any,
+			permCtx any,
+		) (any, error) {
+			// Convert permCtx back to strongly-typed ToolPermissionContext
+			tpc, ok := permCtx.(control.ToolPermissionContext)
+			if !ok {
+				tpc = control.ToolPermissionContext{}
+			}
+			return callback(ctx, toolName, input, tpc)
+		}
+	}
 }
