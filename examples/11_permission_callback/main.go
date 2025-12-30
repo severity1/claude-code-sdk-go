@@ -72,10 +72,10 @@ func runToolFilterExample() {
 
 	// Permission callback that filters by tool name
 	permissionCallback := claudecode.WithCanUseTool(func(
-		ctx context.Context,
+		_ context.Context,
 		toolName string,
-		input map[string]any,
-		permCtx claudecode.ToolPermissionContext,
+		_ map[string]any,
+		_ claudecode.ToolPermissionContext,
 	) (claudecode.PermissionResult, error) {
 		// Allow only Read tool, deny everything else
 		switch toolName {
@@ -114,10 +114,10 @@ func runPathBasedExample(allowedDir string) {
 
 	// Permission callback with path-based restrictions
 	permissionCallback := claudecode.WithCanUseTool(func(
-		ctx context.Context,
+		_ context.Context,
 		toolName string,
 		input map[string]any,
-		permCtx claudecode.ToolPermissionContext,
+		_ claudecode.ToolPermissionContext,
 	) (claudecode.PermissionResult, error) {
 		// Only filter Read tool for path-based access
 		if toolName != "Read" {
@@ -188,10 +188,10 @@ func runAuditLoggingExample() {
 
 	// Permission callback that logs all requests
 	permissionCallback := claudecode.WithCanUseTool(func(
-		ctx context.Context,
+		_ context.Context,
 		toolName string,
 		input map[string]any,
-		permCtx claudecode.ToolPermissionContext,
+		_ claudecode.ToolPermissionContext,
 	) (claudecode.PermissionResult, error) {
 		// Create audit entry
 		entry := AuditEntry{
@@ -273,7 +273,10 @@ func streamResponse(ctx context.Context, client claudecode.Client) error {
 				}
 			case *claudecode.ResultMessage:
 				if msg.IsError {
-					return fmt.Errorf("error: %s", msg.Result)
+					if msg.Result != nil {
+						return fmt.Errorf("error: %s", *msg.Result)
+					}
+					return fmt.Errorf("error: unknown error")
 				}
 				return nil
 			}
