@@ -22,6 +22,15 @@ type Client interface {
 	ReceiveMessages(ctx context.Context) <-chan Message
 	ReceiveResponse(ctx context.Context) MessageIterator
 	Interrupt(ctx context.Context) error
+	// SetModel changes the AI model during a streaming session.
+	// Pass nil to reset to the default model.
+	// Only works in streaming mode (after Connect()).
+	SetModel(ctx context.Context, model *string) error
+	// SetPermissionMode changes the permission mode during a streaming session.
+	// Valid modes: PermissionModeDefault, PermissionModeAcceptEdits,
+	// PermissionModePlan, PermissionModeBypassPermissions.
+	// Only works in streaming mode (after Connect()).
+	SetPermissionMode(ctx context.Context, mode PermissionMode) error
 	GetStreamIssues() []StreamIssue
 	GetStreamStats() StreamStats
 	GetServerInfo(ctx context.Context) (map[string]interface{}, error)
@@ -417,6 +426,68 @@ func (c *ClientImpl) Interrupt(ctx context.Context) error {
 	}
 
 	return transport.Interrupt(ctx)
+}
+
+// SetModel changes the AI model during a streaming session.
+// Pass nil to reset to the default model.
+// Returns error if not connected or if the control request fails.
+//
+// Example - Change to a specific model:
+//
+//	model := "claude-sonnet-4-5"
+//	err := client.SetModel(ctx, &model)
+//
+// Example - Reset to default model:
+//
+//	err := client.SetModel(ctx, nil)
+func (c *ClientImpl) SetModel(ctx context.Context, model *string) error {
+	// Check context before proceeding (Go idiom: fail fast)
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+
+	// Check connection status with read lock (minimize lock duration)
+	c.mu.RLock()
+	connected := c.connected
+	transport := c.transport
+	c.mu.RUnlock()
+
+	if !connected || transport == nil {
+		return fmt.Errorf("client not connected")
+	}
+
+	return transport.SetModel(ctx, model)
+}
+
+// SetPermissionMode changes the permission mode during a streaming session.
+// Valid modes: PermissionModeDefault, PermissionModeAcceptEdits,
+// PermissionModePlan, PermissionModeBypassPermissions.
+// Returns error if not connected or if the control request fails.
+//
+// Example - Enable auto-accept for edits:
+//
+//	err := client.SetPermissionMode(ctx, claudecode.PermissionModeAcceptEdits)
+//
+// Example - Switch to plan mode:
+//
+//	err := client.SetPermissionMode(ctx, claudecode.PermissionModePlan)
+func (c *ClientImpl) SetPermissionMode(ctx context.Context, mode PermissionMode) error {
+	// Check context before proceeding (Go idiom: fail fast)
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+
+	// Check connection status with read lock (minimize lock duration)
+	c.mu.RLock()
+	connected := c.connected
+	transport := c.transport
+	c.mu.RUnlock()
+
+	if !connected || transport == nil {
+		return fmt.Errorf("client not connected")
+	}
+
+	return transport.SetPermissionMode(ctx, string(mode))
 }
 
 // clientIterator implements MessageIterator for client message reception

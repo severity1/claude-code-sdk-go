@@ -119,6 +119,10 @@ type Transport interface {
 	SendMessage(ctx context.Context, message StreamMessage) error
 	ReceiveMessages(ctx context.Context) (<-chan Message, <-chan error)
 	Interrupt(ctx context.Context) error
+	// SetModel changes the AI model during streaming session.
+	SetModel(ctx context.Context, model *string) error
+	// SetPermissionMode changes the permission mode during streaming session.
+	SetPermissionMode(ctx context.Context, mode string) error
 	Close() error
 	GetValidator() *StreamValidator
 }
@@ -149,6 +153,12 @@ type InitializeResponse = control.InitializeResponse
 // InterruptRequest to interrupt current operation via control protocol.
 type InterruptRequest = control.InterruptRequest
 
+// SetPermissionModeRequest to change permission mode via control protocol.
+type SetPermissionModeRequest = control.SetPermissionModeRequest
+
+// SetModelRequest to change AI model via control protocol.
+type SetModelRequest = control.SetModelRequest
+
 // ControlProtocol manages bidirectional control communication with CLI.
 type ControlProtocol = control.Protocol
 
@@ -159,6 +169,7 @@ const (
 	SubtypeCanUseTool        = control.SubtypeCanUseTool
 	SubtypeInitialize        = control.SubtypeInitialize
 	SubtypeSetPermissionMode = control.SubtypeSetPermissionMode
+	SubtypeSetModel          = control.SubtypeSetModel
 	SubtypeHookCallback      = control.SubtypeHookCallback
 	SubtypeMcpMessage        = control.SubtypeMcpMessage
 

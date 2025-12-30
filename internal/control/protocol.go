@@ -327,6 +327,30 @@ func (p *Protocol) Interrupt(ctx context.Context) error {
 	return err
 }
 
+// SetModel changes the AI model during a streaming session.
+// Pass nil to reset to the default model.
+// Returns error if the control request fails or times out.
+func (p *Protocol) SetModel(ctx context.Context, model *string) error {
+	_, err := p.SendControlRequest(ctx, SetModelRequest{
+		Subtype: SubtypeSetModel,
+		Model:   model,
+	}, 5*time.Second)
+
+	return err
+}
+
+// SetPermissionMode changes the permission mode during a streaming session.
+// Valid modes: "default", "accept_edits", "plan", "bypass_permissions"
+// Returns error if the control request fails or times out.
+func (p *Protocol) SetPermissionMode(ctx context.Context, mode string) error {
+	_, err := p.SendControlRequest(ctx, SetPermissionModeRequest{
+		Subtype: SubtypeSetPermissionMode,
+		Mode:    mode,
+	}, 5*time.Second)
+
+	return err
+}
+
 // ReceiveMessages returns a channel for receiving regular (non-control) messages.
 func (p *Protocol) ReceiveMessages() <-chan map[string]any {
 	return p.messageStream

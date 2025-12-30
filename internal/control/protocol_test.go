@@ -9,6 +9,9 @@ import (
 	"time"
 )
 
+// Test constants for model names used across dynamic control tests.
+const testModelSonnet = "claude-sonnet-4-5"
+
 // =============================================================================
 // Phase 1: Control Message Type Tests
 // =============================================================================
@@ -53,6 +56,7 @@ func testSubtypeConstants(t *testing.T) {
 		{"can_use_tool", SubtypeCanUseTool, "can_use_tool"},
 		{"initialize", SubtypeInitialize, "initialize"},
 		{"set_permission_mode", SubtypeSetPermissionMode, "set_permission_mode"},
+		{"set_model", SubtypeSetModel, "set_model"},
 		{"hook_callback", SubtypeHookCallback, "hook_callback"},
 		{"mcp_message", SubtypeMcpMessage, "mcp_message"},
 	}
@@ -993,5 +997,373 @@ func assertControlEqual(t *testing.T, expected, actual any) {
 	t.Helper()
 	if expected != actual {
 		t.Errorf("expected %v, got %v", expected, actual)
+	}
+}
+
+// =============================================================================
+// Phase 7: Dynamic Control Methods Tests (SetModel, SetPermissionMode)
+// =============================================================================
+
+func TestDynamicControlMethods(t *testing.T) {
+	t.Run("set_model", testSetModel)
+	t.Run("set_permission_mode", testSetPermissionMode)
+}
+
+func testSetModel(t *testing.T) {
+	t.Run("success", testSetModelSuccess)
+	t.Run("with_nil_resets_default", testSetModelWithNil)
+	t.Run("error_response", testSetModelError)
+	t.Run("timeout", testSetModelTimeout)
+}
+
+func testSetModelSuccess(t *testing.T) {
+	t.Helper()
+
+	ctx, cancel := setupControlTestContext(t, 5*time.Second)
+	defer cancel()
+
+	transport := newControlMockTransport()
+	protocol := NewProtocol(transport)
+
+	err := protocol.Start(ctx)
+	assertControlNoError(t, err)
+	defer func() { _ = protocol.Close() }()
+
+	// Auto-respond to set_model request
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		transport.mu.Lock()
+		if len(transport.writtenData) > 0 {
+			var req SDKControlRequest
+			if err := json.Unmarshal(transport.writtenData[0], &req); err == nil {
+				transport.mu.Unlock()
+				transport.injectResponse(req.RequestID, nil)
+				return
+			}
+		}
+		transport.mu.Unlock()
+	}()
+
+	model := testModelSonnet
+	err = protocol.SetModel(ctx, &model)
+	assertControlNoError(t, err)
+
+	// Verify set_model request was sent with correct structure
+	transport.mu.Lock()
+	defer transport.mu.Unlock()
+
+	if len(transport.writtenData) == 0 {
+		t.Fatal("expected set_model request to be sent")
+	}
+
+	var req SDKControlRequest
+	err = json.Unmarshal(transport.writtenData[0], &req)
+	assertControlNoError(t, err)
+
+	request, ok := req.Request.(map[string]any)
+	if !ok {
+		t.Fatal("request should be a map")
+	}
+	assertControlEqual(t, SubtypeSetModel, request["subtype"])
+	assertControlEqual(t, testModelSonnet, request["model"])
+}
+
+func testSetModelWithNil(t *testing.T) {
+	t.Helper()
+
+	ctx, cancel := setupControlTestContext(t, 5*time.Second)
+	defer cancel()
+
+	transport := newControlMockTransport()
+	protocol := NewProtocol(transport)
+
+	err := protocol.Start(ctx)
+	assertControlNoError(t, err)
+	defer func() { _ = protocol.Close() }()
+
+	// Auto-respond to set_model request
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		transport.mu.Lock()
+		if len(transport.writtenData) > 0 {
+			var req SDKControlRequest
+			if err := json.Unmarshal(transport.writtenData[0], &req); err == nil {
+				transport.mu.Unlock()
+				transport.injectResponse(req.RequestID, nil)
+				return
+			}
+		}
+		transport.mu.Unlock()
+	}()
+
+	// Pass nil to reset to default model
+	err = protocol.SetModel(ctx, nil)
+	assertControlNoError(t, err)
+
+	// Verify set_model request was sent with null model
+	transport.mu.Lock()
+	defer transport.mu.Unlock()
+
+	if len(transport.writtenData) == 0 {
+		t.Fatal("expected set_model request to be sent")
+	}
+
+	var req SDKControlRequest
+	err = json.Unmarshal(transport.writtenData[0], &req)
+	assertControlNoError(t, err)
+
+	request, ok := req.Request.(map[string]any)
+	if !ok {
+		t.Fatal("request should be a map")
+	}
+	assertControlEqual(t, SubtypeSetModel, request["subtype"])
+	// model should be nil/null
+	if request["model"] != nil {
+		t.Errorf("expected model to be nil, got %v", request["model"])
+	}
+}
+
+func testSetModelError(t *testing.T) {
+	t.Helper()
+
+	ctx, cancel := setupControlTestContext(t, 5*time.Second)
+	defer cancel()
+
+	transport := newControlMockTransport()
+	protocol := NewProtocol(transport)
+
+	err := protocol.Start(ctx)
+	assertControlNoError(t, err)
+	defer func() { _ = protocol.Close() }()
+
+	// Respond with error
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		transport.mu.Lock()
+		if len(transport.writtenData) > 0 {
+			var req SDKControlRequest
+			if err := json.Unmarshal(transport.writtenData[0], &req); err == nil {
+				transport.mu.Unlock()
+				transport.injectErrorResponse(req.RequestID, "invalid model")
+				return
+			}
+		}
+		transport.mu.Unlock()
+	}()
+
+	model := "invalid-model"
+	err = protocol.SetModel(ctx, &model)
+
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+}
+
+func testSetModelTimeout(t *testing.T) {
+	t.Helper()
+
+	ctx, cancel := setupControlTestContext(t, 5*time.Second)
+	defer cancel()
+
+	transport := newControlMockTransport()
+	protocol := NewProtocol(transport)
+
+	err := protocol.Start(ctx)
+	assertControlNoError(t, err)
+	defer func() { _ = protocol.Close() }()
+
+	// Don't send any response - should timeout
+	// Note: SetModel uses 5-second timeout internally, but we test with shorter context
+	shortCtx, shortCancel := context.WithTimeout(ctx, 100*time.Millisecond)
+	defer shortCancel()
+
+	model := testModelSonnet
+	err = protocol.SetModel(shortCtx, &model)
+
+	if err == nil {
+		t.Fatal("expected timeout error, got nil")
+	}
+}
+
+func testSetPermissionMode(t *testing.T) {
+	t.Run("success", testSetPermissionModeSuccess)
+	t.Run("error_response", testSetPermissionModeError)
+	t.Run("timeout", testSetPermissionModeTimeout)
+}
+
+func testSetPermissionModeSuccess(t *testing.T) {
+	t.Helper()
+
+	ctx, cancel := setupControlTestContext(t, 5*time.Second)
+	defer cancel()
+
+	transport := newControlMockTransport()
+	protocol := NewProtocol(transport)
+
+	err := protocol.Start(ctx)
+	assertControlNoError(t, err)
+	defer func() { _ = protocol.Close() }()
+
+	// Auto-respond to set_permission_mode request
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		transport.mu.Lock()
+		if len(transport.writtenData) > 0 {
+			var req SDKControlRequest
+			if err := json.Unmarshal(transport.writtenData[0], &req); err == nil {
+				transport.mu.Unlock()
+				transport.injectResponse(req.RequestID, nil)
+				return
+			}
+		}
+		transport.mu.Unlock()
+	}()
+
+	err = protocol.SetPermissionMode(ctx, "accept_edits")
+	assertControlNoError(t, err)
+
+	// Verify set_permission_mode request was sent with correct structure
+	transport.mu.Lock()
+	defer transport.mu.Unlock()
+
+	if len(transport.writtenData) == 0 {
+		t.Fatal("expected set_permission_mode request to be sent")
+	}
+
+	var req SDKControlRequest
+	err = json.Unmarshal(transport.writtenData[0], &req)
+	assertControlNoError(t, err)
+
+	request, ok := req.Request.(map[string]any)
+	if !ok {
+		t.Fatal("request should be a map")
+	}
+	assertControlEqual(t, SubtypeSetPermissionMode, request["subtype"])
+	assertControlEqual(t, "accept_edits", request["mode"])
+}
+
+func testSetPermissionModeError(t *testing.T) {
+	t.Helper()
+
+	ctx, cancel := setupControlTestContext(t, 5*time.Second)
+	defer cancel()
+
+	transport := newControlMockTransport()
+	protocol := NewProtocol(transport)
+
+	err := protocol.Start(ctx)
+	assertControlNoError(t, err)
+	defer func() { _ = protocol.Close() }()
+
+	// Respond with error
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		transport.mu.Lock()
+		if len(transport.writtenData) > 0 {
+			var req SDKControlRequest
+			if err := json.Unmarshal(transport.writtenData[0], &req); err == nil {
+				transport.mu.Unlock()
+				transport.injectErrorResponse(req.RequestID, "invalid permission mode")
+				return
+			}
+		}
+		transport.mu.Unlock()
+	}()
+
+	err = protocol.SetPermissionMode(ctx, "invalid_mode")
+
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+}
+
+func testSetPermissionModeTimeout(t *testing.T) {
+	t.Helper()
+
+	ctx, cancel := setupControlTestContext(t, 5*time.Second)
+	defer cancel()
+
+	transport := newControlMockTransport()
+	protocol := NewProtocol(transport)
+
+	err := protocol.Start(ctx)
+	assertControlNoError(t, err)
+	defer func() { _ = protocol.Close() }()
+
+	// Don't send any response - should timeout
+	shortCtx, shortCancel := context.WithTimeout(ctx, 100*time.Millisecond)
+	defer shortCancel()
+
+	err = protocol.SetPermissionMode(shortCtx, "accept_edits")
+
+	if err == nil {
+		t.Fatal("expected timeout error, got nil")
+	}
+}
+
+// TestSetModelRequestSerialization tests the JSON serialization of SetModelRequest
+func TestSetModelRequestSerialization(t *testing.T) {
+	t.Run("marshal_with_model", testMarshalSetModelWithModel)
+	t.Run("marshal_with_nil", testMarshalSetModelWithNil)
+}
+
+func testMarshalSetModelWithModel(t *testing.T) {
+	t.Helper()
+
+	model := testModelSonnet
+	req := SDKControlRequest{
+		Type:      MessageTypeControlRequest,
+		RequestID: "req_1_abc123",
+		Request: SetModelRequest{
+			Subtype: SubtypeSetModel,
+			Model:   &model,
+		},
+	}
+
+	data, err := json.Marshal(req)
+	assertControlNoError(t, err)
+
+	var parsed map[string]any
+	err = json.Unmarshal(data, &parsed)
+	assertControlNoError(t, err)
+
+	assertControlEqual(t, "control_request", parsed["type"])
+	assertControlEqual(t, "req_1_abc123", parsed["request_id"])
+
+	request, ok := parsed["request"].(map[string]any)
+	if !ok {
+		t.Fatal("request field should be an object")
+	}
+	assertControlEqual(t, "set_model", request["subtype"])
+	assertControlEqual(t, testModelSonnet, request["model"])
+}
+
+func testMarshalSetModelWithNil(t *testing.T) {
+	t.Helper()
+
+	req := SDKControlRequest{
+		Type:      MessageTypeControlRequest,
+		RequestID: "req_2_def456",
+		Request: SetModelRequest{
+			Subtype: SubtypeSetModel,
+			Model:   nil,
+		},
+	}
+
+	data, err := json.Marshal(req)
+	assertControlNoError(t, err)
+
+	var parsed map[string]any
+	err = json.Unmarshal(data, &parsed)
+	assertControlNoError(t, err)
+
+	request, ok := parsed["request"].(map[string]any)
+	if !ok {
+		t.Fatal("request field should be an object")
+	}
+	assertControlEqual(t, "set_model", request["subtype"])
+	// Model should be nil/null when not specified
+	if request["model"] != nil {
+		t.Errorf("expected model to be nil, got %v", request["model"])
 	}
 }

@@ -1,4 +1,5 @@
 // Package main demonstrates Client API with file tools using WithClient for automatic resource management.
+// Also showcases dynamic permission mode switching with SetPermissionMode.
 package main
 
 import (
@@ -48,8 +49,18 @@ func main() {
 			return fmt.Errorf("turn 1 failed: %w", err)
 		}
 
-		// Turn 2: Improve the project
-		fmt.Println("\n--- Turn 2: Code Improvements ---")
+		// Switch to auto-accept edits mode before making changes
+		// This demonstrates SetPermissionMode for dynamic permission control
+		fmt.Println("\n--- Switching to auto-accept edits mode ---")
+		if err := client.SetPermissionMode(ctx, claudecode.PermissionModeAcceptEdits); err != nil {
+			// Permission mode switch is best-effort - log but continue
+			fmt.Printf("Note: Permission mode switch failed (may not be supported): %v\n", err)
+		} else {
+			fmt.Println("Now auto-accepting file edits!")
+		}
+
+		// Turn 2: Improve the project (edits will be auto-accepted)
+		fmt.Println("\n--- Turn 2: Code Improvements (auto-accept mode) ---")
 		query2 := "Based on what you learned, improve the main.go file with better error handling and create a README.md"
 
 		if err := client.Query(ctx, query2); err != nil {

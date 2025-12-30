@@ -1,4 +1,5 @@
-// Package main demonstrates advanced Client API features with WithClient and error handling.
+// Package main demonstrates advanced Client API features with WithClient,
+// dynamic model switching, and error handling.
 package main
 
 import (
@@ -12,7 +13,7 @@ import (
 
 func main() {
 	fmt.Println("Claude Code SDK - Advanced Client Features Example")
-	fmt.Println("WithClient with custom options and error handling")
+	fmt.Println("WithClient with dynamic model switching and error handling")
 
 	ctx := context.Background()
 
@@ -20,22 +21,46 @@ func main() {
 	err := claudecode.WithClient(ctx, func(client claudecode.Client) error {
 		fmt.Println("\nConnected with custom configuration!")
 
-		questions := []string{
-			"Explain Go concurrency patterns for web crawlers with goroutine management",
-			"Review this Go code for race conditions: func processItems(items []Item) error { var wg sync.WaitGroup; for _, item := range items { go func() { processItem(item) }() } }",
+		// First question with default model
+		fmt.Println("\n--- Question 1 (default model) ---")
+		question1 := "Explain Go concurrency patterns for web crawlers with goroutine management"
+		fmt.Printf("Q: %s\n", question1)
+
+		if err := client.Query(ctx, question1); err != nil {
+			return fmt.Errorf("query 1 failed: %w", err)
+		}
+		if err := streamResponse(ctx, client); err != nil {
+			return fmt.Errorf("response 1 failed: %w", err)
 		}
 
-		for i, question := range questions {
-			fmt.Printf("\n--- Question %d ---\n", i+1)
-			fmt.Printf("Q: %s\n", question)
+		// Dynamic model switch mid-conversation
+		fmt.Println("\n--- Switching model to claude-sonnet-4-5 ---")
+		sonnetModel := "claude-sonnet-4-5"
+		if err := client.SetModel(ctx, &sonnetModel); err != nil {
+			// Model switch is best-effort - log but continue
+			fmt.Printf("Note: Model switch failed (may not be supported): %v\n", err)
+		} else {
+			fmt.Println("Model switched successfully!")
+		}
 
-			if err := client.Query(ctx, question); err != nil {
-				return fmt.Errorf("query %d failed: %w", i+1, err)
-			}
+		// Second question with new model
+		fmt.Println("\n--- Question 2 (after model switch) ---")
+		question2 := "Review this Go code for race conditions: func processItems(items []Item) error { var wg sync.WaitGroup; for _, item := range items { go func() { processItem(item) }() } }"
+		fmt.Printf("Q: %s\n", question2)
 
-			if err := streamResponse(ctx, client); err != nil {
-				return fmt.Errorf("response %d failed: %w", i+1, err)
-			}
+		if err := client.Query(ctx, question2); err != nil {
+			return fmt.Errorf("query 2 failed: %w", err)
+		}
+		if err := streamResponse(ctx, client); err != nil {
+			return fmt.Errorf("response 2 failed: %w", err)
+		}
+
+		// Reset to default model
+		fmt.Println("\n--- Resetting to default model ---")
+		if err := client.SetModel(ctx, nil); err != nil {
+			fmt.Printf("Note: Model reset failed: %v\n", err)
+		} else {
+			fmt.Println("Model reset to default!")
 		}
 
 		fmt.Println("\nAdvanced session completed!")
