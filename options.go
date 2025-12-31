@@ -262,6 +262,26 @@ func WithMcpServers(servers map[string]McpServerConfig) Option {
 	}
 }
 
+// WithSdkMcpServer adds an in-process SDK MCP server by name.
+// This is a convenience method for adding SDK MCP servers created with CreateSDKMcpServer.
+// Multiple calls accumulate servers.
+//
+// Example:
+//
+//	calculator := claudecode.CreateSDKMcpServer("calculator", "1.0.0", addTool, sqrtTool)
+//	client := claudecode.NewClient(
+//	    claudecode.WithSdkMcpServer("calc", calculator),
+//	    claudecode.WithAllowedTools("mcp__calc__add", "mcp__calc__sqrt"),
+//	)
+func WithSdkMcpServer(name string, server *McpSdkServerConfig) Option {
+	return func(o *Options) {
+		if o.McpServers == nil {
+			o.McpServers = make(map[string]McpServerConfig)
+		}
+		o.McpServers[name] = server
+	}
+}
+
 // WithMaxTurns sets the maximum number of conversation turns.
 func WithMaxTurns(turns int) Option {
 	return func(o *Options) {

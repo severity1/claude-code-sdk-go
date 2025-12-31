@@ -227,9 +227,8 @@ func (t *Transport) Connect(ctx context.Context) error {
 		}
 
 		// Perform control protocol handshake when hooks, permission callbacks,
-		// or file checkpointing is configured (file checkpointing requires
-		// control protocol for RewindFiles requests)
-		if t.options != nil && (t.options.Hooks != nil || t.options.CanUseTool != nil || t.options.EnableFileCheckpointing) {
+		// file checkpointing, or SDK MCP servers are configured
+		if t.options != nil && (t.options.Hooks != nil || t.options.CanUseTool != nil || t.options.EnableFileCheckpointing || t.hasSdkMcpServers()) {
 			if _, err := t.protocol.Initialize(t.ctx); err != nil {
 				t.cleanup()
 				return fmt.Errorf("failed to initialize control protocol: %w", err)
@@ -595,9 +594,25 @@ func (t *Transport) cleanup() {
 // generateMcpConfigFile creates a temporary MCP config file from options.McpServers.
 // Returns the file path. The file is stored in t.mcpConfigFile for cleanup.
 func (t *Transport) generateMcpConfigFile() (string, error) {
+	// Build servers map, stripping Instance field from SDK servers for CLI serialization
+	// The CLI doesn't need the Go instance - it routes mcp_message requests to the SDK
+	serversForCLI := make(map[string]any)
+	for name, config := range t.options.McpServers {
+		if sdkConfig, ok := config.(*shared.McpSdkServerConfig); ok {
+			// SDK servers: only send type and name to CLI
+			serversForCLI[name] = map[string]any{
+				"type": string(sdkConfig.Type),
+				"name": sdkConfig.Name,
+			}
+		} else {
+			// External servers: pass as-is
+			serversForCLI[name] = config
+		}
+	}
+
 	// Create the MCP config structure matching Claude CLI expected format
 	mcpConfig := map[string]interface{}{
-		"mcpServers": t.options.McpServers,
+		"mcpServers": serversForCLI,
 	}
 
 	// Marshal to JSON
@@ -752,6 +767,19 @@ func (t *Transport) buildProtocolOptions() []control.ProtocolOption {
 		}
 	}
 
+	// Wire SDK MCP servers to protocol (Issue #7)
+	if t.options != nil && len(t.options.McpServers) > 0 {
+		sdkServers := make(map[string]control.McpServer)
+		for name, config := range t.options.McpServers {
+			if sdkConfig, ok := config.(*shared.McpSdkServerConfig); ok && sdkConfig.Instance != nil {
+				sdkServers[name] = sdkConfig.Instance
+			}
+		}
+		if len(sdkServers) > 0 {
+			opts = append(opts, control.WithSdkMcpServers(sdkServers))
+		}
+	}
+
 	return opts
 }
 
@@ -781,6 +809,20 @@ func (t *Transport) setupStderr() error {
 		t.cmd.Stderr = t.stderr
 	}
 	return nil
+}
+
+// hasSdkMcpServers checks if any SDK MCP servers are configured.
+// Returns true if at least one SDK server with a valid Instance exists.
+func (t *Transport) hasSdkMcpServers() bool {
+	if t.options == nil || len(t.options.McpServers) == 0 {
+		return false
+	}
+	for _, config := range t.options.McpServers {
+		if sdkConfig, ok := config.(*shared.McpSdkServerConfig); ok && sdkConfig.Instance != nil {
+			return true
+		}
+	}
+	return false
 }
 
 // buildEnvironment constructs the environment variables for the subprocess.
