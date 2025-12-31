@@ -845,6 +845,24 @@ func (p *Protocol) SetPermissionMode(ctx context.Context, mode string) error {
 	return err
 }
 
+// RewindFiles reverts tracked files to their state at a specific user message.
+// The userMessageID should be the UUID from a UserMessage received during the session.
+// Requires EnableFileCheckpointing to be set when creating the client.
+// Returns error if the control request fails or times out.
+//
+// This method matches Python SDK's rewind_files behavior exactly:
+// - Uses "rewind_files" subtype
+// - Sends user_message_id in the request
+// - Uses standard 5-second timeout
+func (p *Protocol) RewindFiles(ctx context.Context, userMessageID string) error {
+	_, err := p.SendControlRequest(ctx, RewindFilesRequest{
+		Subtype:       SubtypeRewindFiles,
+		UserMessageID: userMessageID,
+	}, 5*time.Second)
+
+	return err
+}
+
 // ReceiveMessages returns a channel for receiving regular (non-control) messages.
 func (p *Protocol) ReceiveMessages() <-chan map[string]any {
 	return p.messageStream

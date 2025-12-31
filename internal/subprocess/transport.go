@@ -151,22 +151,8 @@ func (t *Transport) Connect(ctx context.Context) error {
 	//nolint:gosec // G204: This is the core CLI SDK functionality - subprocess execution is required
 	t.cmd = exec.CommandContext(ctx, args[0], args[1:]...)
 
-	// Set up environment - idiomatic Go: start with system env
-	env := os.Environ()
-
-	// Add SDK identifier (required)
-	env = append(env, "CLAUDE_CODE_ENTRYPOINT="+t.entrypoint)
-
-	// Merge custom environment variables
-	if t.options != nil && t.options.ExtraEnv != nil {
-		for key, value := range t.options.ExtraEnv {
-			// Use fmt.Sprintf for clarity and consistency
-			env = append(env, fmt.Sprintf("%s=%s", key, value))
-		}
-	}
-
-	// Apply environment to command
-	t.cmd.Env = env
+	// Set up environment and apply to command
+	t.cmd.Env = t.buildEnvironment()
 
 	// Set working directory if specified
 	if t.options != nil && t.options.Cwd != nil {
@@ -191,27 +177,9 @@ func (t *Transport) Connect(ctx context.Context) error {
 		return fmt.Errorf("failed to create stdout pipe: %w", err)
 	}
 
-	// Handle stderr based on StderrCallback/DebugWriter configuration
-	// Precedence: StderrCallback > DebugWriter > temp file (default)
-	switch {
-	case t.options != nil && t.options.StderrCallback != nil:
-		// Create pipe for callback-based stderr handling
-		t.stderrPipe, err = t.cmd.StderrPipe()
-		if err != nil {
-			return fmt.Errorf("failed to create stderr pipe: %w", err)
-		}
-		// Note: goroutine will be started after cmd.Start()
-	case t.options != nil && t.options.DebugWriter != nil:
-		// Use custom debug writer provided by user
-		t.cmd.Stderr = t.options.DebugWriter
-	default:
-		// Isolate stderr using temporary file to prevent deadlocks
-		// This matches Python SDK pattern to avoid subprocess pipe deadlocks
-		t.stderr, err = os.CreateTemp("", "claude_stderr_*.log")
-		if err != nil {
-			return fmt.Errorf("failed to create stderr file: %w", err)
-		}
-		t.cmd.Stderr = t.stderr
+	// Handle stderr configuration
+	if err := t.setupStderr(); err != nil {
+		return err
 	}
 
 	// Start the process
@@ -258,9 +226,10 @@ func (t *Transport) Connect(ctx context.Context) error {
 			return fmt.Errorf("failed to start control protocol: %w", err)
 		}
 
-		// Perform control protocol handshake only if hooks or permission callbacks are configured
-		// This registers hooks with the CLI and enables bidirectional control communication
-		if t.options != nil && (t.options.Hooks != nil || t.options.CanUseTool != nil) {
+		// Perform control protocol handshake when hooks, permission callbacks,
+		// or file checkpointing is configured (file checkpointing requires
+		// control protocol for RewindFiles requests)
+		if t.options != nil && (t.options.Hooks != nil || t.options.CanUseTool != nil || t.options.EnableFileCheckpointing) {
 			if _, err := t.protocol.Initialize(t.ctx); err != nil {
 				t.cleanup()
 				return fmt.Errorf("failed to initialize control protocol: %w", err)
@@ -717,6 +686,31 @@ func (t *Transport) SetPermissionMode(ctx context.Context, mode string) error {
 	return t.protocol.SetPermissionMode(ctx, mode)
 }
 
+// RewindFiles reverts tracked files to their state at a specific user message.
+// This method requires control protocol integration which is only available
+// in streaming mode (when closeStdin is false).
+// Returns error if not connected, not in streaming mode, or protocol not initialized.
+func (t *Transport) RewindFiles(ctx context.Context, userMessageID string) error {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+
+	if !t.connected {
+		return fmt.Errorf("transport not connected")
+	}
+
+	// Control protocol integration is only available in streaming mode
+	if t.closeStdin {
+		return fmt.Errorf("RewindFiles not available in one-shot mode")
+	}
+
+	// Delegate to control protocol
+	if t.protocol == nil {
+		return fmt.Errorf("control protocol not initialized")
+	}
+
+	return t.protocol.RewindFiles(ctx, userMessageID)
+}
+
 // buildProtocolOptions constructs control protocol options from transport configuration.
 // This extracts callback wiring logic from Connect to reduce cyclomatic complexity.
 func (t *Transport) buildProtocolOptions() []control.ProtocolOption {
@@ -759,4 +753,55 @@ func (t *Transport) buildProtocolOptions() []control.ProtocolOption {
 	}
 
 	return opts
+}
+
+// setupStderr configures stderr handling based on options.
+// Precedence: StderrCallback > DebugWriter > temp file (default).
+// This extracts stderr setup logic from Connect to reduce cyclomatic complexity.
+func (t *Transport) setupStderr() error {
+	switch {
+	case t.options != nil && t.options.StderrCallback != nil:
+		// Create pipe for callback-based stderr handling
+		stderrPipe, err := t.cmd.StderrPipe()
+		if err != nil {
+			return fmt.Errorf("failed to create stderr pipe: %w", err)
+		}
+		t.stderrPipe = stderrPipe
+	case t.options != nil && t.options.DebugWriter != nil:
+		// Use custom debug writer provided by user
+		t.cmd.Stderr = t.options.DebugWriter
+	default:
+		// Isolate stderr using temporary file to prevent deadlocks
+		// This matches Python SDK pattern to avoid subprocess pipe deadlocks
+		stderrFile, err := os.CreateTemp("", "claude_stderr_*.log")
+		if err != nil {
+			return fmt.Errorf("failed to create stderr file: %w", err)
+		}
+		t.stderr = stderrFile
+		t.cmd.Stderr = t.stderr
+	}
+	return nil
+}
+
+// buildEnvironment constructs the environment variables for the subprocess.
+// This extracts environment setup logic from Connect to reduce cyclomatic complexity.
+func (t *Transport) buildEnvironment() []string {
+	env := os.Environ()
+
+	// Set entrypoint to identify SDK to CLI
+	env = append(env, "CLAUDE_CODE_ENTRYPOINT="+t.entrypoint)
+
+	// Enable file checkpointing if requested (matches Python SDK)
+	if t.options != nil && t.options.EnableFileCheckpointing {
+		env = append(env, "CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING=true")
+	}
+
+	// Add user-specified environment variables
+	if t.options != nil && t.options.ExtraEnv != nil {
+		for key, value := range t.options.ExtraEnv {
+			env = append(env, fmt.Sprintf("%s=%s", key, value))
+		}
+	}
+
+	return env
 }

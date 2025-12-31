@@ -1,0 +1,4 @@
+This is a sample file for the file checkpointing example.
+It demonstrates how file changes can be tracked and rewound.
+The checkpointing system enables safe experimentation with file modifications.
+Original content: Version 1.0

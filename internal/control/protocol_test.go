@@ -60,6 +60,7 @@ func testSubtypeConstants(t *testing.T) {
 		{"set_model", SubtypeSetModel, "set_model"},
 		{"hook_callback", SubtypeHookCallback, "hook_callback"},
 		{"mcp_message", SubtypeMcpMessage, "mcp_message"},
+		{"rewind_files", SubtypeRewindFiles, "rewind_files"},
 	}
 
 	for _, tc := range tests {
@@ -1916,4 +1917,42 @@ func testMarshalPermissionRuleValue(t *testing.T) {
 // ptrString is a helper to create a pointer to a string.
 func ptrString(s string) *string {
 	return &s
+}
+
+// =============================================================================
+// RewindFiles Request Serialization Tests (Issue #32)
+// =============================================================================
+
+func TestRewindFilesRequestSerialization(t *testing.T) {
+	t.Run("marshal_rewind_files_request", testMarshalRewindFilesRequest)
+}
+
+func testMarshalRewindFilesRequest(t *testing.T) {
+	t.Helper()
+
+	req := SDKControlRequest{
+		Type:      MessageTypeControlRequest,
+		RequestID: "req_1_abc123",
+		Request: RewindFilesRequest{
+			Subtype:       SubtypeRewindFiles,
+			UserMessageID: "msg-uuid-12345",
+		},
+	}
+
+	data, err := json.Marshal(req)
+	assertControlNoError(t, err)
+
+	var parsed map[string]any
+	err = json.Unmarshal(data, &parsed)
+	assertControlNoError(t, err)
+
+	assertControlEqual(t, "control_request", parsed["type"])
+	assertControlEqual(t, "req_1_abc123", parsed["request_id"])
+
+	request, ok := parsed["request"].(map[string]any)
+	if !ok {
+		t.Fatal("request field should be an object")
+	}
+	assertControlEqual(t, "rewind_files", request["subtype"])
+	assertControlEqual(t, "msg-uuid-12345", request["user_message_id"])
 }

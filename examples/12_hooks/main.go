@@ -221,7 +221,7 @@ func runContextInjectionExample() {
 	// PreToolUse hook - record start time
 	preHook := claudecode.WithPreToolUseHook("", func(
 		_ context.Context,
-		input any,
+		_ any,
 		toolUseID *string,
 		_ claudecode.HookContext,
 	) (claudecode.HookJSONOutput, error) {

@@ -888,6 +888,7 @@ func (m *mockTransportForOptions) ReceiveMessages(_ context.Context) (<-chan Mes
 func (m *mockTransportForOptions) Interrupt(_ context.Context) error                   { return nil }
 func (m *mockTransportForOptions) SetModel(_ context.Context, _ *string) error         { return nil }
 func (m *mockTransportForOptions) SetPermissionMode(_ context.Context, _ string) error { return nil }
+func (m *mockTransportForOptions) RewindFiles(_ context.Context, _ string) error       { return nil }
 func (m *mockTransportForOptions) Close() error                                        { return nil }
 func (m *mockTransportForOptions) GetValidator() *StreamValidator                      { return &StreamValidator{} }
 
@@ -3486,4 +3487,39 @@ func TestMultipleCallbacksPerMatcher(t *testing.T) {
 	if len(storedHooks[HookEventPreToolUse][0].Hooks) != 2 {
 		t.Errorf("Expected 2 callbacks, got %d", len(storedHooks[HookEventPreToolUse][0].Hooks))
 	}
+}
+
+// =============================================================================
+// File Checkpointing Options Tests (Issue #32)
+// =============================================================================
+
+// TestFileCheckpointingOptions tests file checkpointing option functions
+func TestFileCheckpointingOptions(t *testing.T) {
+	t.Run("with_enable_file_checkpointing_true", func(t *testing.T) {
+		opts := NewOptions(WithEnableFileCheckpointing(true))
+		if !opts.EnableFileCheckpointing {
+			t.Error("expected EnableFileCheckpointing to be true")
+		}
+	})
+
+	t.Run("with_enable_file_checkpointing_false", func(t *testing.T) {
+		opts := NewOptions(WithEnableFileCheckpointing(false))
+		if opts.EnableFileCheckpointing {
+			t.Error("expected EnableFileCheckpointing to be false")
+		}
+	})
+
+	t.Run("with_file_checkpointing_convenience", func(t *testing.T) {
+		opts := NewOptions(WithFileCheckpointing())
+		if !opts.EnableFileCheckpointing {
+			t.Error("expected EnableFileCheckpointing to be true")
+		}
+	})
+
+	t.Run("default_is_disabled", func(t *testing.T) {
+		opts := NewOptions()
+		if opts.EnableFileCheckpointing {
+			t.Error("expected EnableFileCheckpointing to be false by default")
+		}
+	})
 }

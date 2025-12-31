@@ -543,6 +543,27 @@ func WithPartialStreaming() Option {
 }
 
 // =============================================================================
+// File Checkpointing Options (Issue #32)
+// =============================================================================
+
+// WithEnableFileCheckpointing enables or disables file checkpointing.
+// When enabled, file changes are tracked during the session and can be
+// rewound to their state at any user message using Client.RewindFiles().
+// Matches Python SDK's enable_file_checkpointing option.
+func WithEnableFileCheckpointing(enable bool) Option {
+	return func(o *Options) {
+		o.EnableFileCheckpointing = enable
+	}
+}
+
+// WithFileCheckpointing enables file checkpointing.
+// Equivalent to WithEnableFileCheckpointing(true).
+// This is the recommended convenience function for enabling file checkpointing.
+func WithFileCheckpointing() Option {
+	return WithEnableFileCheckpointing(true)
+}
+
+// =============================================================================
 // Permission Callback Constructors and Options (Issue #8)
 // =============================================================================
 

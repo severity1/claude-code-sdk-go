@@ -123,6 +123,9 @@ type Transport interface {
 	SetModel(ctx context.Context, model *string) error
 	// SetPermissionMode changes the permission mode during streaming session.
 	SetPermissionMode(ctx context.Context, mode string) error
+	// RewindFiles reverts tracked files to their state at a specific user message.
+	// Requires file checkpointing to be enabled and control protocol initialized.
+	RewindFiles(ctx context.Context, userMessageID string) error
 	Close() error
 	GetValidator() *StreamValidator
 }
