@@ -3523,3 +3523,79 @@ func TestFileCheckpointingOptions(t *testing.T) {
 		}
 	})
 }
+
+// =============================================================================
+// SDK MCP Server Options Tests (Issue #7)
+// =============================================================================
+
+// TestWithSdkMcpServer tests the SDK MCP server option function
+func TestWithSdkMcpServer(t *testing.T) {
+	t.Run("initializes_nil_map", func(t *testing.T) {
+		// Test the nil map initialization branch by applying option directly
+		// to an empty Options struct (not via NewOptions which pre-initializes)
+		server := CreateSDKMcpServer("calculator", "1.0.0")
+		opt := WithSdkMcpServer("calc", server)
+
+		opts := &Options{} // McpServers is nil
+		opt(opts)          // Apply option directly
+
+		if opts.McpServers == nil {
+			t.Fatal("expected McpServers to be initialized")
+		}
+		if len(opts.McpServers) != 1 {
+			t.Errorf("expected 1 server, got %d", len(opts.McpServers))
+		}
+		if opts.McpServers["calc"] != server {
+			t.Error("expected server to be stored under 'calc' key")
+		}
+	})
+
+	t.Run("adds_server_via_new_options", func(t *testing.T) {
+		server := CreateSDKMcpServer("calculator", "1.0.0")
+		opts := NewOptions(WithSdkMcpServer("calc", server))
+
+		if opts.McpServers == nil {
+			t.Fatal("expected McpServers to be initialized")
+		}
+		if len(opts.McpServers) != 1 {
+			t.Errorf("expected 1 server, got %d", len(opts.McpServers))
+		}
+		if opts.McpServers["calc"] != server {
+			t.Error("expected server to be stored under 'calc' key")
+		}
+	})
+
+	t.Run("adds_server_to_existing_map", func(t *testing.T) {
+		server1 := CreateSDKMcpServer("calc1", "1.0.0")
+		server2 := CreateSDKMcpServer("calc2", "1.0.0")
+
+		opts := NewOptions(
+			WithSdkMcpServer("first", server1),
+			WithSdkMcpServer("second", server2),
+		)
+
+		if len(opts.McpServers) != 2 {
+			t.Errorf("expected 2 servers, got %d", len(opts.McpServers))
+		}
+		if opts.McpServers["first"] != server1 {
+			t.Error("expected server1 to be stored under 'first' key")
+		}
+		if opts.McpServers["second"] != server2 {
+			t.Error("expected server2 to be stored under 'second' key")
+		}
+	})
+
+	t.Run("server_has_correct_type", func(t *testing.T) {
+		server := CreateSDKMcpServer("test", "1.0.0")
+		opts := NewOptions(WithSdkMcpServer("test", server))
+
+		stored := opts.McpServers["test"]
+		sdkServer, ok := stored.(*McpSdkServerConfig)
+		if !ok {
+			t.Fatalf("expected *McpSdkServerConfig, got %T", stored)
+		}
+		if sdkServer.Type != McpServerTypeSdk {
+			t.Errorf("expected type %q, got %q", McpServerTypeSdk, sdkServer.Type)
+		}
+	})
+}
