@@ -71,8 +71,12 @@ go run main.go
 cd examples/10_context_manager
 go run main.go
 
-# 11 - Session management with clean Query API
-cd examples/11_session_management
+# 11 - Permission callbacks for tool access control
+cd examples/11_permission_callback
+go run main.go
+
+# 12 - Hook system for lifecycle events
+cd examples/12_hooks
 go run main.go
 ```
 
@@ -186,6 +190,16 @@ func main() {
 - **Concepts**: WithClient pattern vs manual connection management
 - **Features**: Automatic resource cleanup, error handling comparison
 - **Time**: 10 minutes
+
+#### `11_permission_callback/` - Permission Callbacks
+- **Concepts**: Tool permission control, security policies
+- **Features**: Allow/deny tool execution, path-based access control, audit logging
+- **Time**: 15 minutes
+
+#### `12_hooks/` - Hook System for Lifecycle Events
+- **Concepts**: Lifecycle hooks, event interception
+- **Features**: PreToolUse/PostToolUse hooks, command blocking, context injection
+- **Time**: 15 minutes
 
 ## Common Patterns
 
