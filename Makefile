@@ -103,7 +103,7 @@ docs: ## Generate documentation
 
 docs-serve: ## Serve documentation locally
 	@echo "Starting documentation server at http://localhost:6060"
-	@echo "Visit http://localhost:6060/pkg/github.com/severity1/claude-code-sdk-go/"
+	@echo "Visit http://localhost:6060/pkg/github.com/severity1/claude-agent-sdk-go/"
 	godoc -http=:6060
 
 ## SDK/Library specific tasks
@@ -112,8 +112,8 @@ sdk-test: ## Test SDK as a consumer would use it
 	@mkdir -p /tmp/sdk-test
 	@cd /tmp/sdk-test && \
 	go mod init sdk-consumer-test && \
-	echo 'module sdk-consumer-test\n\ngo 1.18\n\nreplace github.com/severity1/claude-code-sdk-go => $(PWD)' > go.mod && \
-	echo 'package main\n\nimport (\n\t"context"\n\t"fmt"\n\tclaudecode "github.com/severity1/claude-code-sdk-go"\n)\n\nfunc main() {\n\tctx := context.Background()\n\t_ = claudecode.NewOptions()\n\tfmt.Println("✅ SDK imports work")\n\t_, _ = claudecode.Query(ctx, "test")\n\tfmt.Println("✅ SDK API accessible")\n}' > main.go && \
+	echo 'module sdk-consumer-test\n\ngo 1.18\n\nreplace github.com/severity1/claude-agent-sdk-go => $(PWD)' > go.mod && \
+	echo 'package main\n\nimport (\n\t"context"\n\t"fmt"\n\tclaudecode "github.com/severity1/claude-agent-sdk-go"\n)\n\nfunc main() {\n\tctx := context.Background()\n\t_ = claudecode.NewOptions()\n\tfmt.Println("✅ SDK imports work")\n\t_, _ = claudecode.Query(ctx, "test")\n\tfmt.Println("✅ SDK API accessible")\n}' > main.go && \
 	go mod tidy && \
 	go run main.go && \
 	rm -rf /tmp/sdk-test

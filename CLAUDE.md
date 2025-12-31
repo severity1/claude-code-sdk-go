@@ -4,9 +4,9 @@
 
 **Claude Code SDK for Go** - Provides programmatic interaction with Claude Code CLI through `Query()` (one-shot) and `Client` (streaming) APIs with 100% Python SDK parity.
 
-**Module**: `github.com/severity1/claude-code-sdk-go`
+**Module**: `github.com/severity1/claude-agent-sdk-go`
 **Package**: `claudecode`
-**Import**: `import "github.com/severity1/claude-code-sdk-go"`
+**Import**: `import "github.com/severity1/claude-agent-sdk-go"`
 
 ## Development Commands
 

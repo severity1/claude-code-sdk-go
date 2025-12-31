@@ -5,7 +5,7 @@ package control
 import (
 	"context"
 
-	"github.com/severity1/claude-code-sdk-go/internal/shared"
+	"github.com/severity1/claude-agent-sdk-go/internal/shared"
 )
 
 // Message type constants for control protocol discrimination.

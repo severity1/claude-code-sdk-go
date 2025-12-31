@@ -6,8 +6,8 @@ import (
 	"os"
 	"sync"
 
-	"github.com/severity1/claude-code-sdk-go/internal/cli"
-	"github.com/severity1/claude-code-sdk-go/internal/subprocess"
+	"github.com/severity1/claude-agent-sdk-go/internal/cli"
+	"github.com/severity1/claude-agent-sdk-go/internal/subprocess"
 )
 
 const defaultSessionID = "default"

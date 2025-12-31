@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/severity1/claude-code-sdk-go/internal/shared"
+	"github.com/severity1/claude-agent-sdk-go/internal/shared"
 )
 
 // Test constants to avoid goconst linter warnings.

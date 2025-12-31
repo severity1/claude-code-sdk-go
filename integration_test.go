@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/severity1/claude-code-sdk-go"
+	"github.com/severity1/claude-agent-sdk-go"
 )
 
 // TestIntegrationCoreQueries tests core query functionality end-to-end

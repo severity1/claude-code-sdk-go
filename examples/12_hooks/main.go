@@ -29,7 +29,7 @@ import (
 	"sync"
 	"time"
 
-	claudecode "github.com/severity1/claude-code-sdk-go"
+	claudecode "github.com/severity1/claude-agent-sdk-go"
 )
 
 func main() {
