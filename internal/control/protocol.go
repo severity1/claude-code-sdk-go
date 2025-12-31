@@ -54,6 +54,9 @@ type Protocol struct {
 	hookCallbacksMu  sync.RWMutex
 	nextHookCallback int64
 
+	// SDK MCP servers for in-process tool handling (Issue #7)
+	sdkMcpServers map[string]McpServer
+
 	// Background goroutine management
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -91,6 +94,14 @@ func WithHooks(hooks map[HookEvent][]HookMatcher) ProtocolOption {
 func WithHookCallbacks(callbacks map[string]HookCallback) ProtocolOption {
 	return func(p *Protocol) {
 		p.hookCallbacks = callbacks
+	}
+}
+
+// WithSdkMcpServers configures SDK MCP servers for in-process tool handling.
+// The servers map is keyed by server name.
+func WithSdkMcpServers(servers map[string]McpServer) ProtocolOption {
+	return func(p *Protocol) {
+		p.sdkMcpServers = servers
 	}
 }
 
@@ -267,6 +278,8 @@ func (p *Protocol) handleIncomingControlRequest(ctx context.Context, msg map[str
 		return p.handleCanUseToolRequest(ctx, requestID, request)
 	case SubtypeHookCallback:
 		return p.handleHookCallbackRequest(ctx, requestID, request)
+	case SubtypeMcpMessage:
+		return p.handleMcpMessageRequest(ctx, requestID, request)
 	default:
 		// Unknown subtype - ignore for forward compatibility
 		return nil
@@ -904,4 +917,167 @@ func (p *Protocol) setPendingRequest(requestID string, responseChan chan *Respon
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.pendingRequests[requestID] = responseChan
+}
+
+// =============================================================================
+// MCP Message Handling (Issue #7)
+// =============================================================================
+
+// handleMcpMessageRequest routes MCP JSONRPC messages to SDK servers.
+// Follows handleCanUseToolRequest pattern with panic recovery.
+func (p *Protocol) handleMcpMessageRequest(ctx context.Context, requestID string, request map[string]any) error {
+	serverName := getString(request, "server_name")
+	if serverName == "" {
+		return p.sendErrorResponse(ctx, requestID, "missing server_name")
+	}
+
+	message, _ := request["message"].(map[string]any)
+	if message == nil {
+		return p.sendErrorResponse(ctx, requestID, "missing message")
+	}
+
+	// Thread-safe server lookup
+	p.mu.Lock()
+	server, exists := p.sdkMcpServers[serverName]
+	p.mu.Unlock()
+
+	if !exists {
+		return p.sendMcpErrorResponse(ctx, requestID, message, -32601,
+			fmt.Sprintf("server '%s' not found", serverName))
+	}
+
+	// Route JSONRPC method with panic recovery
+	var mcpResponse map[string]any
+	var routeErr error
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				routeErr = fmt.Errorf("MCP handler panicked: %v", r)
+			}
+		}()
+		mcpResponse, routeErr = p.routeMcpMethod(ctx, server, message)
+	}()
+
+	if routeErr != nil {
+		return p.sendMcpErrorResponse(ctx, requestID, message, -32603, routeErr.Error())
+	}
+
+	return p.sendMcpResponse(ctx, requestID, mcpResponse)
+}
+
+// routeMcpMethod dispatches JSONRPC methods to server handlers.
+func (p *Protocol) routeMcpMethod(ctx context.Context, server McpServer, msg map[string]any) (map[string]any, error) {
+	method := getString(msg, "method")
+	params, _ := msg["params"].(map[string]any)
+	msgID := msg["id"]
+
+	switch method {
+	case "initialize":
+		return map[string]any{
+			"jsonrpc": "2.0",
+			"id":      msgID,
+			"result": map[string]any{
+				"protocolVersion": "2024-11-05",
+				"capabilities":    map[string]any{"tools": map[string]any{}},
+				"serverInfo": map[string]any{
+					"name":    server.Name(),
+					"version": server.Version(),
+				},
+			},
+		}, nil
+
+	case "tools/list":
+		tools, err := server.ListTools(ctx)
+		if err != nil {
+			return nil, err
+		}
+		toolsData := make([]map[string]any, len(tools))
+		for i, t := range tools {
+			toolsData[i] = map[string]any{
+				"name":        t.Name,
+				"description": t.Description,
+				"inputSchema": t.InputSchema,
+			}
+		}
+		return map[string]any{
+			"jsonrpc": "2.0",
+			"id":      msgID,
+			"result":  map[string]any{"tools": toolsData},
+		}, nil
+
+	case "tools/call":
+		if params == nil {
+			params = make(map[string]any)
+		}
+		name := getString(params, "name")
+		args, _ := params["arguments"].(map[string]any)
+		if args == nil {
+			args = make(map[string]any)
+		}
+
+		result, err := server.CallTool(ctx, name, args)
+		if err != nil {
+			return nil, err
+		}
+
+		content := make([]map[string]any, len(result.Content))
+		for i, c := range result.Content {
+			item := map[string]any{"type": c.Type}
+			switch c.Type {
+			case "text":
+				item["text"] = c.Text
+			case "image":
+				item["data"] = c.Data
+				item["mimeType"] = c.MimeType
+			}
+			content[i] = item
+		}
+
+		respData := map[string]any{"content": content}
+		if result.IsError {
+			respData["isError"] = true
+		}
+		return map[string]any{
+			"jsonrpc": "2.0",
+			"id":      msgID,
+			"result":  respData,
+		}, nil
+
+	case "notifications/initialized":
+		// Notification - no response required per JSONRPC spec
+		return map[string]any{"jsonrpc": "2.0", "result": map[string]any{}}, nil
+
+	default:
+		return nil, fmt.Errorf("method '%s' not found", method)
+	}
+}
+
+// sendMcpResponse sends an MCP success response.
+func (p *Protocol) sendMcpResponse(ctx context.Context, requestID string, mcpResp map[string]any) error {
+	response := SDKControlResponse{
+		Type: MessageTypeControlResponse,
+		Response: Response{
+			Subtype:   ResponseSubtypeSuccess,
+			RequestID: requestID,
+			Response:  map[string]any{"mcp_response": mcpResp},
+		},
+	}
+	data, err := json.Marshal(response)
+	if err != nil {
+		return fmt.Errorf("failed to marshal MCP response: %w", err)
+	}
+	return p.transport.Write(ctx, append(data, '\n'))
+}
+
+// sendMcpErrorResponse sends an MCP JSONRPC error response.
+func (p *Protocol) sendMcpErrorResponse(ctx context.Context, requestID string, msg map[string]any, code int, message string) error {
+	errorResp := map[string]any{
+		"jsonrpc": "2.0",
+		"id":      msg["id"],
+		"error": map[string]any{
+			"code":    code,
+			"message": message,
+		},
+	}
+	return p.sendMcpResponse(ctx, requestID, errorResp)
 }

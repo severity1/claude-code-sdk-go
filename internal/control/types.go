@@ -2,7 +2,11 @@
 // This package enables features like tool permission callbacks, hook callbacks, and MCP message routing.
 package control
 
-import "context"
+import (
+	"context"
+
+	"github.com/severity1/claude-code-sdk-go/internal/shared"
+)
 
 // Message type constants for control protocol discrimination.
 const (
@@ -245,3 +249,22 @@ type CanUseToolCallback func(
 	input map[string]any,
 	permCtx ToolPermissionContext,
 ) (PermissionResult, error)
+
+// =============================================================================
+// MCP Server Types (Issue #7)
+// =============================================================================
+
+// Type aliases for MCP types from shared package.
+// Using type aliases (not type definitions) ensures interface compatibility:
+// - shared.McpServer and control.McpServer are the SAME type
+// - This allows transport to pass shared.McpServer to control.WithSdkMcpServers()
+type (
+	// McpServer is the interface for in-process SDK MCP servers.
+	McpServer = shared.McpServer
+	// McpToolDefinition describes a tool exposed by an MCP server.
+	McpToolDefinition = shared.McpToolDefinition
+	// McpToolResult represents the result of a tool call.
+	McpToolResult = shared.McpToolResult
+	// McpContent represents content returned by a tool.
+	McpContent = shared.McpContent
+)

@@ -310,6 +310,59 @@ func (c *McpHTTPServerConfig) GetType() McpServerType {
 	return McpServerTypeHTTP
 }
 
+// McpServerTypeSdk represents an in-process SDK MCP server.
+const McpServerTypeSdk McpServerType = "sdk"
+
+// McpServer is the interface for in-process SDK MCP servers.
+// Implementations must be thread-safe as methods may be called concurrently.
+type McpServer interface {
+	// Name returns the server name.
+	Name() string
+	// Version returns the server version.
+	Version() string
+	// ListTools returns the available tools.
+	ListTools(ctx context.Context) ([]McpToolDefinition, error)
+	// CallTool executes a tool by name with the given arguments.
+	CallTool(ctx context.Context, name string, args map[string]any) (*McpToolResult, error)
+}
+
+// McpSdkServerConfig configures an in-process SDK MCP server.
+// The Instance field contains the actual server implementation and is
+// excluded from JSON serialization (not sent to CLI).
+type McpSdkServerConfig struct {
+	Type     McpServerType `json:"type"`
+	Name     string        `json:"name"`
+	Instance McpServer     `json:"-"` // Excluded from CLI serialization
+}
+
+// GetType returns the server type for McpSdkServerConfig.
+func (c *McpSdkServerConfig) GetType() McpServerType {
+	return McpServerTypeSdk
+}
+
+// McpToolDefinition describes a tool exposed by an MCP server.
+type McpToolDefinition struct {
+	Name        string         `json:"name"`
+	Description string         `json:"description"`
+	InputSchema map[string]any `json:"inputSchema"`
+}
+
+// McpToolResult represents the result of a tool call.
+// Matches Python SDK's tool result structure for 100% parity.
+type McpToolResult struct {
+	Content []McpContent `json:"content"`
+	IsError bool         `json:"isError,omitempty"`
+}
+
+// McpContent represents content returned by a tool.
+// Supports both text and image content types.
+type McpContent struct {
+	Type     string `json:"type"` // "text" or "image"
+	Text     string `json:"text,omitempty"`
+	Data     string `json:"data,omitempty"`     // base64 for images
+	MimeType string `json:"mimeType,omitempty"` // for images
+}
+
 // Validate checks the options for valid values and constraints.
 func (o *Options) Validate() error {
 	// Validate MaxThinkingTokens
