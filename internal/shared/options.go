@@ -242,6 +242,12 @@ type Options struct {
 		input map[string]any,
 		permCtx any, // Actually control.ToolPermissionContext
 	) (any, error) `json:"-"` // Not serialized
+
+	// Hooks contains lifecycle event hook registrations.
+	// The actual type is map[control.HookEvent][]control.HookMatcher.
+	// Stored as any to avoid import cycles with internal/control package.
+	// Use the claudecode package's WithHook option for type-safe configuration.
+	Hooks any `json:"-"` // Not serialized
 }
 
 // McpServerType represents the type of MCP server.

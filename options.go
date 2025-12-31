@@ -609,3 +609,139 @@ func WithCanUseTool(callback CanUseToolCallback) Option {
 		}
 	}
 }
+
+// =============================================================================
+// Hook Types (Issue #9)
+// =============================================================================
+
+// HookEvent represents lifecycle events that can trigger hooks.
+type HookEvent = control.HookEvent
+
+// Hook event constants matching Python SDK exactly.
+const (
+	// HookEventPreToolUse is triggered before a tool is executed.
+	HookEventPreToolUse = control.HookEventPreToolUse
+	// HookEventPostToolUse is triggered after a tool is executed.
+	HookEventPostToolUse = control.HookEventPostToolUse
+	// HookEventUserPromptSubmit is triggered when a user submits a prompt.
+	HookEventUserPromptSubmit = control.HookEventUserPromptSubmit
+	// HookEventStop is triggered when the session is stopping.
+	HookEventStop = control.HookEventStop
+	// HookEventSubagentStop is triggered when a subagent is stopping.
+	HookEventSubagentStop = control.HookEventSubagentStop
+	// HookEventPreCompact is triggered before context compaction.
+	HookEventPreCompact = control.HookEventPreCompact
+)
+
+// HookCallback is the function signature for hook callbacks.
+type HookCallback = control.HookCallback
+
+// HookMatcher defines which hooks to trigger for a given pattern.
+type HookMatcher = control.HookMatcher
+
+// HookContext provides context information for hook callbacks.
+type HookContext = control.HookContext
+
+// HookJSONOutput is the synchronous hook output structure.
+type HookJSONOutput = control.HookJSONOutput
+
+// AsyncHookJSONOutput indicates the hook will respond asynchronously.
+type AsyncHookJSONOutput = control.AsyncHookJSONOutput
+
+// BaseHookInput and related types represent hook event inputs.
+type (
+	// BaseHookInput contains common fields present across all hook events.
+	BaseHookInput = control.BaseHookInput
+	// PreToolUseHookInput is the input for PreToolUse hook events.
+	PreToolUseHookInput = control.PreToolUseHookInput
+	// PostToolUseHookInput is the input for PostToolUse hook events.
+	PostToolUseHookInput = control.PostToolUseHookInput
+	// UserPromptSubmitHookInput is the input for UserPromptSubmit hook events.
+	UserPromptSubmitHookInput = control.UserPromptSubmitHookInput
+	// StopHookInput is the input for Stop hook events.
+	StopHookInput = control.StopHookInput
+	// SubagentStopHookInput is the input for SubagentStop hook events.
+	SubagentStopHookInput = control.SubagentStopHookInput
+	// PreCompactHookInput is the input for PreCompact hook events.
+	PreCompactHookInput = control.PreCompactHookInput
+)
+
+// PreToolUseHookSpecificOutput and related types contain hook-specific output fields.
+type (
+	// PreToolUseHookSpecificOutput contains PreToolUse-specific output fields.
+	PreToolUseHookSpecificOutput = control.PreToolUseHookSpecificOutput
+	// PostToolUseHookSpecificOutput contains PostToolUse-specific output fields.
+	PostToolUseHookSpecificOutput = control.PostToolUseHookSpecificOutput
+	// UserPromptSubmitHookSpecificOutput contains UserPromptSubmit-specific output fields.
+	UserPromptSubmitHookSpecificOutput = control.UserPromptSubmitHookSpecificOutput
+)
+
+// =============================================================================
+// Hook Options (Issue #9)
+// =============================================================================
+
+// WithHooks sets the complete hook configuration for lifecycle events.
+// This replaces any previously configured hooks.
+//
+// Example - Configure multiple hooks:
+//
+//	client := claudecode.NewClient(
+//	    claudecode.WithHooks(map[claudecode.HookEvent][]claudecode.HookMatcher{
+//	        claudecode.HookEventPreToolUse: {
+//	            {Matcher: "Bash", Hooks: []claudecode.HookCallback{myCallback}},
+//	        },
+//	    }),
+//	)
+func WithHooks(hooks map[HookEvent][]HookMatcher) Option {
+	return func(o *Options) {
+		o.Hooks = hooks
+	}
+}
+
+// WithHook adds a single hook callback for a specific event and tool pattern.
+// Multiple calls accumulate hooks for the same event.
+// Pass empty string for matcher to match all tools.
+//
+// Example - Add a PreToolUse hook for Bash commands:
+//
+//	client := claudecode.NewClient(
+//	    claudecode.WithHook(claudecode.HookEventPreToolUse, "Bash", myCallback),
+//	)
+func WithHook(event HookEvent, matcher string, callback HookCallback) Option {
+	return func(o *Options) {
+		if o.Hooks == nil {
+			o.Hooks = make(map[HookEvent][]HookMatcher)
+		}
+		hooks, ok := o.Hooks.(map[HookEvent][]HookMatcher)
+		if !ok {
+			// If not the expected type, initialize fresh
+			hooks = make(map[HookEvent][]HookMatcher)
+			o.Hooks = hooks
+		}
+		hooks[event] = append(hooks[event], HookMatcher{
+			Matcher: matcher,
+			Hooks:   []HookCallback{callback},
+		})
+	}
+}
+
+// WithPreToolUseHook is a convenience function to add a PreToolUse hook.
+// Pass empty string for matcher to match all tools.
+//
+// Example:
+//
+//	client := claudecode.NewClient(
+//	    claudecode.WithPreToolUseHook("Bash", func(ctx context.Context, input any, toolUseID *string, hookCtx claudecode.HookContext) (claudecode.HookJSONOutput, error) {
+//	        // Log the bash command
+//	        return claudecode.HookJSONOutput{}, nil
+//	    }),
+//	)
+func WithPreToolUseHook(matcher string, callback HookCallback) Option {
+	return WithHook(HookEventPreToolUse, matcher, callback)
+}
+
+// WithPostToolUseHook is a convenience function to add a PostToolUse hook.
+// Pass empty string for matcher to match all tools.
+func WithPostToolUseHook(matcher string, callback HookCallback) Option {
+	return WithHook(HookEventPostToolUse, matcher, callback)
+}
