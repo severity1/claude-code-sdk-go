@@ -3,6 +3,7 @@ package claudecode
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -434,63 +435,5 @@ func dummyHandler(_ context.Context, _ map[string]any) (*McpToolResult, error) {
 
 // formatFloat formats a float with 2 decimal places.
 func formatFloat(f float64) string {
-	return formatFloatPrecision(f, 2)
-}
-
-// formatFloatPrecision formats a float with specified precision.
-func formatFloatPrecision(f float64, precision int) string {
-	format := "%." + string(rune('0'+precision)) + "f"
-	return formatWithPattern(format, f)
-}
-
-// formatWithPattern formats using the specified pattern.
-func formatWithPattern(pattern string, v any) string {
-	switch val := v.(type) {
-	case float64:
-		return floatToString(val, pattern)
-	default:
-		return ""
-	}
-}
-
-// floatToString converts float to string with pattern.
-func floatToString(f float64, pattern string) string {
-	// Simple implementation for tests
-	if pattern == "%.2f" {
-		intPart := int(f)
-		fracPart := int((f - float64(intPart)) * 100)
-		if fracPart < 0 {
-			fracPart = -fracPart
-		}
-		return intToString(intPart) + "." + padLeft(intToString(fracPart), 2, '0')
-	}
-	return ""
-}
-
-// intToString converts int to string.
-func intToString(i int) string {
-	if i == 0 {
-		return "0"
-	}
-	neg := i < 0
-	if neg {
-		i = -i
-	}
-	var digits []byte
-	for i > 0 {
-		digits = append([]byte{byte('0' + i%10)}, digits...)
-		i /= 10
-	}
-	if neg {
-		digits = append([]byte{'-'}, digits...)
-	}
-	return string(digits)
-}
-
-// padLeft pads string on the left with char to reach length.
-func padLeft(s string, length int, char byte) string {
-	for len(s) < length {
-		s = string(char) + s
-	}
-	return s
+	return fmt.Sprintf("%.2f", f)
 }
