@@ -393,14 +393,14 @@ func (p *Protocol) parseHookInput(event HookEvent, inputData map[string]any) any
 
 	switch event {
 	case HookEventPreToolUse:
-		return PreToolUseHookInput{
+		return &PreToolUseHookInput{
 			BaseHookInput: base,
 			HookEventName: "PreToolUse",
 			ToolName:      getString(inputData, "tool_name"),
 			ToolInput:     getMap(inputData, "tool_input"),
 		}
 	case HookEventPostToolUse:
-		return PostToolUseHookInput{
+		return &PostToolUseHookInput{
 			BaseHookInput: base,
 			HookEventName: "PostToolUse",
 			ToolName:      getString(inputData, "tool_name"),
@@ -408,25 +408,25 @@ func (p *Protocol) parseHookInput(event HookEvent, inputData map[string]any) any
 			ToolResponse:  inputData["tool_response"],
 		}
 	case HookEventUserPromptSubmit:
-		return UserPromptSubmitHookInput{
+		return &UserPromptSubmitHookInput{
 			BaseHookInput: base,
 			HookEventName: "UserPromptSubmit",
 			Prompt:        getString(inputData, "prompt"),
 		}
 	case HookEventStop:
-		return StopHookInput{
+		return &StopHookInput{
 			BaseHookInput:  base,
 			HookEventName:  "Stop",
 			StopHookActive: getBool(inputData, "stop_hook_active"),
 		}
 	case HookEventSubagentStop:
-		return SubagentStopHookInput{
+		return &SubagentStopHookInput{
 			BaseHookInput:  base,
 			HookEventName:  "SubagentStop",
 			StopHookActive: getBool(inputData, "stop_hook_active"),
 		}
 	case HookEventPreCompact:
-		return PreCompactHookInput{
+		return &PreCompactHookInput{
 			BaseHookInput:      base,
 			HookEventName:      "PreCompact",
 			Trigger:            getString(inputData, "trigger"),

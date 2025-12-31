@@ -257,6 +257,15 @@ func (t *Transport) Connect(ctx context.Context) error {
 			t.cleanup()
 			return fmt.Errorf("failed to start control protocol: %w", err)
 		}
+
+		// Perform control protocol handshake only if hooks or permission callbacks are configured
+		// This registers hooks with the CLI and enables bidirectional control communication
+		if t.options != nil && (t.options.Hooks != nil || t.options.CanUseTool != nil) {
+			if _, err := t.protocol.Initialize(t.ctx); err != nil {
+				t.cleanup()
+				return fmt.Errorf("failed to initialize control protocol: %w", err)
+			}
+		}
 	}
 
 	t.connected = true

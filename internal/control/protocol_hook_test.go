@@ -83,9 +83,9 @@ func TestHookCallbackHandler_PreToolUse(t *testing.T) {
 	}
 
 	// Verify input was parsed correctly
-	preToolInput, ok := receivedInput.(PreToolUseHookInput)
+	preToolInput, ok := receivedInput.(*PreToolUseHookInput)
 	if !ok {
-		t.Fatalf("Expected PreToolUseHookInput, got %T", receivedInput)
+		t.Fatalf("Expected *PreToolUseHookInput, got %T", receivedInput)
 	}
 
 	if preToolInput.ToolName != "Bash" {
@@ -156,9 +156,9 @@ func TestHookCallbackHandler_PostToolUse(t *testing.T) {
 		t.Fatal("Expected callback to be called")
 	}
 
-	postToolInput, ok := receivedInput.(PostToolUseHookInput)
+	postToolInput, ok := receivedInput.(*PostToolUseHookInput)
 	if !ok {
-		t.Fatalf("Expected PostToolUseHookInput, got %T", receivedInput)
+		t.Fatalf("Expected *PostToolUseHookInput, got %T", receivedInput)
 	}
 
 	if postToolInput.ToolResponse != "file1.txt\nfile2.txt" {
@@ -437,9 +437,9 @@ func TestHookCallbackHandler_UserPromptSubmit(t *testing.T) {
 		t.Fatal("Expected callback to be called")
 	}
 
-	promptInput, ok := receivedInput.(UserPromptSubmitHookInput)
+	promptInput, ok := receivedInput.(*UserPromptSubmitHookInput)
 	if !ok {
-		t.Fatalf("Expected UserPromptSubmitHookInput, got %T", receivedInput)
+		t.Fatalf("Expected *UserPromptSubmitHookInput, got %T", receivedInput)
 	}
 
 	if promptInput.Prompt != "Help me fix this bug" {
@@ -501,9 +501,9 @@ func TestHookCallbackHandler_StopHook(t *testing.T) {
 		t.Fatal("Expected callback to be called")
 	}
 
-	stopInput, ok := receivedInput.(StopHookInput)
+	stopInput, ok := receivedInput.(*StopHookInput)
 	if !ok {
-		t.Fatalf("Expected StopHookInput, got %T", receivedInput)
+		t.Fatalf("Expected *StopHookInput, got %T", receivedInput)
 	}
 
 	if !stopInput.StopHookActive {
