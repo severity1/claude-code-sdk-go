@@ -186,6 +186,12 @@ type Options struct {
 	// Partial Message Streaming
 	IncludePartialMessages bool `json:"include_partial_messages,omitempty"`
 
+	// File Checkpointing (Issue #32)
+	// EnableFileCheckpointing enables file change tracking for rewind support.
+	// When enabled, files can be rewound to their state at any user message
+	// using Client.RewindFiles(). Matches Python SDK's enable_file_checkpointing.
+	EnableFileCheckpointing bool `json:"enable_file_checkpointing,omitempty"`
+
 	// Agent Definitions
 	Agents map[string]AgentDefinition `json:"agents,omitempty"`
 

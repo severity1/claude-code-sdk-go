@@ -28,6 +28,8 @@ const (
 	SubtypeHookCallback = "hook_callback"
 	// SubtypeMcpMessage routes an MCP message to an SDK MCP server.
 	SubtypeMcpMessage = "mcp_message"
+	// SubtypeRewindFiles requests file rewind to a specific user message state.
+	SubtypeRewindFiles = "rewind_files"
 )
 
 // Response subtype constants for control responses.
@@ -109,6 +111,16 @@ type SetModelRequest struct {
 	// Model is the new model to use. Use nil to reset to default.
 	// Examples: "claude-sonnet-4-5", "claude-opus-4-1-20250805"
 	Model *string `json:"model"`
+}
+
+// RewindFilesRequest requests rewinding files to a specific user message state.
+// Matches Python SDK's SDKControlRewindFilesRequest structure.
+type RewindFilesRequest struct {
+	// Subtype is always SubtypeRewindFiles ("rewind_files").
+	Subtype string `json:"subtype"`
+	// UserMessageID is the UUID of the user message to rewind to.
+	// This should be obtained from UserMessage.UUID received during the session.
+	UserMessageID string `json:"user_message_id"`
 }
 
 // =============================================================================

@@ -31,6 +31,11 @@ type Client interface {
 	// PermissionModePlan, PermissionModeBypassPermissions.
 	// Only works in streaming mode (after Connect()).
 	SetPermissionMode(ctx context.Context, mode PermissionMode) error
+	// RewindFiles reverts tracked files to their state at a specific user message.
+	// The messageUUID should be the UUID from a UserMessage received during the session.
+	// Requires WithFileCheckpointing() or WithEnableFileCheckpointing(true) option.
+	// Only works in streaming mode (after Connect()).
+	RewindFiles(ctx context.Context, messageUUID string) error
 	GetStreamIssues() []StreamIssue
 	GetStreamStats() StreamStats
 	GetServerInfo(ctx context.Context) (map[string]interface{}, error)
@@ -488,6 +493,37 @@ func (c *ClientImpl) SetPermissionMode(ctx context.Context, mode PermissionMode)
 	}
 
 	return transport.SetPermissionMode(ctx, string(mode))
+}
+
+// RewindFiles reverts tracked files to their state at a specific user message.
+// The messageUUID should be the UUID from a UserMessage received during the session.
+// Requires file checkpointing to be enabled via WithFileCheckpointing() option.
+// Returns error if not connected or the request fails.
+//
+// Example:
+//
+//	client := claudecode.NewClient(claudecode.WithFileCheckpointing())
+//	// ... connect and receive messages, capture UUID from UserMessage
+//	if msg, ok := receivedMsg.(*claudecode.UserMessage); ok && msg.UUID != nil {
+//	    err := client.RewindFiles(ctx, *msg.UUID)
+//	}
+func (c *ClientImpl) RewindFiles(ctx context.Context, messageUUID string) error {
+	// Check context before proceeding (Go idiom: fail fast)
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+
+	// Check connection status with read lock (minimize lock duration)
+	c.mu.RLock()
+	connected := c.connected
+	transport := c.transport
+	c.mu.RUnlock()
+
+	if !connected || transport == nil {
+		return fmt.Errorf("client not connected")
+	}
+
+	return transport.RewindFiles(ctx, messageUUID)
 }
 
 // clientIterator implements MessageIterator for client message reception

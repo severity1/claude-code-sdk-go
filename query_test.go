@@ -926,6 +926,10 @@ func (q *queryMockTransport) SetPermissionMode(_ context.Context, _ string) erro
 	return nil
 }
 
+func (q *queryMockTransport) RewindFiles(_ context.Context, _ string) error {
+	return nil
+}
+
 func (q *queryMockTransport) Close() error {
 	q.mu.Lock()
 	defer q.mu.Unlock()

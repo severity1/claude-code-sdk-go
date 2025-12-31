@@ -991,6 +991,7 @@ type clientMockTransport struct {
 	asyncError             error // For async error testing
 	setModelError          error
 	setPermissionModeError error
+	rewindFilesError       error
 }
 
 func (c *clientMockTransport) Connect(ctx context.Context) error {
@@ -1167,6 +1168,15 @@ func (c *clientMockTransport) SetPermissionMode(_ context.Context, _ string) err
 	return nil
 }
 
+func (c *clientMockTransport) RewindFiles(_ context.Context, _ string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.rewindFilesError != nil {
+		return c.rewindFilesError
+	}
+	return nil
+}
+
 // Streamlined Mock Transport Options - reduced from 11 to 6 essential functions
 type ClientMockTransportOption func(*clientMockTransport)
 
@@ -1196,6 +1206,10 @@ func WithClientSetModelError(err error) ClientMockTransportOption {
 
 func WithClientSetPermissionModeError(err error) ClientMockTransportOption {
 	return func(t *clientMockTransport) { t.setPermissionModeError = err }
+}
+
+func WithClientRewindFilesError(err error) ClientMockTransportOption {
+	return func(t *clientMockTransport) { t.rewindFilesError = err }
 }
 
 // Factory Functions - streamlined creation methods
@@ -2656,6 +2670,98 @@ func testClientSetPermissionModeTransportError(t *testing.T) {
 		t.Fatal("expected error from transport, got nil")
 	}
 	if !strings.Contains(err.Error(), "transport set permission mode error") {
+		t.Errorf("expected transport error, got: %v", err)
+	}
+}
+
+// =============================================================================
+// RewindFiles Tests (Issue #32)
+// =============================================================================
+
+func TestClientRewindFiles(t *testing.T) {
+	t.Run("success", testClientRewindFilesSuccess)
+	t.Run("not_connected", testClientRewindFilesNotConnected)
+	t.Run("context_cancelled", testClientRewindFilesContextCancelled)
+	t.Run("transport_error", testClientRewindFilesTransportError)
+}
+
+func testClientRewindFilesSuccess(t *testing.T) {
+	t.Helper()
+
+	ctx, cancel := setupClientTestContext(t, 5*time.Second)
+	defer cancel()
+
+	transport := newClientMockTransport()
+	client := setupClientForTest(t, transport)
+	defer disconnectClientSafely(t, client)
+
+	connectClientSafely(ctx, t, client)
+
+	err := client.RewindFiles(ctx, "msg-uuid-12345")
+	assertNoError(t, err)
+}
+
+func testClientRewindFilesNotConnected(t *testing.T) {
+	t.Helper()
+
+	ctx, cancel := setupClientTestContext(t, 5*time.Second)
+	defer cancel()
+
+	transport := newClientMockTransport()
+	client := setupClientForTest(t, transport)
+	// Note: NOT connecting the client
+
+	err := client.RewindFiles(ctx, "msg-uuid-12345")
+
+	if err == nil {
+		t.Fatal("expected error when not connected, got nil")
+	}
+	if !strings.Contains(err.Error(), "not connected") {
+		t.Errorf("expected 'not connected' error, got: %v", err)
+	}
+}
+
+func testClientRewindFilesContextCancelled(t *testing.T) {
+	t.Helper()
+
+	ctx, cancel := setupClientTestContext(t, 5*time.Second)
+	transport := newClientMockTransport()
+	client := setupClientForTest(t, transport)
+	defer disconnectClientSafely(t, client)
+
+	connectClientSafely(ctx, t, client)
+
+	// Cancel context before calling RewindFiles
+	cancel()
+
+	err := client.RewindFiles(ctx, "msg-uuid-12345")
+
+	if err == nil {
+		t.Fatal("expected error when context cancelled, got nil")
+	}
+}
+
+func testClientRewindFilesTransportError(t *testing.T) {
+	t.Helper()
+
+	ctx, cancel := setupClientTestContext(t, 5*time.Second)
+	defer cancel()
+
+	expectedErr := errors.New("transport rewind files error")
+	transport := newClientMockTransportWithOptions(
+		WithClientRewindFilesError(expectedErr),
+	)
+	client := setupClientForTest(t, transport)
+	defer disconnectClientSafely(t, client)
+
+	connectClientSafely(ctx, t, client)
+
+	err := client.RewindFiles(ctx, "msg-uuid-12345")
+
+	if err == nil {
+		t.Fatal("expected error from transport, got nil")
+	}
+	if !strings.Contains(err.Error(), "transport rewind files error") {
 		t.Errorf("expected transport error, got: %v", err)
 	}
 }

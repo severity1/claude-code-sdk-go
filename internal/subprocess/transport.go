@@ -157,6 +157,12 @@ func (t *Transport) Connect(ctx context.Context) error {
 	// Add SDK identifier (required)
 	env = append(env, "CLAUDE_CODE_ENTRYPOINT="+t.entrypoint)
 
+	// Enable file checkpointing if requested (matches Python SDK)
+	// Python sets CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING=true in process env
+	if t.options != nil && t.options.EnableFileCheckpointing {
+		env = append(env, "CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING=true")
+	}
+
 	// Merge custom environment variables
 	if t.options != nil && t.options.ExtraEnv != nil {
 		for key, value := range t.options.ExtraEnv {
@@ -258,9 +264,10 @@ func (t *Transport) Connect(ctx context.Context) error {
 			return fmt.Errorf("failed to start control protocol: %w", err)
 		}
 
-		// Perform control protocol handshake only if hooks or permission callbacks are configured
-		// This registers hooks with the CLI and enables bidirectional control communication
-		if t.options != nil && (t.options.Hooks != nil || t.options.CanUseTool != nil) {
+		// Perform control protocol handshake when hooks, permission callbacks,
+		// or file checkpointing is configured (file checkpointing requires
+		// control protocol for RewindFiles requests)
+		if t.options != nil && (t.options.Hooks != nil || t.options.CanUseTool != nil || t.options.EnableFileCheckpointing) {
 			if _, err := t.protocol.Initialize(t.ctx); err != nil {
 				t.cleanup()
 				return fmt.Errorf("failed to initialize control protocol: %w", err)
@@ -715,6 +722,31 @@ func (t *Transport) SetPermissionMode(ctx context.Context, mode string) error {
 	}
 
 	return t.protocol.SetPermissionMode(ctx, mode)
+}
+
+// RewindFiles reverts tracked files to their state at a specific user message.
+// This method requires control protocol integration which is only available
+// in streaming mode (when closeStdin is false).
+// Returns error if not connected, not in streaming mode, or protocol not initialized.
+func (t *Transport) RewindFiles(ctx context.Context, userMessageID string) error {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+
+	if !t.connected {
+		return fmt.Errorf("transport not connected")
+	}
+
+	// Control protocol integration is only available in streaming mode
+	if t.closeStdin {
+		return fmt.Errorf("RewindFiles not available in one-shot mode")
+	}
+
+	// Delegate to control protocol
+	if t.protocol == nil {
+		return fmt.Errorf("control protocol not initialized")
+	}
+
+	return t.protocol.RewindFiles(ctx, userMessageID)
 }
 
 // buildProtocolOptions constructs control protocol options from transport configuration.
