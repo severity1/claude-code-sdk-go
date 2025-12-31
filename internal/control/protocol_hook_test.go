@@ -9,6 +9,11 @@ import (
 	"time"
 )
 
+// Test constants for hook callback tests.
+const (
+	testDecisionBlock = "block"
+)
+
 // =============================================================================
 // Hook Callback Handler Tests
 // =============================================================================
@@ -173,7 +178,7 @@ func TestHookCallbackHandler_BlockDecision(t *testing.T) {
 		_ *string,
 		_ HookContext,
 	) (HookJSONOutput, error) {
-		decision := "block"
+		decision := testDecisionBlock
 		reason := "Dangerous command detected"
 		return HookJSONOutput{
 			Decision: &decision,
@@ -229,8 +234,8 @@ func TestHookCallbackHandler_BlockDecision(t *testing.T) {
 		t.Fatal("Response should be a map")
 	}
 
-	if responseData["decision"] != "block" {
-		t.Errorf("decision = %v, want %q", responseData["decision"], "block")
+	if responseData["decision"] != testDecisionBlock {
+		t.Errorf("decision = %v, want %q", responseData["decision"], testDecisionBlock)
 	}
 	if responseData["reason"] != "Dangerous command detected" {
 		t.Errorf("reason = %v, want %q", responseData["reason"], "Dangerous command detected")
