@@ -44,14 +44,14 @@ cd examples/05_client_with_tools
 go run main.go
 ```
 
-### 4. Advanced Cloud Integration
+### 4. MCP Tools Integration
 
 ```bash
-# 06 - Query API with AWS MCP tools
+# 06 - Query API with MCP tools (timezone queries)
 cd examples/06_query_with_mcp
 go run main.go
 
-# 07 - Client API with AWS MCP tools (requires AWS credentials)
+# 07 - Client API with MCP tools (multi-turn time workflows)
 cd examples/07_client_with_mcp
 go run main.go
 ```
@@ -59,16 +59,16 @@ go run main.go
 ### 5. Production Patterns
 
 ```bash
-# 08 - Advanced error handling & retries
+# 08 - Advanced error handling & model switching
 cd examples/08_client_advanced
 go run main.go
 
-# 09 - API comparison & selection guide
-cd examples/09_client_vs_query
+# 09 - WithClient pattern for automatic resource management
+cd examples/09_context_manager
 go run main.go
 
-# 10 - WithClient pattern for automatic resource management
-cd examples/10_context_manager
+# 10 - Session management and isolation
+cd examples/10_session_management
 go run main.go
 
 # 11 - Permission callbacks for tool access control
@@ -162,33 +162,33 @@ func main() {
 - **Features**: Interactive file manipulation, context across tools
 - **Time**: 10 minutes
 
-#### `06_query_with_mcp/` - Cloud Integration (AWS)
-- **Concepts**: MCP tools, cloud service integration
-- **Features**: AWS S3 bucket listing, infrastructure queries
-- **Prerequisites**: AWS credentials
-- **Time**: 15 minutes
+#### `06_query_with_mcp/` - MCP Tools Integration
+- **Concepts**: MCP tools, external service integration
+- **Features**: Timezone queries using MCP time server
+- **Prerequisites**: uvx (for mcp-server-time)
+- **Time**: 10 minutes
 
 ### 🔴 Advanced Level
 
-#### `07_client_with_mcp/` - Advanced Cloud Workflows
-- **Concepts**: Multi-step cloud operations, security analysis
-- **Features**: AWS security assessment, progressive analysis
-- **Prerequisites**: AWS credentials, AWS MCP server
-- **Time**: 20 minutes
+#### `07_client_with_mcp/` - Multi-Turn MCP Workflows
+- **Concepts**: Multi-step MCP operations, context preservation
+- **Features**: Time conversion across timezones, multi-turn workflows
+- **Prerequisites**: uvx (for mcp-server-time)
+- **Time**: 10 minutes
 
-#### `08_client_advanced/` - Production Patterns
-- **Concepts**: Error handling, retries, production deployment
-- **Features**: Robust error handling, connection retries, timeout management
+#### `08_client_advanced/` - Advanced Client Features
+- **Concepts**: Dynamic model switching, structured error handling
+- **Features**: SetModel(), type-specific error checking, multi-turn with model changes
 - **Time**: 15 minutes
 
-#### `09_client_vs_query/` - Architecture Decision Guide
-- **Concepts**: API selection, performance considerations
-- **Features**: Side-by-side comparison, use case guidance
-- **Time**: 15 minutes
-
-#### `10_context_manager/` - Resource Management Patterns
+#### `09_context_manager/` - Resource Management Patterns
 - **Concepts**: WithClient pattern vs manual connection management
 - **Features**: Automatic resource cleanup, error handling comparison
+- **Time**: 10 minutes
+
+#### `10_session_management/` - Session Isolation
+- **Concepts**: Session management, conversation isolation
+- **Features**: Default vs custom sessions, QueryWithSession(), context separation
 - **Time**: 10 minutes
 
 #### `11_permission_callback/` - Permission Callbacks

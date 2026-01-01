@@ -107,7 +107,7 @@ func runToolFilterExample() {
 
 		return streamResponse(ctx, client)
 	}, permissionCallback,
-		claudecode.WithPermissionMode(claudecode.PermissionModeDefault), // Default mode with callback
+		claudecode.WithPermissionMode(claudecode.PermissionModeAcceptEdits), // Auto-approve edits, callback controls access
 		claudecode.WithMaxTurns(3),
 		claudecode.WithCwd(exampleDir()))
 
@@ -182,7 +182,7 @@ func runPathBasedExample() {
 		}
 		return streamResponse(ctx, client)
 	}, permissionCallback,
-		claudecode.WithPermissionMode(claudecode.PermissionModeDefault), // Default mode with callback
+		claudecode.WithPermissionMode(claudecode.PermissionModeAcceptEdits), // Auto-approve edits, callback controls access
 		claudecode.WithMaxTurns(5),
 		claudecode.WithCwd(exampleDir()))
 
@@ -234,7 +234,7 @@ func runAuditLoggingExample() {
 		}
 		return streamResponse(ctx, client)
 	}, permissionCallback,
-		claudecode.WithPermissionMode(claudecode.PermissionModeDefault), // Default mode with callback
+		claudecode.WithPermissionMode(claudecode.PermissionModeAcceptEdits), // Auto-approve edits, callback controls access
 		claudecode.WithMaxTurns(5),
 		claudecode.WithCwd(exampleDir()))
 

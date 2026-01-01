@@ -43,7 +43,10 @@ func main() {
 					}
 				case *claudecode.ResultMessage:
 					if msg.IsError {
-						return fmt.Errorf("error: %s", msg.Result)
+						if msg.Result != nil {
+							return fmt.Errorf("error: %s", *msg.Result)
+						}
+						return fmt.Errorf("error: unknown error")
 					}
 					return nil // Success, stream complete
 				}

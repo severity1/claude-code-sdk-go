@@ -82,7 +82,11 @@ func main() {
 			}
 		case *claudecode.ResultMessage:
 			if msg.IsError {
-				fmt.Printf("Error: %s\n", msg.Result)
+				if msg.Result != nil {
+					fmt.Printf("Error: %s\n", *msg.Result)
+				} else {
+					fmt.Printf("Error: unknown error\n")
+				}
 			}
 		}
 	}

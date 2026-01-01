@@ -184,11 +184,18 @@ func runRewindWorkflowExample() {
 		}
 
 		// Capture UUID from UserMessage
+		// Process ALL messages until channel returns nil to avoid race condition
+		// where UserMessage might still be buffered after ResultMessage
 		msgChan := client.ReceiveMessages(ctx)
+		var streamErr error
 		for {
 			select {
 			case message := <-msgChan:
 				if message == nil {
+					// Channel closed - all messages processed
+					if streamErr != nil {
+						return streamErr
+					}
 					goto done
 				}
 
@@ -213,11 +220,12 @@ func runRewindWorkflowExample() {
 				case *claudecode.ResultMessage:
 					if msg.IsError {
 						if msg.Result != nil {
-							return fmt.Errorf("error: %s", *msg.Result)
+							streamErr = fmt.Errorf("error: %s", *msg.Result)
+						} else {
+							streamErr = fmt.Errorf("error: unknown error")
 						}
-						return fmt.Errorf("error: unknown error")
 					}
-					goto done
+					// Don't exit here - continue draining to capture UserMessage
 				}
 			case <-ctx.Done():
 				return ctx.Err()

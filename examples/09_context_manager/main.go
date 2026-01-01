@@ -18,8 +18,8 @@ func main() {
 
 	// WithClient pattern (recommended)
 	fmt.Println("\n--- WithClient Pattern (Recommended) ---")
-	fmt.Println("✅ Automatic connect/disconnect")
-	fmt.Println("✅ Guaranteed cleanup on errors")
+	fmt.Println("[+] Automatic connect/disconnect")
+	fmt.Println("[+] Guaranteed cleanup on errors")
 
 	if err := demonstrateWithClient(ctx, question); err != nil {
 		log.Printf("WithClient failed: %v", err)
@@ -27,8 +27,8 @@ func main() {
 
 	// Manual pattern (still supported)
 	fmt.Println("\n--- Manual Pattern (Still Supported) ---")
-	fmt.Println("⚠️  Manual connect/disconnect required")
-	fmt.Println("⚠️  Easy to forget cleanup")
+	fmt.Println("[!] Manual connect/disconnect required")
+	fmt.Println("[!] Easy to forget cleanup")
 
 	if err := demonstrateManualPattern(ctx, question); err != nil {
 		log.Printf("Manual pattern failed: %v", err)
@@ -40,7 +40,7 @@ func main() {
 		log.Printf("Error demo failed: %v", err)
 	}
 
-	fmt.Println("\n🎯 Recommendation: Use WithClient for automatic resource management")
+	fmt.Println("\nRecommendation: Use WithClient for automatic resource management")
 }
 
 func demonstrateWithClient(ctx context.Context, question string) error {
@@ -57,7 +57,7 @@ func demonstrateWithClient(ctx context.Context, question string) error {
 		if err := showFirstLines(ctx, client, 3, 80); err != nil {
 			return err
 		}
-		fmt.Println("✅ WithClient will handle cleanup automatically")
+		fmt.Println("[+] WithClient will handle cleanup automatically")
 		return nil
 	})
 }
@@ -76,7 +76,7 @@ func demonstrateManualPattern(ctx context.Context, question string) error {
 		if err := client.Disconnect(); err != nil {
 			log.Printf("Disconnect warning: %v", err)
 		}
-		fmt.Println("✅ Manual cleanup completed")
+		fmt.Println("[+] Manual cleanup completed")
 	}()
 
 	fmt.Println("Connected manually")
@@ -103,7 +103,7 @@ func demonstrateErrorScenarios(ctx context.Context) error {
 		return client.Query(cancelCtx, "This will be cancelled")
 	})
 	if err != nil {
-		fmt.Printf("✅ WithClient handled cancellation: %v\n", err)
+		fmt.Printf("[+] WithClient handled cancellation: %v\n", err)
 	}
 
 	// Test function error
@@ -111,7 +111,7 @@ func demonstrateErrorScenarios(ctx context.Context) error {
 		return fmt.Errorf("simulated application error")
 	})
 	if err != nil {
-		fmt.Printf("✅ WithClient propagated error: %v\n", err)
+		fmt.Printf("[+] WithClient propagated error: %v\n", err)
 		fmt.Println("   Connection was still cleaned up automatically")
 	}
 
@@ -146,7 +146,10 @@ func showFirstLines(ctx context.Context, client claudecode.Client, maxLines, max
 				}
 			case *claudecode.ResultMessage:
 				if msg.IsError {
-					return fmt.Errorf("error: %s", msg.Result)
+					if msg.Result != nil {
+						return fmt.Errorf("error: %s", *msg.Result)
+					}
+					return fmt.Errorf("error: unknown error")
 				}
 				return nil
 			}

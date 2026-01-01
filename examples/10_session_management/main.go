@@ -74,7 +74,11 @@ func drainResponse(ctx context.Context, client claudecode.Client) {
 			}
 		case *claudecode.ResultMessage:
 			if message.IsError {
-				fmt.Printf("   ✗ Error: %s\n", message.Result)
+				if message.Result != nil {
+					fmt.Printf("   [Error] %s\n", *message.Result)
+				} else {
+					fmt.Printf("   [Error] unknown error\n")
+				}
 			}
 			return // Stream complete
 		}
