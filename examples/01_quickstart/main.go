@@ -1,4 +1,4 @@
-// Package main demonstrates basic usage of the Claude Code SDK Query API.
+// Package main demonstrates basic usage of the Claude Agent SDK Query API.
 package main
 
 import (
@@ -11,7 +11,7 @@ import (
 )
 
 func main() {
-	fmt.Println("Claude Code SDK - Query API Example")
+	fmt.Println("Claude Agent SDK - Query API Example")
 	fmt.Println("Asking: What is 2+2?")
 
 	ctx := context.Background()

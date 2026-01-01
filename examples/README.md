@@ -1,6 +1,6 @@
-# Claude Code SDK for Go - Examples
+# Claude Agent SDK for Go - Examples
 
-Working examples demonstrating the Claude Code SDK for Go. Both the **Query API** and **Client API** are production ready with full Python SDK compatibility.
+Working examples demonstrating the Claude Agent SDK for Go. Both the **Query API** and **Client API** are production ready with full Python SDK compatibility.
 
 ## Prerequisites
 

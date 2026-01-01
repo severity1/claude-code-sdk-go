@@ -10,7 +10,7 @@ import (
 )
 
 func main() {
-	fmt.Println("Claude Code SDK - WithClient Context Manager")
+	fmt.Println("Claude Agent SDK - WithClient Context Manager")
 	fmt.Println("Automatic resource management vs manual pattern")
 
 	ctx := context.Background()

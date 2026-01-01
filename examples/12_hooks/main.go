@@ -41,7 +41,7 @@ func exampleDir() string {
 }
 
 func main() {
-	fmt.Println("Claude Code SDK - Hook System Example")
+	fmt.Println("Claude Agent SDK - Hook System Example")
 	fmt.Println("======================================")
 	fmt.Println()
 

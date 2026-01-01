@@ -10,7 +10,7 @@ import (
 )
 
 func main() {
-	fmt.Println("Claude Code SDK - Multi-Turn Conversation Example")
+	fmt.Println("Claude Agent SDK - Multi-Turn Conversation Example")
 	fmt.Println("Building context across multiple related questions")
 
 	ctx := context.Background()

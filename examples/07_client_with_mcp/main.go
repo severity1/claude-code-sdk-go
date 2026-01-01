@@ -11,7 +11,7 @@ import (
 )
 
 func main() {
-	fmt.Println("Claude Code SDK - Client API with MCP Time Tools Example")
+	fmt.Println("Claude Agent SDK - Client API with MCP Time Tools Example")
 	fmt.Println("Multi-turn time workflow with context preservation")
 
 	ctx := context.Background()

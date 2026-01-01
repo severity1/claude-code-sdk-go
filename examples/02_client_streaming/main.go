@@ -10,7 +10,7 @@ import (
 )
 
 func main() {
-	fmt.Println("Claude Code SDK - Client Streaming Example")
+	fmt.Println("Claude Agent SDK - Client Streaming Example")
 	fmt.Println("Asking: Explain Go goroutines with a simple example")
 
 	ctx := context.Background()

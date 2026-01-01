@@ -1,4 +1,4 @@
-# Claude Code SDK for Go
+# Claude Agent SDK for Go
 
 <div align="center">
   <img src="gopher.png" alt="Go Gopher" width="200"/>
@@ -21,7 +21,7 @@ Unofficial Go SDK for Claude Code CLI integration. Build production-ready applic
 - **Client API**: Interactive conversations, multi-turn workflows, streaming responses
 - **WithClient**: Go-idiomatic context manager for automatic resource management
 
-![Claude Code SDK in Action](cc-sdk-go-in-action-v2.gif)
+![Claude Agent SDK in Action](cc-sdk-go-in-action-v2.gif)
 
 ## Installation
 
@@ -61,7 +61,7 @@ import (
 )
 
 func main() {
-    fmt.Println("Claude Code SDK - Query API Example")
+    fmt.Println("Claude Agent SDK - Query API Example")
     fmt.Println("Asking: What is 2+2?")
 
     ctx := context.Background()
@@ -127,7 +127,7 @@ import (
 )
 
 func main() {
-    fmt.Println("Claude Code SDK - Client Streaming Example")
+    fmt.Println("Claude Agent SDK - Client Streaming Example")
     fmt.Println("Asking: Explain Go goroutines with a simple example")
 
     ctx := context.Background()
@@ -198,7 +198,7 @@ import (
 )
 
 func main() {
-    fmt.Println("Claude Code SDK - Session Management Example")
+    fmt.Println("Claude Agent SDK - Session Management Example")
 
     ctx := context.Background()
 

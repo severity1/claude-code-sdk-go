@@ -12,7 +12,7 @@ import (
 )
 
 func main() {
-	fmt.Println("Claude Code SDK - Query API with MCP Tools Example")
+	fmt.Println("Claude Agent SDK - Query API with MCP Tools Example")
 	fmt.Println("Getting current time in multiple timezones using MCP time server")
 
 	ctx := context.Background()

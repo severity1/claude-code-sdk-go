@@ -46,7 +46,7 @@ func exampleDir() string {
 }
 
 func main() {
-	fmt.Println("Claude Code SDK - Permission Callback Example")
+	fmt.Println("Claude Agent SDK - Permission Callback Example")
 	fmt.Println("==============================================")
 	fmt.Println()
 

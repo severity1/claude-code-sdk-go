@@ -12,7 +12,7 @@ import (
 )
 
 func main() {
-	fmt.Println("Claude Code SDK - Advanced Client Features Example")
+	fmt.Println("Claude Agent SDK - Advanced Client Features Example")
 	fmt.Println("WithClient with dynamic model switching and error handling")
 
 	ctx := context.Background()

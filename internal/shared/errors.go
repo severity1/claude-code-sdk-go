@@ -3,7 +3,7 @@ package shared
 
 import "fmt"
 
-// SDKError is the base interface for all Claude Code SDK errors.
+// SDKError is the base interface for all Claude Agent SDK errors.
 type SDKError interface {
 	error
 	Type() string

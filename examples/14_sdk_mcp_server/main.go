@@ -27,7 +27,7 @@ import (
 )
 
 func main() {
-	fmt.Println("Claude Code SDK - In-Process SDK MCP Server Example")
+	fmt.Println("Claude Agent SDK - In-Process SDK MCP Server Example")
 	fmt.Println("====================================================")
 	fmt.Println()
 

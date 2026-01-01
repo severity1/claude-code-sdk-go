@@ -144,7 +144,7 @@ type AgentDefinition struct {
 	Model AgentModel `json:"model,omitempty"`
 }
 
-// Options configures the Claude Code SDK behavior.
+// Options configures the Claude Agent SDK behavior.
 type Options struct {
 	// Tool Control
 	AllowedTools    []string `json:"allowed_tools,omitempty"`

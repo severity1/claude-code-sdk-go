@@ -14,7 +14,7 @@ import (
 )
 
 func main() {
-	fmt.Println("Claude Code SDK - Query API with Tools Example")
+	fmt.Println("Claude Agent SDK - Query API with Tools Example")
 	fmt.Println("File operations: Read analysis and Write generation")
 
 	ctx := context.Background()

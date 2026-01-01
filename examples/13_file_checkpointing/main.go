@@ -39,7 +39,7 @@ func exampleDir() string {
 }
 
 func main() {
-	fmt.Println("Claude Code SDK - File Checkpointing Example")
+	fmt.Println("Claude Agent SDK - File Checkpointing Example")
 	fmt.Println("=============================================")
 	fmt.Println()
 

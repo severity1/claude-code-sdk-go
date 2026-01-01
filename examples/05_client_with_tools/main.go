@@ -13,7 +13,7 @@ import (
 )
 
 func main() {
-	fmt.Println("Claude Code SDK - Client API with Tools Example")
+	fmt.Println("Claude Agent SDK - Client API with Tools Example")
 	fmt.Println("Interactive file operations with context preservation")
 
 	// Setup demo files

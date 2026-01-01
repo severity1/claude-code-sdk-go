@@ -46,7 +46,7 @@ release:
   prerelease: auto
   mode: replace
   header: |
-    ## Claude Code SDK for Go {{ .Tag }}
+    ## Claude Agent SDK for Go {{ .Tag }}
 
     Go library for Claude Code CLI integration with Query and Client APIs.
 
