@@ -23,15 +23,23 @@ package main
 import (
 	"context"
 	"fmt"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
 
-	claudecode "github.com/severity1/claude-code-sdk-go"
+	claudecode "github.com/severity1/claude-agent-sdk-go"
 )
 
+// exampleDir returns the directory containing this source file.
+func exampleDir() string {
+	_, file, _, _ := runtime.Caller(0)
+	return filepath.Dir(file)
+}
+
 func main() {
-	fmt.Println("Claude Code SDK - File Checkpointing Example")
+	fmt.Println("Claude Agent SDK - File Checkpointing Example")
 	fmt.Println("=============================================")
 	fmt.Println()
 
@@ -48,10 +56,10 @@ func main() {
 	fmt.Println()
 	runModificationTrackingExample()
 
-	// Example 3: Rewind demonstration (conceptual)
+	// Example 3: Rewind demonstration with file operations
 	fmt.Println()
 	fmt.Println("--- Example 3: Rewind Workflow ---")
-	fmt.Println("Setup: Demonstrate the rewind pattern")
+	fmt.Println("Setup: Demonstrate the rewind pattern with file operations")
 	fmt.Println()
 	runRewindWorkflowExample()
 
@@ -94,7 +102,7 @@ func runCheckpointCaptureExample() {
 			})
 			mu.Unlock()
 		}, query)
-	}, claudecode.WithFileCheckpointing(), claudecode.WithMaxTurns(3))
+	}, claudecode.WithFileCheckpointing(), claudecode.WithMaxTurns(3), claudecode.WithCwd(exampleDir()))
 
 	if err != nil {
 		fmt.Printf("Error: %v\n", err)
@@ -135,7 +143,7 @@ func runModificationTrackingExample() {
 		}
 
 		return nil
-	}, claudecode.WithFileCheckpointing(), claudecode.WithMaxTurns(5))
+	}, claudecode.WithFileCheckpointing(), claudecode.WithMaxTurns(5), claudecode.WithCwd(exampleDir()))
 
 	if err != nil {
 		fmt.Printf("Error: %v\n", err)
@@ -156,7 +164,7 @@ func runModificationTrackingExample() {
 
 // runRewindWorkflowExample demonstrates the rewind workflow pattern
 func runRewindWorkflowExample() {
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
 	// Capture the checkpoint UUID
@@ -171,17 +179,34 @@ func runRewindWorkflowExample() {
 		// Step 2: Capture checkpoint from first interaction
 		fmt.Println("Step 2: Send query and capture checkpoint UUID")
 
-		if err := client.Query(ctx, "What is 2 + 2? Answer in one word."); err != nil {
+		if err := client.Query(ctx, "Read demo/notes.txt and tell me the version in one sentence."); err != nil {
 			return err
 		}
 
 		// Capture UUID from UserMessage
+		// Process messages until we get both UUID and result, or channel closes
 		msgChan := client.ReceiveMessages(ctx)
+		var streamErr error
+		resultReceived := false
+
+		// Create a timeout for draining after we have what we need
+		drainDeadline := time.After(200 * time.Millisecond)
+		draining := false
+
 		for {
+			var timeoutChan <-chan time.Time
+			if draining {
+				timeoutChan = drainDeadline
+			}
+
 			select {
 			case message := <-msgChan:
 				if message == nil {
-					goto done
+					// Channel closed - all messages processed
+					if streamErr != nil {
+						return streamErr
+					}
+					goto processComplete
 				}
 
 				switch msg := message.(type) {
@@ -203,19 +228,41 @@ func runRewindWorkflowExample() {
 						}
 					}
 				case *claudecode.ResultMessage:
+					resultReceived = true
 					if msg.IsError {
 						if msg.Result != nil {
-							return fmt.Errorf("error: %s", *msg.Result)
+							streamErr = fmt.Errorf("error: %s", *msg.Result)
+						} else {
+							streamErr = fmt.Errorf("error: unknown error")
 						}
-						return fmt.Errorf("error: unknown error")
 					}
-					goto done
 				}
+
+				// If we have both UUID and result, start draining with timeout
+				if resultReceived && capturedUUID != "" && !draining {
+					draining = true
+					drainDeadline = time.After(200 * time.Millisecond)
+				}
+
+			case <-timeoutChan:
+				// Drain timeout - we've waited long enough for remaining messages
+				if streamErr != nil {
+					return streamErr
+				}
+				goto processComplete
+
 			case <-ctx.Done():
+				// Main context timeout - acceptable if we got what we needed
+				mu.Lock()
+				hasUUID := capturedUUID != ""
+				mu.Unlock()
+				if hasUUID && resultReceived {
+					goto processComplete
+				}
 				return ctx.Err()
 			}
 		}
-	done:
+	processComplete:
 
 		// Step 3: Show how RewindFiles would be called
 		fmt.Println()
@@ -243,7 +290,7 @@ func runRewindWorkflowExample() {
 		}
 
 		return nil
-	}, claudecode.WithFileCheckpointing(), claudecode.WithMaxTurns(3))
+	}, claudecode.WithFileCheckpointing(), claudecode.WithMaxTurns(3), claudecode.WithCwd(exampleDir()))
 
 	if err != nil {
 		fmt.Printf("Error: %v\n", err)

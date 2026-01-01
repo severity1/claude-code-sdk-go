@@ -1,4 +1,4 @@
-// Package main demonstrates basic usage of the Claude Code SDK Query API.
+// Package main demonstrates basic usage of the Claude Agent SDK Query API.
 package main
 
 import (
@@ -7,11 +7,11 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/severity1/claude-code-sdk-go"
+	"github.com/severity1/claude-agent-sdk-go"
 )
 
 func main() {
-	fmt.Println("Claude Code SDK - Query API Example")
+	fmt.Println("Claude Agent SDK - Query API Example")
 	fmt.Println("Asking: What is 2+2?")
 
 	ctx := context.Background()
@@ -49,7 +49,11 @@ func main() {
 			}
 		case *claudecode.ResultMessage:
 			if msg.IsError {
-				log.Printf("Error: %s", msg.Result)
+				if msg.Result != nil {
+					log.Printf("Error: %s", *msg.Result)
+				} else {
+					log.Printf("Error: unknown error")
+				}
 			}
 		}
 	}

@@ -6,8 +6,8 @@ import (
 	"os"
 	"sync"
 
-	"github.com/severity1/claude-code-sdk-go/internal/cli"
-	"github.com/severity1/claude-code-sdk-go/internal/subprocess"
+	"github.com/severity1/claude-agent-sdk-go/internal/cli"
+	"github.com/severity1/claude-agent-sdk-go/internal/subprocess"
 )
 
 const defaultSessionID = "default"
@@ -182,6 +182,14 @@ func WithClientTransport(ctx context.Context, transport Transport, fn func(Clien
 func (c *ClientImpl) validateOptions() error {
 	if c.options == nil {
 		return nil // Nil options are acceptable (use defaults)
+	}
+
+	// Auto-configure PermissionPromptToolName when CanUseTool callback is set
+	// This tells CLI to route permission prompts through stdio (control protocol)
+	// Matches Python SDK behavior: permission_prompt_tool_name="stdio"
+	if c.options.CanUseTool != nil && c.options.PermissionPromptToolName == nil {
+		stdio := "stdio"
+		c.options.PermissionPromptToolName = &stdio
 	}
 
 	// Validate working directory

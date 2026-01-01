@@ -1,6 +1,6 @@
 version: 1
 
-project_name: claude-code-sdk-go
+project_name: claude-agent-sdk-go
 
 before:
   hooks:
@@ -42,24 +42,24 @@ changelog:
 release:
   github:
     owner: severity1
-    name: claude-code-sdk-go
+    name: claude-agent-sdk-go
   prerelease: auto
   mode: replace
   header: |
-    ## Claude Code SDK for Go {{ .Tag }}
+    ## Claude Agent SDK for Go {{ .Tag }}
 
     Go library for Claude Code CLI integration with Query and Client APIs.
 
     ### Installation
 
     ```bash
-    go get github.com/severity1/claude-code-sdk-go@{{ .Tag }}
+    go get github.com/severity1/claude-agent-sdk-go@{{ .Tag }}
     ```
 
     ### Usage
 
     ```go
-    import "github.com/severity1/claude-code-sdk-go"
+    import "github.com/severity1/claude-agent-sdk-go"
 
     // Query API (one-shot)
     messages, err := claudecode.Query(ctx, "Hello!")
@@ -72,19 +72,19 @@ release:
 
     ### Documentation
 
-    📦 **[View on pkg.go.dev](https://pkg.go.dev/github.com/severity1/claude-code-sdk-go@{{ .Tag }})**
+    📦 **[View on pkg.go.dev](https://pkg.go.dev/github.com/severity1/claude-agent-sdk-go@{{ .Tag }})**
 
   footer: |
     ## SDK Release Notes
 
     This Go SDK provides 100% Python SDK parity with Go-native patterns.
 
-    **Full Changelog**: https://github.com/severity1/claude-code-sdk-go/compare/{{ .PreviousTag }}...{{ .Tag }}
+    **Full Changelog**: https://github.com/severity1/claude-agent-sdk-go/compare/{{ .PreviousTag }}...{{ .Tag }}
 
     ### Resources
-    - 📚 [Documentation](https://pkg.go.dev/github.com/severity1/claude-code-sdk-go@{{ .Tag }})
-    - 💻 [Examples](https://github.com/severity1/claude-code-sdk-go/tree/{{ .Tag }}/examples)
-    - 🐛 [Report Issues](https://github.com/severity1/claude-code-sdk-go/issues)
+    - 📚 [Documentation](https://pkg.go.dev/github.com/severity1/claude-agent-sdk-go@{{ .Tag }})
+    - 💻 [Examples](https://github.com/severity1/claude-agent-sdk-go/tree/{{ .Tag }}/examples)
+    - 🐛 [Report Issues](https://github.com/severity1/claude-agent-sdk-go/issues)
 
   extra_files:
     - glob: ./README.md

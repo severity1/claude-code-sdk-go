@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/severity1/claude-code-sdk-go/internal/shared"
+	"github.com/severity1/claude-agent-sdk-go/internal/shared"
 )
 
 // Type aliases for MCP types from shared package.

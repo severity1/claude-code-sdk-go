@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/severity1/claude-code-sdk-go"
+	"github.com/severity1/claude-agent-sdk-go"
 )
 
 func main() {
-	fmt.Println("Claude Code SDK - Multi-Turn Conversation Example")
+	fmt.Println("Claude Agent SDK - Multi-Turn Conversation Example")
 	fmt.Println("Building context across multiple related questions")
 
 	ctx := context.Background()
@@ -69,7 +69,10 @@ func streamFullResponse(ctx context.Context, client claudecode.Client) error {
 				}
 			case *claudecode.ResultMessage:
 				if msg.IsError {
-					return fmt.Errorf("error: %s", msg.Result)
+					if msg.Result != nil {
+						return fmt.Errorf("error: %s", *msg.Result)
+					}
+					return fmt.Errorf("error: unknown error")
 				}
 				return nil
 			}

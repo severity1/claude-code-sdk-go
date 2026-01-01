@@ -1,4 +1,4 @@
-// Package main demonstrates session management with the Claude Code SDK for Go.
+// Package main demonstrates session management with the Claude Agent SDK for Go.
 // This example shows the clean Query API that replaces the variadic sessionID parameter
 // with explicit methods for better clarity and Go idiom compliance.
 package main
@@ -8,11 +8,11 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/severity1/claude-code-sdk-go"
+	"github.com/severity1/claude-agent-sdk-go"
 )
 
 func main() {
-	fmt.Println("Claude Code SDK - Session Management Example")
+	fmt.Println("Claude Agent SDK - Session Management Example")
 	fmt.Println("============================================")
 
 	ctx := context.Background()
@@ -74,7 +74,11 @@ func drainResponse(ctx context.Context, client claudecode.Client) {
 			}
 		case *claudecode.ResultMessage:
 			if message.IsError {
-				fmt.Printf("   ✗ Error: %s\n", message.Result)
+				if message.Result != nil {
+					fmt.Printf("   [Error] %s\n", *message.Result)
+				} else {
+					fmt.Printf("   [Error] unknown error\n")
+				}
 			}
 			return // Stream complete
 		}

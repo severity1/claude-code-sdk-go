@@ -25,7 +25,7 @@ This package exists solely to break the circular dependency between the main pac
 ## Usage Pattern
 Internal packages import from here instead of main package:
 ```go
-import "github.com/severity1/claude-code-sdk-go/internal/shared"
+import "github.com/severity1/claude-agent-sdk-go/internal/shared"
 ```
 
 Main package re-exports types for public API compatibility:

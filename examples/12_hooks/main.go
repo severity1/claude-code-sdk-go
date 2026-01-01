@@ -25,15 +25,23 @@ package main
 import (
 	"context"
 	"fmt"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
 
-	claudecode "github.com/severity1/claude-code-sdk-go"
+	claudecode "github.com/severity1/claude-agent-sdk-go"
 )
 
+// exampleDir returns the directory containing this source file.
+func exampleDir() string {
+	_, file, _, _ := runtime.Caller(0)
+	return filepath.Dir(file)
+}
+
 func main() {
-	fmt.Println("Claude Code SDK - Hook System Example")
+	fmt.Println("Claude Agent SDK - Hook System Example")
 	fmt.Println("======================================")
 	fmt.Println()
 
@@ -133,7 +141,7 @@ func runToolLoggingExample() {
 			return err
 		}
 		return streamResponse(ctx, client)
-	}, preToolHook, postToolHook, claudecode.WithMaxTurns(3))
+	}, preToolHook, postToolHook, claudecode.WithMaxTurns(3), claudecode.WithCwd(exampleDir()))
 
 	if err != nil {
 		fmt.Printf("Error: %v\n", err)
@@ -202,7 +210,7 @@ func runBlockingExample() {
 			return err
 		}
 		return streamResponse(ctx, client)
-	}, blockingHook, claudecode.WithMaxTurns(5))
+	}, blockingHook, claudecode.WithMaxTurns(5), claudecode.WithCwd(exampleDir()))
 
 	if err != nil {
 		fmt.Printf("Error: %v\n", err)
@@ -277,7 +285,7 @@ func runContextInjectionExample() {
 			return err
 		}
 		return streamResponse(ctx, client)
-	}, preHook, postHook, claudecode.WithMaxTurns(5))
+	}, preHook, postHook, claudecode.WithMaxTurns(5), claudecode.WithCwd(exampleDir()))
 
 	if err != nil {
 		fmt.Printf("Error: %v\n", err)

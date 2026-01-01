@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/severity1/claude-code-sdk-go"
+	"github.com/severity1/claude-agent-sdk-go"
 )
 
 func main() {
-	fmt.Println("Claude Code SDK - Client Streaming Example")
+	fmt.Println("Claude Agent SDK - Client Streaming Example")
 	fmt.Println("Asking: Explain Go goroutines with a simple example")
 
 	ctx := context.Background()
@@ -43,7 +43,10 @@ func main() {
 					}
 				case *claudecode.ResultMessage:
 					if msg.IsError {
-						return fmt.Errorf("error: %s", msg.Result)
+						if msg.Result != nil {
+							return fmt.Errorf("error: %s", *msg.Result)
+						}
+						return fmt.Errorf("error: unknown error")
 					}
 					return nil // Success, stream complete
 				}

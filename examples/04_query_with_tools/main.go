@@ -10,11 +10,11 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/severity1/claude-code-sdk-go"
+	"github.com/severity1/claude-agent-sdk-go"
 )
 
 func main() {
-	fmt.Println("Claude Code SDK - Query API with Tools Example")
+	fmt.Println("Claude Agent SDK - Query API with Tools Example")
 	fmt.Println("File operations: Read analysis and Write generation")
 
 	ctx := context.Background()
@@ -103,11 +103,11 @@ func queryWithTools(ctx context.Context, question string, allowedTools []string)
 					if toolResult, ok := block.(*claudecode.ToolResultBlock); ok {
 						if content, ok := toolResult.Content.(string); ok {
 							if strings.Contains(content, "tool_use_error") {
-								fmt.Printf("⚠️ Tool error: %s\n", content)
+								fmt.Printf("[Tool error] %s\n", content)
 							} else if len(content) > 100 {
-								fmt.Printf("📁 Tool: %s...\n", content[:100])
+								fmt.Printf("[Tool] %s...\n", content[:100])
 							} else {
-								fmt.Printf("📁 Tool: %s\n", content)
+								fmt.Printf("[Tool] %s\n", content)
 							}
 						}
 					}
@@ -115,12 +115,15 @@ func queryWithTools(ctx context.Context, question string, allowedTools []string)
 			}
 		case *claudecode.ResultMessage:
 			if msg.IsError {
-				return fmt.Errorf("error: %s", msg.Result)
+				if msg.Result != nil {
+					return fmt.Errorf("error: %s", *msg.Result)
+				}
+				return fmt.Errorf("error: unknown error")
 			}
 		}
 	}
 
-	fmt.Println("\n✅ Completed")
+	fmt.Println("\nCompleted")
 	return nil
 }
 

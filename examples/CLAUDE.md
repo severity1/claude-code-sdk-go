@@ -1,6 +1,6 @@
 # Usage Patterns Context
 
-**Context**: Example usage patterns for Claude Code SDK Go with Query vs Client API patterns, tool integration, and Go-native concurrency
+**Context**: Example usage patterns for Claude Agent SDK Go with Query vs Client API patterns, tool integration, and Go-native concurrency
 
 ## Component Focus
 - **Query API Patterns** - One-shot automation, scripting, CI/CD integration with automatic cleanup

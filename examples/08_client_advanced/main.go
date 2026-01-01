@@ -8,11 +8,11 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/severity1/claude-code-sdk-go"
+	"github.com/severity1/claude-agent-sdk-go"
 )
 
 func main() {
-	fmt.Println("Claude Code SDK - Advanced Client Features Example")
+	fmt.Println("Claude Agent SDK - Advanced Client Features Example")
 	fmt.Println("WithClient with dynamic model switching and error handling")
 
 	ctx := context.Background()
@@ -75,14 +75,14 @@ func main() {
 		// Check for specific error types
 		var cliError *claudecode.CLINotFoundError
 		if errors.As(err, &cliError) {
-			fmt.Printf("❌ Claude CLI not installed: %v\n", cliError)
+			fmt.Printf("[Error] Claude CLI not installed: %v\n", cliError)
 			fmt.Println("Install: npm install -g @anthropic-ai/claude-code")
 			return
 		}
 
 		var connError *claudecode.ConnectionError
 		if errors.As(err, &connError) {
-			fmt.Printf("⚠️ Connection failed: %v\n", connError)
+			fmt.Printf("[Warning] Connection failed: %v\n", connError)
 			fmt.Println("WithClient handled cleanup automatically")
 			return
 		}
@@ -113,7 +113,10 @@ func streamResponse(ctx context.Context, client claudecode.Client) error {
 				}
 			case *claudecode.ResultMessage:
 				if msg.IsError {
-					return fmt.Errorf("error: %s", msg.Result)
+					if msg.Result != nil {
+						return fmt.Errorf("error: %s", *msg.Result)
+					}
+					return fmt.Errorf("error: unknown error")
 				}
 				return nil
 			}

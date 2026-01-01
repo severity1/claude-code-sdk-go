@@ -5,8 +5,8 @@ import (
 	"io"
 	"os"
 
-	"github.com/severity1/claude-code-sdk-go/internal/control"
-	"github.com/severity1/claude-code-sdk-go/internal/shared"
+	"github.com/severity1/claude-agent-sdk-go/internal/control"
+	"github.com/severity1/claude-agent-sdk-go/internal/shared"
 )
 
 // Options contains configuration for Claude Code CLI interactions.

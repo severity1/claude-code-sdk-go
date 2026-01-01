@@ -1,4 +1,4 @@
-// Package main demonstrates Client API with AWS MCP tools using WithClient for security analysis.
+// Package main demonstrates Client API with MCP time tools using WithClient for multi-turn time workflow.
 package main
 
 import (
@@ -7,24 +7,33 @@ import (
 	"log"
 	"strings"
 
-	"github.com/severity1/claude-code-sdk-go"
+	"github.com/severity1/claude-agent-sdk-go"
 )
 
 func main() {
-	fmt.Println("Claude Code SDK - Client API with AWS MCP Tools Example")
-	fmt.Println("S3 security analysis with context preservation")
+	fmt.Println("Claude Agent SDK - Client API with MCP Time Tools Example")
+	fmt.Println("Multi-turn time workflow with context preservation")
 
 	ctx := context.Background()
 
-	// Two-step AWS security workflow using WithClient
+	// Two-step time workflow using WithClient
 	steps := []string{
-		"List all S3 buckets with their names, creation dates, and regions",
-		"Analyze the S3 buckets from step 1 for public access and security risks. Provide recommendations.",
+		"What time is it in London?",
+		"Convert that time to Tokyo timezone",
 	}
 
-	// WithClient maintains context between AWS operations automatically
+	// Configure MCP time server using uvx
+	servers := map[string]claudecode.McpServerConfig{
+		"time": &claudecode.McpStdioServerConfig{
+			Type:    claudecode.McpServerTypeStdio,
+			Command: "uvx",
+			Args:    []string{"mcp-server-time"},
+		},
+	}
+
+	// WithClient maintains context between time operations automatically
 	err := claudecode.WithClient(ctx, func(client claudecode.Client) error {
-		fmt.Println("\nConnected! Starting S3 security analysis workflow...")
+		fmt.Println("\nConnected! Starting multi-turn time workflow...")
 
 		for i, step := range steps {
 			fmt.Printf("\n--- Step %d ---\n", i+1)
@@ -34,24 +43,25 @@ func main() {
 				return fmt.Errorf("step %d failed: %w", i+1, err)
 			}
 
-			if err := streamAWSResponse(ctx, client); err != nil {
+			if err := streamTimeResponse(ctx, client); err != nil {
 				return fmt.Errorf("step %d response failed: %w", i+1, err)
 			}
 		}
 
-		fmt.Println("\nS3 security analysis completed!")
-		fmt.Println("Context was preserved - step 2 referenced buckets from step 1")
+		fmt.Println("\nTime workflow completed!")
+		fmt.Println("Context was preserved - step 2 referenced the time from step 1")
 		return nil
-	}, claudecode.WithAllowedTools(
-		"mcp__aws-api-mcp__call_aws",
-		"mcp__aws-api-mcp__suggest_aws_commands"),
-		claudecode.WithSystemPrompt("You are an AWS security expert. Analyze S3 buckets for security risks."))
+	}, claudecode.WithMcpServers(servers),
+		claudecode.WithAllowedTools(
+			"mcp__time__get_current_time",
+			"mcp__time__convert_time"),
+		claudecode.WithSystemPrompt("You are a helpful assistant. Use the MCP time server to get and convert times between timezones."))
 	if err != nil {
-		log.Fatalf("S3 analysis failed: %v", err)
+		log.Fatalf("Time workflow failed: %v", err)
 	}
 }
 
-func streamAWSResponse(ctx context.Context, client claudecode.Client) error {
+func streamTimeResponse(ctx context.Context, client claudecode.Client) error {
 	fmt.Println("\nResponse:")
 
 	msgChan := client.ReceiveMessages(ctx)
@@ -75,11 +85,11 @@ func streamAWSResponse(ctx context.Context, client claudecode.Client) error {
 						if toolResult, ok := block.(*claudecode.ToolResultBlock); ok {
 							if content, ok := toolResult.Content.(string); ok {
 								if strings.Contains(content, "tool_use_error") {
-									fmt.Printf("⚠️ AWS Error: %s\n", content)
+									fmt.Printf("Time Tool Error: %s\n", content)
 								} else if len(content) > 150 {
-									fmt.Printf("🔧 AWS: %s...\n", content[:150])
+									fmt.Printf("Time Result: %s...\n", content[:150])
 								} else {
-									fmt.Printf("🔧 AWS: %s\n", content)
+									fmt.Printf("Time Result: %s\n", content)
 								}
 							}
 						}
@@ -87,7 +97,10 @@ func streamAWSResponse(ctx context.Context, client claudecode.Client) error {
 				}
 			case *claudecode.ResultMessage:
 				if msg.IsError {
-					return fmt.Errorf("error: %s", msg.Result)
+					if msg.Result != nil {
+						return fmt.Errorf("error: %s", *msg.Result)
+					}
+					return fmt.Errorf("error: unknown error")
 				}
 				return nil
 			}

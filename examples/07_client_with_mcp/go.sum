@@ -1,2 +1,2 @@
-github.com/severity1/claude-code-sdk-go v0.0.0-20250906084130-5e58795cfc92 h1:le6cPvBly12/cXNvqRD36T2T10JPqZbu4L+VVhEpFLk=
-github.com/severity1/claude-code-sdk-go v0.0.0-20250906084130-5e58795cfc92/go.mod h1:hR7RdtWXHAA2VxvIxmXQQo91eMGMzzasMSeX2CXDmCY=
+github.com/severity1/claude-agent-sdk-go v0.0.0-20250906084130-5e58795cfc92 h1:le6cPvBly12/cXNvqRD36T2T10JPqZbu4L+VVhEpFLk=
+github.com/severity1/claude-agent-sdk-go v0.0.0-20250906084130-5e58795cfc92/go.mod h1:hR7RdtWXHAA2VxvIxmXQQo91eMGMzzasMSeX2CXDmCY=

@@ -1,4 +1,4 @@
-// Package claudecode provides the Claude Code SDK for Go.
+// Package claudecode provides the Claude Agent SDK for Go.
 //
 // This SDK enables programmatic interaction with Claude Code CLI through two main APIs:
 // - Query() for one-shot requests with automatic cleanup
@@ -9,7 +9,7 @@
 //
 // Example usage:
 //
-//	import "github.com/severity1/claude-code-sdk-go"
+//	import "github.com/severity1/claude-agent-sdk-go"
 //
 //	// One-shot query
 //	messages, err := claudecode.Query(ctx, "Hello, Claude!")
@@ -27,5 +27,5 @@
 // Go idioms and patterns.
 package claudecode
 
-// Version represents the current version of the Claude Code SDK for Go.
+// Version represents the current version of the Claude Agent SDK for Go.
 const Version = "0.1.0"

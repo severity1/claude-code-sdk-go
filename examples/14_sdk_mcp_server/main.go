@@ -23,11 +23,11 @@ import (
 	"strings"
 	"time"
 
-	claudecode "github.com/severity1/claude-code-sdk-go"
+	claudecode "github.com/severity1/claude-agent-sdk-go"
 )
 
 func main() {
-	fmt.Println("Claude Code SDK - In-Process SDK MCP Server Example")
+	fmt.Println("Claude Agent SDK - In-Process SDK MCP Server Example")
 	fmt.Println("====================================================")
 	fmt.Println()
 

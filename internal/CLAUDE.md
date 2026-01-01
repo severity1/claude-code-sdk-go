@@ -1,6 +1,6 @@
 # Internal Implementation Patterns
 
-**Context**: Internal Go implementation for Claude Code SDK with transport abstraction and Go-native concurrency
+**Context**: Internal Go implementation for Claude Agent SDK with transport abstraction and Go-native concurrency
 
 ## Component Focus
 - **Transport Interface** - Abstract communication with Claude CLI subprocess

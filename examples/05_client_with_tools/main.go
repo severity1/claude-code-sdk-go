@@ -9,11 +9,11 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/severity1/claude-code-sdk-go"
+	"github.com/severity1/claude-agent-sdk-go"
 )
 
 func main() {
-	fmt.Println("Claude Code SDK - Client API with Tools Example")
+	fmt.Println("Claude Agent SDK - Client API with Tools Example")
 	fmt.Println("Interactive file operations with context preservation")
 
 	// Setup demo files
@@ -105,9 +105,9 @@ func streamResponse(ctx context.Context, client claudecode.Client) error {
 						if toolResult, ok := block.(*claudecode.ToolResultBlock); ok {
 							if content, ok := toolResult.Content.(string); ok {
 								if len(content) > 100 {
-									fmt.Printf("📁 File operation: %s...\n", content[:100])
+									fmt.Printf("[File] %s...\n", content[:100])
 								} else {
-									fmt.Printf("📁 File operation: %s\n", content)
+									fmt.Printf("[File] %s\n", content)
 								}
 							}
 						}
@@ -115,7 +115,10 @@ func streamResponse(ctx context.Context, client claudecode.Client) error {
 				}
 			case *claudecode.ResultMessage:
 				if msg.IsError {
-					return fmt.Errorf("error: %s", msg.Result)
+					if msg.Result != nil {
+						return fmt.Errorf("error: %s", *msg.Result)
+					}
+					return fmt.Errorf("error: unknown error")
 				}
 				return nil
 			}

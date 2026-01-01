@@ -3,8 +3,8 @@ package claudecode
 import (
 	"context"
 
-	"github.com/severity1/claude-code-sdk-go/internal/control"
-	"github.com/severity1/claude-code-sdk-go/internal/shared"
+	"github.com/severity1/claude-agent-sdk-go/internal/control"
+	"github.com/severity1/claude-agent-sdk-go/internal/shared"
 )
 
 // Message represents any message type in the conversation.
