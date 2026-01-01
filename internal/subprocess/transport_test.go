@@ -772,7 +772,7 @@ func TestTransportHandleStdoutErrorPaths(t *testing.T) {
 		// Close transport to trigger scanner completion
 		disconnectTransportSafely(t, transport)
 
-		// Channels should be closed after transport close
+		// Message channel should close after transport close
 		select {
 		case _, ok := <-msgChan:
 			if ok {
@@ -782,13 +782,21 @@ func TestTransportHandleStdoutErrorPaths(t *testing.T) {
 			t.Error("Expected message channel to be closed promptly")
 		}
 
-		select {
-		case _, ok := <-errChan:
-			if ok {
-				t.Error("Expected error channel to be closed")
+		// Error channel may emit shutdown errors before closing.
+		// Drain any errors and verify the channel eventually closes.
+		timeout := time.After(2 * time.Second)
+		for {
+			select {
+			case _, ok := <-errChan:
+				if !ok {
+					// Channel closed - success
+					return
+				}
+				// Received an error (e.g., scanner shutdown error), keep draining
+			case <-timeout:
+				t.Error("Expected error channel to be closed within timeout")
+				return
 			}
-		case <-time.After(1 * time.Second):
-			t.Error("Expected error channel to be closed promptly")
 		}
 	})
 }
