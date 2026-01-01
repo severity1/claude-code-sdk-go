@@ -80,6 +80,42 @@ cd examples/12_hooks
 go run main.go
 ```
 
+### 6. Advanced Features
+
+```bash
+# 13 - File checkpointing and rewind
+cd examples/13_file_checkpointing
+go run main.go
+
+# 14 - In-process SDK MCP servers
+cd examples/14_sdk_mcp_server
+go run main.go
+
+# 15 - Programmatic subagents
+cd examples/15_programmatic_subagents
+go run main.go
+
+# 16 - Type-safe structured output
+cd examples/16_structured_output
+go run main.go
+
+# 17 - Custom plugin integration
+cd examples/17_plugins
+go run main.go
+
+# 18 - Sandbox security (Linux/macOS)
+cd examples/18_sandbox_security
+go run main.go
+
+# 19 - Partial streaming updates
+cd examples/19_partial_streaming
+go run main.go
+
+# 20 - Debugging and diagnostics
+cd examples/20_debugging_and_diagnostics
+go run main.go
+```
+
 ## Quick Test Example
 
 Try this simple example to verify your setup:
@@ -201,6 +237,49 @@ func main() {
 - **Features**: PreToolUse/PostToolUse hooks, command blocking, context injection
 - **Time**: 15 minutes
 
+#### `13_file_checkpointing/` - File Checkpointing and Rewind
+- **Concepts**: File state management, checkpoint/rewind operations
+- **Features**: WithFileCheckpointing(), RewindFiles(), message UUIDs
+- **Time**: 15 minutes
+
+#### `14_sdk_mcp_server/` - In-Process SDK MCP Servers
+- **Concepts**: Custom MCP tools, in-process tool execution
+- **Features**: NewTool(), CreateSDKMcpServer(), WithSdkMcpServer()
+- **Time**: 20 minutes
+
+### Expert Level
+
+#### `15_programmatic_subagents/` - Programmatic Subagents
+- **Concepts**: Agent definitions, specialized agents
+- **Features**: WithAgent(), WithAgents(), AgentDefinition, AgentModel constants
+- **Time**: 15 minutes
+
+#### `16_structured_output/` - Type-Safe Structured Output
+- **Concepts**: JSON schema constraints, structured responses
+- **Features**: WithJSONSchema(), WithOutputFormat(), ResultMessage.StructuredOutput
+- **Time**: 15 minutes
+
+#### `17_plugins/` - Plugin Configuration
+- **Concepts**: Plugin integration, extensibility
+- **Features**: WithLocalPlugin(), WithPlugins(), SdkPluginConfig
+- **Time**: 10 minutes
+
+#### `18_sandbox_security/` - Sandbox Security
+- **Concepts**: Command isolation, security boundaries
+- **Features**: WithSandboxEnabled(), WithSandboxNetwork(), excluded commands
+- **Platform**: Linux/macOS only
+- **Time**: 15 minutes
+
+#### `19_partial_streaming/` - Partial Streaming
+- **Concepts**: Real-time updates, progressive rendering
+- **Features**: WithPartialStreaming(), StreamEvent types, delta handling
+- **Time**: 15 minutes
+
+#### `20_debugging_and_diagnostics/` - Debugging and Diagnostics
+- **Concepts**: Debug output, environment config, health monitoring
+- **Features**: WithDebugWriter(), WithStderrCallback(), GetServerInfo()
+- **Time**: 15 minutes
+
 ## Common Patterns
 
 ### Query API - One-Shot Operations
@@ -273,6 +352,18 @@ iterator, err := claudecode.Query(ctx, "List my S3 buckets",
     claudecode.WithAllowedTools(
         "mcp__aws-api-mcp__call_aws",
         "mcp__aws-api-mcp__suggest_aws_commands"))
+```
+
+### Tools Presets
+```go
+// Explicit list - Maximum control
+claudecode.WithAllowedTools("Read", "Write", "Edit")
+
+// Preset - Convenience (full Claude Code toolset)
+claudecode.WithClaudeCodeTools()
+
+// Custom preset
+claudecode.WithToolsPreset("my_custom_preset")
 ```
 
 ## Error Handling
