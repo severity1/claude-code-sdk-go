@@ -8,12 +8,21 @@
 // - Dynamic permission decisions based on context
 //
 // IMPORTANT: Permission callbacks are only invoked for tools that would
-// normally prompt the user for permission. Read-only operations (Read, Glob,
-// Grep) are auto-approved by the CLI and do NOT trigger callbacks.
-// Write operations (Write, Edit, Bash) DO trigger callbacks.
+// normally prompt the user for permission AND when using PermissionModeDefault.
+//
+// - Read-only operations (Read, Glob, Grep) are auto-approved and do NOT trigger callbacks
+// - Write operations (Write, Edit, Bash) trigger callbacks ONLY in PermissionModeDefault
+// - PermissionModeAcceptEdits auto-approves Write/Edit/Bash without invoking callbacks
+// - Permission callbacks require Client API (streaming mode) - Query API does not support them
 //
 // The permission flow is:
 // PreToolUse Hook -> Deny Rules -> Allow Rules -> Ask Rules -> Permission Mode -> canUseTool Callback
+//
+// NOTE: As of CLI version 1.0.x, there may be issues with permission callback responses
+// not being properly processed by the CLI. If you see callbacks being invoked ([CALLBACK]
+// messages) but tools still being blocked, this is a known CLI issue. See GitHub issues:
+// - https://github.com/anthropics/claude-code/issues/4775
+// - https://github.com/anthropics/claude-agent-sdk-python/issues/227
 //
 // Run: go run main.go
 package main
@@ -44,7 +53,8 @@ func main() {
 	// Example 1: Basic tool filtering (allow Write/Bash, deny Edit)
 	fmt.Println("--- Example 1: Tool-Based Permission Control ---")
 	fmt.Println("Policy: Allow Write/Bash tools, deny Edit tool")
-	fmt.Println("Note: Read/Glob are auto-approved by CLI and don't trigger callbacks")
+	fmt.Println("Note: Using PermissionModeDefault to ensure callbacks are invoked")
+	fmt.Println("      Read/Glob are auto-approved by CLI and don't trigger callbacks")
 	fmt.Println()
 	runToolFilterExample()
 
@@ -107,7 +117,7 @@ func runToolFilterExample() {
 
 		return streamResponse(ctx, client)
 	}, permissionCallback,
-		claudecode.WithPermissionMode(claudecode.PermissionModeAcceptEdits), // Auto-approve edits, callback controls access
+		claudecode.WithPermissionMode(claudecode.PermissionModeDefault), // Use default mode so callbacks are invoked
 		claudecode.WithMaxTurns(3),
 		claudecode.WithCwd(exampleDir()))
 
@@ -182,7 +192,7 @@ func runPathBasedExample() {
 		}
 		return streamResponse(ctx, client)
 	}, permissionCallback,
-		claudecode.WithPermissionMode(claudecode.PermissionModeAcceptEdits), // Auto-approve edits, callback controls access
+		claudecode.WithPermissionMode(claudecode.PermissionModeDefault), // Use default mode so callbacks are invoked
 		claudecode.WithMaxTurns(5),
 		claudecode.WithCwd(exampleDir()))
 
@@ -234,7 +244,7 @@ func runAuditLoggingExample() {
 		}
 		return streamResponse(ctx, client)
 	}, permissionCallback,
-		claudecode.WithPermissionMode(claudecode.PermissionModeAcceptEdits), // Auto-approve edits, callback controls access
+		claudecode.WithPermissionMode(claudecode.PermissionModeDefault), // Use default mode so callbacks are invoked
 		claudecode.WithMaxTurns(5),
 		claudecode.WithCwd(exampleDir()))
 
