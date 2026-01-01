@@ -344,6 +344,43 @@ func TestClientConfiguration(t *testing.T) {
 	}
 }
 
+// TestClientCanUseToolAutoConfiguresPermissionPromptToolName verifies that when
+// CanUseTool callback is set but PermissionPromptToolName is not, validateOptions
+// automatically configures PermissionPromptToolName to "stdio" for control protocol routing.
+func TestClientCanUseToolAutoConfiguresPermissionPromptToolName(t *testing.T) {
+	ctx, cancel := setupClientTestContext(t, 5*time.Second)
+	defer cancel()
+
+	// Create a simple permission callback
+	callback := func(_ context.Context, _ string, _ map[string]any, _ ToolPermissionContext) (PermissionResult, error) {
+		return NewPermissionResultAllow(), nil
+	}
+
+	// Create client with CanUseTool but without PermissionPromptToolName
+	transport := newClientMockTransport()
+	client := NewClientWithTransport(transport, WithCanUseTool(callback))
+	defer disconnectClientSafely(t, client)
+
+	// Connect triggers validateOptions which should auto-configure PermissionPromptToolName
+	err := client.Connect(ctx)
+	if err != nil {
+		t.Fatalf("Connect failed: %v", err)
+	}
+
+	// Access internal options via type assertion
+	impl, ok := client.(*ClientImpl)
+	if !ok {
+		t.Fatal("Expected client to be *ClientImpl")
+	}
+
+	// Verify PermissionPromptToolName was auto-configured to "stdio"
+	if impl.options.PermissionPromptToolName == nil {
+		t.Error("Expected PermissionPromptToolName to be auto-configured, got nil")
+	} else if *impl.options.PermissionPromptToolName != "stdio" {
+		t.Errorf("Expected PermissionPromptToolName = 'stdio', got %q", *impl.options.PermissionPromptToolName)
+	}
+}
+
 // TestClientReceiveMessages tests message reception through client channels
 // Covers T137: Client Message Reception
 func TestClientReceiveMessages(t *testing.T) {
