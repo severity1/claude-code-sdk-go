@@ -76,7 +76,7 @@ func runToolFilterExample() {
 	permissionCallback := claudecode.WithCanUseTool(func(
 		_ context.Context,
 		toolName string,
-		input map[string]any,
+		_ map[string]any,
 		_ claudecode.ToolPermissionContext,
 	) (claudecode.PermissionResult, error) {
 		// Log all permission requests
