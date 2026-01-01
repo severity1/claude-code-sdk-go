@@ -1,4 +1,4 @@
-// Package main demonstrates Query API with MCP tools (AWS operations).
+// Package main demonstrates Query API with MCP tools (timezone operations).
 package main
 
 import (
@@ -13,20 +13,28 @@ import (
 
 func main() {
 	fmt.Println("Claude Code SDK - Query API with MCP Tools Example")
-	fmt.Println("AWS S3 bucket listing using MCP tools")
+	fmt.Println("Getting current time in multiple timezones using MCP time server")
 
 	ctx := context.Background()
-	query := "List my S3 buckets with their names, creation dates, and regions"
+	query := "What time is it in Tokyo and New York?"
 
 	fmt.Printf("\nQuery: %s\n", query)
-	fmt.Println("Tools: AWS MCP tools")
+	fmt.Println("Tools: MCP time server")
 
-	// Query with MCP tools enabled
+	// Configure MCP time server using uvx
+	servers := map[string]claudecode.McpServerConfig{
+		"time": &claudecode.McpStdioServerConfig{
+			Type:    claudecode.McpServerTypeStdio,
+			Command: "uvx",
+			Args:    []string{"mcp-server-time"},
+		},
+	}
+
+	// Query with MCP time tools enabled
 	iterator, err := claudecode.Query(ctx, query,
-		claudecode.WithAllowedTools(
-			"mcp__aws-api-mcp__call_aws",
-			"mcp__aws-api-mcp__suggest_aws_commands"),
-		claudecode.WithSystemPrompt("You are an AWS expert. Use AWS MCP tools to help with S3 operations."),
+		claudecode.WithMcpServers(servers),
+		claudecode.WithAllowedTools("mcp__time__get_current_time"),
+		claudecode.WithSystemPrompt("You are a helpful assistant. Use the MCP time server to get current time in different timezones."),
 	)
 	if err != nil {
 		log.Fatalf("Query failed: %v", err)
@@ -62,11 +70,11 @@ func main() {
 					if toolResult, ok := block.(*claudecode.ToolResultBlock); ok {
 						if content, ok := toolResult.Content.(string); ok {
 							if strings.Contains(content, "tool_use_error") {
-								fmt.Printf("⚠️ AWS Tool Error: %s\n", content)
+								fmt.Printf("Time Tool Error: %s\n", content)
 							} else if len(content) > 150 {
-								fmt.Printf("🔧 AWS Result: %s...\n", content[:150])
+								fmt.Printf("Time Result: %s...\n", content[:150])
 							} else {
-								fmt.Printf("🔧 AWS Result: %s\n", content)
+								fmt.Printf("Time Result: %s\n", content)
 							}
 						}
 					}
@@ -79,5 +87,5 @@ func main() {
 		}
 	}
 
-	fmt.Println("\nS3 bucket listing completed!")
+	fmt.Println("\nTimezone query completed!")
 }

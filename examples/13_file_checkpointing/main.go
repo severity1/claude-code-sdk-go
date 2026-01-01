@@ -23,12 +23,20 @@ package main
 import (
 	"context"
 	"fmt"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
 
 	claudecode "github.com/severity1/claude-agent-sdk-go"
 )
+
+// exampleDir returns the directory containing this source file.
+func exampleDir() string {
+	_, file, _, _ := runtime.Caller(0)
+	return filepath.Dir(file)
+}
 
 func main() {
 	fmt.Println("Claude Code SDK - File Checkpointing Example")
@@ -94,7 +102,7 @@ func runCheckpointCaptureExample() {
 			})
 			mu.Unlock()
 		}, query)
-	}, claudecode.WithFileCheckpointing(), claudecode.WithMaxTurns(3))
+	}, claudecode.WithFileCheckpointing(), claudecode.WithMaxTurns(3), claudecode.WithCwd(exampleDir()))
 
 	if err != nil {
 		fmt.Printf("Error: %v\n", err)
@@ -135,7 +143,7 @@ func runModificationTrackingExample() {
 		}
 
 		return nil
-	}, claudecode.WithFileCheckpointing(), claudecode.WithMaxTurns(5))
+	}, claudecode.WithFileCheckpointing(), claudecode.WithMaxTurns(5), claudecode.WithCwd(exampleDir()))
 
 	if err != nil {
 		fmt.Printf("Error: %v\n", err)
@@ -243,7 +251,7 @@ func runRewindWorkflowExample() {
 		}
 
 		return nil
-	}, claudecode.WithFileCheckpointing(), claudecode.WithMaxTurns(3))
+	}, claudecode.WithFileCheckpointing(), claudecode.WithMaxTurns(3), claudecode.WithCwd(exampleDir()))
 
 	if err != nil {
 		fmt.Printf("Error: %v\n", err)

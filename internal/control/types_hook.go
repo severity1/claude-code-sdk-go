@@ -229,7 +229,7 @@ type HookCallback func(
 type HookMatcher struct {
 	// Matcher is a tool name pattern (e.g., "Bash", "Write|Edit|MultiEdit").
 	// Empty string matches all tools (Python SDK: None).
-	Matcher string `json:"matcher,omitempty"`
+	Matcher string `json:"matcher"`
 
 	// Hooks are the callbacks to execute when the pattern matches.
 	// Not serialized to JSON.
@@ -248,7 +248,7 @@ type HookMatcher struct {
 // This is what gets sent to the CLI during initialization.
 type HookMatcherConfig struct {
 	// Matcher is a tool name pattern.
-	Matcher string `json:"matcher,omitempty"`
+	Matcher string `json:"matcher"`
 	// HookCallbackIDs are the generated callback IDs for this matcher.
 	HookCallbackIDs []string `json:"hookCallbackIds"`
 	// Timeout is the maximum time in seconds.
@@ -260,7 +260,7 @@ type HookRegistration struct {
 	// CallbackID is the unique identifier for this callback.
 	CallbackID string `json:"callback_id"`
 	// Matcher is the tool name pattern.
-	Matcher string `json:"matcher,omitempty"`
+	Matcher string `json:"matcher"`
 	// Timeout is the maximum time in seconds.
 	Timeout *float64 `json:"timeout,omitempty"`
 }

@@ -184,6 +184,14 @@ func (c *ClientImpl) validateOptions() error {
 		return nil // Nil options are acceptable (use defaults)
 	}
 
+	// Auto-configure PermissionPromptToolName when CanUseTool callback is set
+	// This tells CLI to route permission prompts through stdio (control protocol)
+	// Matches Python SDK behavior: permission_prompt_tool_name="stdio"
+	if c.options.CanUseTool != nil && c.options.PermissionPromptToolName == nil {
+		stdio := "stdio"
+		c.options.PermissionPromptToolName = &stdio
+	}
+
 	// Validate working directory
 	if c.options.Cwd != nil {
 		if _, err := os.Stat(*c.options.Cwd); os.IsNotExist(err) {

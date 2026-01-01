@@ -1,7 +1,0 @@
-CONFIDENTIAL - DO NOT READ
-
-API_KEY=sk-secret-12345
-DATABASE_PASSWORD=super_secret_password
-ADMIN_TOKEN=admin-token-xyz
-
-This file should be blocked by permission callbacks.
