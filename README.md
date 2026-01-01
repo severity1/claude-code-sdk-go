@@ -16,7 +16,7 @@
 
 Unofficial Go SDK for Claude Code CLI integration. Build production-ready applications that leverage Claude's advanced code understanding, secure file operations, and external tool integrations through a clean, idiomatic Go API with comprehensive error handling and automatic resource management.
 
-**🚀 Two powerful APIs for different use cases:**
+**Two powerful APIs for different use cases:**
 - **Query API**: One-shot operations, automation, CI/CD integration  
 - **Client API**: Interactive conversations, multi-turn workflows, streaming responses
 - **WithClient**: Go-idiomatic context manager for automatic resource management
@@ -40,7 +40,8 @@ go get github.com/severity1/claude-agent-sdk-go
 **Built-in tool integration** - File operations, AWS, GitHub, databases, and more
 **Production ready** - Comprehensive error handling, timeouts, resource cleanup
 **Security focused** - Granular tool permissions and access controls
-**Context-aware** - Maintain conversation state across multiple interactions  
+**Context-aware** - Maintain conversation state across multiple interactions
+**Advanced capabilities** - Permission callbacks, lifecycle hooks, file checkpointing
 
 ## Usage
 
@@ -98,7 +99,11 @@ func main() {
             }
         case *claudecode.ResultMessage:
             if msg.IsError {
-                log.Printf("Error: %s", msg.Result)
+                if msg.Result != nil {
+                    log.Printf("Error: %s", *msg.Result)
+                } else {
+                    log.Printf("Error: unknown error")
+                }
             }
         }
     }
@@ -156,7 +161,10 @@ func main() {
                     }
                 case *claudecode.ResultMessage:
                     if msg.IsError {
-                        return fmt.Errorf("error: %s", msg.Result)
+                        if msg.Result != nil {
+                            return fmt.Errorf("error: %s", *msg.Result)
+                        }
+                        return fmt.Errorf("error: unknown error")
                     }
                     return nil // Success, stream complete
                 }
@@ -357,16 +365,28 @@ Available agent models: `AgentModelSonnet`, `AgentModelOpus`, `AgentModelHaiku`,
 
 See [pkg.go.dev](https://pkg.go.dev/github.com/severity1/claude-agent-sdk-go) for complete API reference.
 
+## Advanced Features
+
+The SDK includes advanced capabilities for production use:
+
+- **Permission Callbacks** - Programmatic tool access control ([Example 11](examples/11_permission_callback/))
+- **Lifecycle Hooks** - Intercept tool execution events ([Example 12](examples/12_hooks/))
+- **File Checkpointing** - Track and rewind file changes ([Example 13](examples/13_file_checkpointing/))
+- **SDK MCP Servers** - Create in-process custom tools ([Example 14](examples/14_sdk_mcp_server/))
+- **Stream Diagnostics** - Monitor stream health with `GetStreamIssues()` and `GetStreamStats()`
+
+See the [examples directory](examples/README.md) for complete documentation.
+
 ## When to Use Which API
 
-**🎯 Use Query API when you:**
+**Use Query API when you:**
 - Need one-shot automation or scripting
 - Have clear task completion criteria  
 - Want automatic resource cleanup
 - Are building CI/CD integrations
 - Prefer simple, stateless operations
 
-**🔄 Use Client API (WithClient) when you:**  
+**Use Client API (WithClient) when you:**  
 - Need interactive conversations
 - Want to build context across multiple requests
 - Are creating complex, multi-step workflows
@@ -374,28 +394,39 @@ See [pkg.go.dev](https://pkg.go.dev/github.com/severity1/claude-agent-sdk-go) fo
 - Want to iterate and refine based on previous results
 - **Need automatic resource management (recommended)**
 
-## Examples & Documentation
+## Examples
 
-Comprehensive examples covering every use case:
+See [`examples/README.md`](examples/README.md) for detailed documentation.
 
-**Learning Path (Easiest → Hardest):**
-- [`examples/01_quickstart/`](examples/01_quickstart/) - Query API fundamentals
-- [`examples/02_client_streaming/`](examples/02_client_streaming/) - WithClient streaming basics
-- [`examples/03_client_multi_turn/`](examples/03_client_multi_turn/) - Multi-turn conversations with automatic cleanup
-- [`examples/10_context_manager/`](examples/10_context_manager/) - WithClient vs manual patterns comparison
-- [`examples/11_session_management/`](examples/11_session_management/) - Session isolation and context management
+### Getting Started
+| Example | Description |
+|---------|-------------|
+| [`01_quickstart`](examples/01_quickstart/) | Query API fundamentals |
+| [`02_client_streaming`](examples/02_client_streaming/) | WithClient streaming basics |
+| [`03_client_multi_turn`](examples/03_client_multi_turn/) | Multi-turn conversations |
 
-**Tool Integration:**
-- [`examples/04_query_with_tools/`](examples/04_query_with_tools/) - File operations with Query API
-- [`examples/05_client_with_tools/`](examples/05_client_with_tools/) - Interactive file workflows  
-- [`examples/06_query_with_mcp/`](examples/06_query_with_mcp/) - AWS automation with Query API
-- [`examples/07_client_with_mcp/`](examples/07_client_with_mcp/) - AWS management with Client API
+### Tool Integration
+| Example | Description |
+|---------|-------------|
+| [`04_query_with_tools`](examples/04_query_with_tools/) | File operations with Query API |
+| [`05_client_with_tools`](examples/05_client_with_tools/) | Interactive file workflows |
+| [`06_query_with_mcp`](examples/06_query_with_mcp/) | External MCP server integration |
+| [`07_client_with_mcp`](examples/07_client_with_mcp/) | Multi-turn MCP workflows |
 
-**Advanced Patterns:**
-- [`examples/08_client_advanced/`](examples/08_client_advanced/) - WithClient error handling and production patterns
-- [`examples/09_client_vs_query/`](examples/09_client_vs_query/) - Modern API comparison and guidance
+### Production Patterns
+| Example | Description |
+|---------|-------------|
+| [`08_client_advanced`](examples/08_client_advanced/) | Error handling, model switching |
+| [`09_context_manager`](examples/09_context_manager/) | WithClient vs manual patterns |
+| [`10_session_management`](examples/10_session_management/) | Session isolation |
 
-**📖 [Full Documentation](examples/README.md)** with usage patterns, security best practices, and troubleshooting.
+### Security & Lifecycle
+| Example | Description |
+|---------|-------------|
+| [`11_permission_callback`](examples/11_permission_callback/) | Permission callbacks |
+| [`12_hooks`](examples/12_hooks/) | Lifecycle hooks |
+| [`13_file_checkpointing`](examples/13_file_checkpointing/) | File rewind capabilities |
+| [`14_sdk_mcp_server`](examples/14_sdk_mcp_server/) | In-process custom tools |
 
 ## License
 
