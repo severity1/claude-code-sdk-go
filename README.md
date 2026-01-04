@@ -363,7 +363,11 @@ claudecode.Query(ctx, "Analyze and improve this code",
 
 Available agent models: `AgentModelSonnet`, `AgentModelOpus`, `AgentModelHaiku`, `AgentModelInherit`
 
-See [pkg.go.dev](https://pkg.go.dev/github.com/severity1/claude-agent-sdk-go) for complete API reference.
+## Documentation
+
+- [API Reference](docs/reference.md) - Complete SDK reference with all types, functions, and examples
+- [Python SDK Parity](docs/parity.md) - Feature comparison with the Python SDK
+- [pkg.go.dev](https://pkg.go.dev/github.com/severity1/claude-agent-sdk-go) - GoDoc reference
 
 ## Advanced Features
 

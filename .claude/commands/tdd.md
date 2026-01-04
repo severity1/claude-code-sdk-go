@@ -46,7 +46,8 @@ Retrieve and analyze issue #$ARGUMENTS:
 Understand existing patterns to match the project's conventions:
 
 1. **Review Python SDK Reference:**
-   - Locate corresponding implementation in `../claude-code-sdk-python/`
+   - **Fetch official documentation** using `curl -s https://platform.claude.com/docs/en/agent-sdk/python.md` - this is the authoritative Python SDK API reference
+   - Locate corresponding implementation in `../claude-code-sdk-python/` (local clone if available)
    - Understand the behavior that needs 100% parity
    - Note any Go-specific adaptations needed
 
@@ -209,8 +210,9 @@ Verify:
 ### Python SDK Alignment Check
 
 1. **Compare behavior** with Python SDK reference implementation
-2. **Verify 100% parity** on all implemented features
-3. **Document any intentional deviations** (Go-specific adaptations)
+2. **Reference official docs** - `curl -s https://platform.claude.com/docs/en/agent-sdk/python.md` for API signatures and behavior
+3. **Verify 100% parity** on all implemented features
+4. **Document any intentional deviations** (Go-specific adaptations)
 
 ### Test Authenticity Verification
 

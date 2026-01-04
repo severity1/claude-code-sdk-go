@@ -1,0 +1,2107 @@
+# Agent SDK Reference - Go
+
+Complete API reference for the Go Agent SDK, including all functions, types, and interfaces.
+
+---
+
+## Installation
+
+```bash
+go get github.com/severity1/claude-agent-sdk-go
+```
+
+**Prerequisites:**
+- Go 1.18+
+- Node.js (for Claude Code CLI)
+- Claude Code CLI: `npm install -g @anthropic-ai/claude-code`
+
+## Choosing Between `Query()` and `Client`
+
+The Go SDK provides two ways to interact with Claude Code:
+
+### Quick Comparison
+
+| Feature             | `Query()`                     | `Client`                           |
+|:--------------------|:------------------------------|:-----------------------------------|
+| **Session**         | Creates new session each time | Reuses same session                |
+| **Conversation**    | Single exchange               | Multiple exchanges in same context |
+| **Connection**      | Managed automatically         | Manual or WithClient helper        |
+| **Streaming**       | Via MessageIterator           | Via channels or iterator           |
+| **Interrupts**      | Not supported                 | Supported                          |
+| **Hooks**           | Not supported                 | Supported                          |
+| **Custom Tools**    | Not supported                 | Supported                          |
+| **Continue Chat**   | New session each time         | Maintains conversation             |
+| **Use Case**        | One-off tasks                 | Continuous conversations           |
+
+### When to Use `Query()` (New Session Each Time)
+
+**Best for:**
+- One-off questions where you don't need conversation history
+- Independent tasks that don't require context from previous exchanges
+- Simple automation scripts
+- CI/CD integrations
+- When you want a fresh start each time
+
+### When to Use `Client` (Continuous Conversation)
+
+**Best for:**
+- **Continuing conversations** - When you need Claude to remember context
+- **Follow-up questions** - Building on previous responses
+- **Interactive applications** - Chat interfaces, REPLs
+- **Response-driven logic** - When next action depends on Claude's response
+- **Session control** - Managing conversation lifecycle explicitly
+- **Custom tools and hooks** - Advanced integrations
+
+---
+
+## Functions
+
+### `Query()`
+
+Creates a new session for each interaction with Claude Code. Returns a MessageIterator that yields messages as they arrive. Each call to `Query()` starts fresh with no memory of previous interactions.
+
+```go
+func Query(ctx context.Context, prompt string, opts ...Option) (MessageIterator, error)
+```
+
+#### Parameters
+
+| Parameter | Type                | Description                                      |
+|:----------|:--------------------|:-------------------------------------------------|
+| `ctx`     | `context.Context`   | Context for cancellation and timeouts            |
+| `prompt`  | `string`            | The input prompt                                 |
+| `opts`    | `...Option`         | Optional configuration (functional options)      |
+
+#### Returns
+
+Returns a `MessageIterator` that yields messages from the conversation, and an error if the query fails to start.
+
+#### Example - Basic Query
+
+```go
+package main
+
+import (
+    "context"
+    "errors"
+    "fmt"
+    "log"
+
+    "github.com/severity1/claude-agent-sdk-go"
+)
+
+func main() {
+    ctx := context.Background()
+
+    iterator, err := claudecode.Query(ctx, "What is 2+2?")
+    if err != nil {
+        log.Fatalf("Query failed: %v", err)
+    }
+    defer iterator.Close()
+
+    for {
+        message, err := iterator.Next(ctx)
+        if err != nil {
+            if errors.Is(err, claudecode.ErrNoMoreMessages) {
+                break
+            }
+            log.Fatalf("Failed to get message: %v", err)
+        }
+
+        switch msg := message.(type) {
+        case *claudecode.AssistantMessage:
+            for _, block := range msg.Content {
+                if textBlock, ok := block.(*claudecode.TextBlock); ok {
+                    fmt.Print(textBlock.Text)
+                }
+            }
+        case *claudecode.ResultMessage:
+            if msg.IsError {
+                log.Printf("Error: %v", msg.Result)
+            }
+        }
+    }
+}
+```
+
+#### Example - With Options
+
+```go
+iterator, err := claudecode.Query(ctx, "Create a Python web server",
+    claudecode.WithSystemPrompt("You are an expert Python developer"),
+    claudecode.WithPermissionMode(claudecode.PermissionModeAcceptEdits),
+    claudecode.WithCwd("/home/user/project"),
+    claudecode.WithAllowedTools("Read", "Write", "Bash"),
+)
+```
+
+### `QueryWithTransport()`
+
+Query with a custom transport implementation. Primarily used for testing.
+
+```go
+func QueryWithTransport(ctx context.Context, prompt string, transport Transport, opts ...Option) (MessageIterator, error)
+```
+
+#### Parameters
+
+| Parameter   | Type                | Description                           |
+|:------------|:--------------------|:--------------------------------------|
+| `ctx`       | `context.Context`   | Context for cancellation and timeouts |
+| `prompt`    | `string`            | The input prompt                      |
+| `transport` | `Transport`         | Custom transport implementation       |
+| `opts`      | `...Option`         | Optional configuration                |
+
+### `NewClient()`
+
+Creates a new Client for interactive conversations.
+
+```go
+func NewClient(opts ...Option) Client
+```
+
+#### Parameters
+
+| Parameter | Type        | Description                        |
+|:----------|:------------|:-----------------------------------|
+| `opts`    | `...Option` | Optional configuration             |
+
+#### Returns
+
+Returns a `Client` interface for managing conversations.
+
+### `NewClientWithTransport()`
+
+Creates a new Client with a custom transport. Primarily used for testing.
+
+```go
+func NewClientWithTransport(transport Transport, opts ...Option) Client
+```
+
+### `WithClient()`
+
+Resource management helper that automatically handles connection lifecycle. This is the Go-idiomatic equivalent of Python's `async with` context manager.
+
+```go
+func WithClient(ctx context.Context, fn func(Client) error, opts ...Option) error
+```
+
+#### Parameters
+
+| Parameter | Type                    | Description                              |
+|:----------|:------------------------|:-----------------------------------------|
+| `ctx`     | `context.Context`       | Context for cancellation and timeouts    |
+| `fn`      | `func(Client) error`    | Function to execute with the client      |
+| `opts`    | `...Option`             | Optional configuration                   |
+
+#### Example
+
+```go
+err := claudecode.WithClient(ctx, func(client claudecode.Client) error {
+    if err := client.Query(ctx, "Hello Claude"); err != nil {
+        return err
+    }
+
+    for msg := range client.ReceiveMessages(ctx) {
+        // Process messages
+    }
+    return nil
+})
+```
+
+### `WithClientTransport()`
+
+Resource management helper with custom transport. Primarily used for testing.
+
+```go
+func WithClientTransport(ctx context.Context, transport Transport, fn func(Client) error, opts ...Option) error
+```
+
+### `CreateSDKMcpServer()`
+
+Create an in-process MCP server that runs within your Go application.
+
+```go
+func CreateSDKMcpServer(name, version string, tools ...*McpTool) *McpSdkServerConfig
+```
+
+#### Parameters
+
+| Parameter | Type          | Description                              |
+|:----------|:--------------|:-----------------------------------------|
+| `name`    | `string`      | Unique identifier for the server         |
+| `version` | `string`      | Server version string                    |
+| `tools`   | `...*McpTool` | Tool functions created with `NewTool()`  |
+
+#### Returns
+
+Returns an `*McpSdkServerConfig` that can be passed to `WithSdkMcpServer()`.
+
+#### Example
+
+```go
+// Define tools
+addTool := claudecode.NewTool(
+    "add",
+    "Add two numbers",
+    map[string]any{"a": "number", "b": "number"},
+    func(ctx context.Context, args map[string]any) (*claudecode.McpToolResult, error) {
+        a := args["a"].(float64)
+        b := args["b"].(float64)
+        return &claudecode.McpToolResult{
+            Content: []claudecode.McpContent{{
+                Type: "text",
+                Text: fmt.Sprintf("Result: %v", a+b),
+            }},
+        }, nil
+    },
+)
+
+// Create server
+calculator := claudecode.CreateSDKMcpServer("calculator", "1.0.0", addTool)
+
+// Use with Query
+iterator, err := claudecode.Query(ctx, "What is 5 + 3?",
+    claudecode.WithSdkMcpServer("calc", calculator),
+    claudecode.WithAllowedTools("mcp__calc__add"),
+)
+```
+
+### `NewTool()`
+
+Create a new MCP tool definition.
+
+```go
+func NewTool(name, description string, inputSchema map[string]any, handler McpToolHandler) *McpTool
+```
+
+#### Parameters
+
+| Parameter     | Type               | Description                              |
+|:--------------|:-------------------|:-----------------------------------------|
+| `name`        | `string`           | Unique identifier for the tool           |
+| `description` | `string`           | Human-readable description               |
+| `inputSchema` | `map[string]any`   | JSON Schema for input validation         |
+| `handler`     | `McpToolHandler`   | Function that handles tool execution     |
+
+#### Returns
+
+Returns an `*McpTool` that can be passed to `CreateSDKMcpServer()`.
+
+---
+
+## Client Interface
+
+The `Client` interface provides methods for managing interactive conversations.
+
+```go
+type Client interface {
+    Connect(ctx context.Context, prompt ...StreamMessage) error
+    Disconnect() error
+    Query(ctx context.Context, prompt string) error
+    QueryWithSession(ctx context.Context, prompt string, sessionID string) error
+    QueryStream(ctx context.Context, messages <-chan StreamMessage) error
+    ReceiveMessages(ctx context.Context) <-chan Message
+    ReceiveResponse(ctx context.Context) MessageIterator
+    Interrupt(ctx context.Context) error
+    SetModel(ctx context.Context, model *string) error
+    SetPermissionMode(ctx context.Context, mode PermissionMode) error
+    RewindFiles(ctx context.Context, messageUUID string) error
+    GetStreamIssues() []StreamIssue
+    GetStreamStats() StreamStats
+    GetServerInfo(ctx context.Context) (map[string]interface{}, error)
+}
+```
+
+### Methods
+
+#### `Connect()`
+
+Establish connection to Claude Code CLI.
+
+```go
+func (c *ClientImpl) Connect(ctx context.Context, prompt ...StreamMessage) error
+```
+
+#### `Disconnect()`
+
+Close the connection and cleanup resources.
+
+```go
+func (c *ClientImpl) Disconnect() error
+```
+
+#### `Query()`
+
+Send a query using the default session.
+
+```go
+func (c *ClientImpl) Query(ctx context.Context, prompt string) error
+```
+
+#### `QueryWithSession()`
+
+Send a query with a specific session ID for isolated conversations.
+
+```go
+func (c *ClientImpl) QueryWithSession(ctx context.Context, prompt string, sessionID string) error
+```
+
+#### `QueryStream()`
+
+Stream messages from a channel to Claude.
+
+```go
+func (c *ClientImpl) QueryStream(ctx context.Context, messages <-chan StreamMessage) error
+```
+
+#### `ReceiveMessages()`
+
+Receive all incoming messages as a channel.
+
+```go
+func (c *ClientImpl) ReceiveMessages(ctx context.Context) <-chan Message
+```
+
+#### `ReceiveResponse()`
+
+Get an iterator for response messages until ResultMessage.
+
+```go
+func (c *ClientImpl) ReceiveResponse(ctx context.Context) MessageIterator
+```
+
+#### `Interrupt()`
+
+Send interrupt signal to stop current operation.
+
+```go
+func (c *ClientImpl) Interrupt(ctx context.Context) error
+```
+
+#### `SetModel()`
+
+Change the model at runtime.
+
+```go
+func (c *ClientImpl) SetModel(ctx context.Context, model *string) error
+```
+
+#### `SetPermissionMode()`
+
+Change the permission mode at runtime.
+
+```go
+func (c *ClientImpl) SetPermissionMode(ctx context.Context, mode PermissionMode) error
+```
+
+#### `RewindFiles()`
+
+Restore files to their state at a specific user message. Requires `WithFileCheckpointing()`.
+
+```go
+func (c *ClientImpl) RewindFiles(ctx context.Context, messageUUID string) error
+```
+
+#### `GetStreamIssues()`
+
+Get validation issues from the stream.
+
+```go
+func (c *ClientImpl) GetStreamIssues() []StreamIssue
+```
+
+#### `GetStreamStats()`
+
+Get stream statistics.
+
+```go
+func (c *ClientImpl) GetStreamStats() StreamStats
+```
+
+#### `GetServerInfo()`
+
+Get diagnostic information from the CLI.
+
+```go
+func (c *ClientImpl) GetServerInfo(ctx context.Context) (map[string]interface{}, error)
+```
+
+### Client Examples
+
+#### Continuing a Conversation
+
+```go
+err := claudecode.WithClient(ctx, func(client claudecode.Client) error {
+    // First question
+    if err := client.Query(ctx, "What's the capital of France?"); err != nil {
+        return err
+    }
+
+    for msg := range client.ReceiveMessages(ctx) {
+        if assistant, ok := msg.(*claudecode.AssistantMessage); ok {
+            for _, block := range assistant.Content {
+                if text, ok := block.(*claudecode.TextBlock); ok {
+                    fmt.Println(text.Text)
+                }
+            }
+        }
+        if _, ok := msg.(*claudecode.ResultMessage); ok {
+            break
+        }
+    }
+
+    // Follow-up - Claude remembers context
+    if err := client.Query(ctx, "What's the population of that city?"); err != nil {
+        return err
+    }
+
+    // Process follow-up response...
+    return nil
+})
+```
+
+#### Using Interrupts
+
+```go
+err := claudecode.WithClient(ctx, func(client claudecode.Client) error {
+    // Start a long-running task
+    if err := client.Query(ctx, "Count from 1 to 100 slowly"); err != nil {
+        return err
+    }
+
+    // Let it run briefly
+    time.Sleep(2 * time.Second)
+
+    // Interrupt
+    if err := client.Interrupt(ctx); err != nil {
+        return err
+    }
+
+    // Send new command
+    return client.Query(ctx, "Just say hello instead")
+}, claudecode.WithAllowedTools("Bash"), claudecode.WithPermissionMode(claudecode.PermissionModeAcceptEdits))
+```
+
+#### Session Management
+
+```go
+err := claudecode.WithClient(ctx, func(client claudecode.Client) error {
+    // Session A: Math conversation
+    if err := client.QueryWithSession(ctx, "Remember: x = 5", "math-session"); err != nil {
+        return err
+    }
+
+    // Session B: Programming conversation (isolated)
+    if err := client.QueryWithSession(ctx, "Remember: lang = Go", "prog-session"); err != nil {
+        return err
+    }
+
+    // Query math session - knows about x
+    if err := client.QueryWithSession(ctx, "What is x * 2?", "math-session"); err != nil {
+        return err
+    }
+
+    // Query prog session - knows about lang
+    return client.QueryWithSession(ctx, "What language did I mention?", "prog-session")
+})
+```
+
+---
+
+## Configuration Options
+
+All options use the functional options pattern. Pass them to `Query()`, `NewClient()`, or `WithClient()`.
+
+### Tool & Permission Options
+
+#### `WithAllowedTools()`
+
+Specify which tools Claude can use.
+
+```go
+func WithAllowedTools(tools ...string) Option
+```
+
+```go
+claudecode.Query(ctx, prompt, claudecode.WithAllowedTools("Read", "Write", "Bash"))
+```
+
+#### `WithDisallowedTools()`
+
+Specify tools Claude cannot use.
+
+```go
+func WithDisallowedTools(tools ...string) Option
+```
+
+#### `WithTools()`
+
+Set tools as a list.
+
+```go
+func WithTools(tools ...string) Option
+```
+
+#### `WithToolsPreset()`
+
+Use a preset tool configuration.
+
+```go
+func WithToolsPreset(preset string) Option
+```
+
+#### `WithClaudeCodeTools()`
+
+Use Claude Code's default tool set.
+
+```go
+func WithClaudeCodeTools() Option
+```
+
+#### `WithPermissionMode()`
+
+Set the permission mode for tool usage.
+
+```go
+func WithPermissionMode(mode PermissionMode) Option
+```
+
+Available modes:
+- `PermissionModeDefault` - Standard permission behavior
+- `PermissionModeAcceptEdits` - Auto-accept file edits
+- `PermissionModePlan` - Planning mode, no execution
+- `PermissionModeBypassPermissions` - Bypass all checks (use with caution)
+
+```go
+claudecode.Query(ctx, prompt, claudecode.WithPermissionMode(claudecode.PermissionModeAcceptEdits))
+```
+
+#### `WithPermissionPromptToolName()`
+
+Set MCP tool name for permission prompts.
+
+```go
+func WithPermissionPromptToolName(toolName string) Option
+```
+
+### System & Model Options
+
+#### `WithSystemPrompt()`
+
+Set a custom system prompt.
+
+```go
+func WithSystemPrompt(prompt string) Option
+```
+
+```go
+claudecode.Query(ctx, prompt, claudecode.WithSystemPrompt("You are a senior Go developer"))
+```
+
+#### `WithAppendSystemPrompt()`
+
+Append to the default system prompt.
+
+```go
+func WithAppendSystemPrompt(prompt string) Option
+```
+
+#### `WithModel()`
+
+Specify the Claude model to use.
+
+```go
+func WithModel(model string) Option
+```
+
+```go
+claudecode.Query(ctx, prompt, claudecode.WithModel("claude-sonnet-4-5"))
+```
+
+#### `WithFallbackModel()`
+
+Set a fallback model if primary is unavailable.
+
+```go
+func WithFallbackModel(model string) Option
+```
+
+#### `WithMaxTurns()`
+
+Limit the number of conversation turns.
+
+```go
+func WithMaxTurns(turns int) Option
+```
+
+#### `WithMaxBudgetUSD()`
+
+Set a maximum cost budget.
+
+```go
+func WithMaxBudgetUSD(budget float64) Option
+```
+
+#### `WithMaxThinkingTokens()`
+
+Set maximum tokens for thinking blocks.
+
+```go
+func WithMaxThinkingTokens(tokens int) Option
+```
+
+#### `WithUser()`
+
+Set a user identifier.
+
+```go
+func WithUser(user string) Option
+```
+
+### Session & Conversation Options
+
+#### `WithContinueConversation()`
+
+Continue the most recent conversation.
+
+```go
+func WithContinueConversation(continueConversation bool) Option
+```
+
+#### `WithResume()`
+
+Resume a specific session by ID.
+
+```go
+func WithResume(sessionID string) Option
+```
+
+#### `WithForkSession()`
+
+Fork to a new session when resuming instead of continuing.
+
+```go
+func WithForkSession(fork bool) Option
+```
+
+### Directory & Environment Options
+
+#### `WithCwd()`
+
+Set the current working directory.
+
+```go
+func WithCwd(cwd string) Option
+```
+
+```go
+claudecode.Query(ctx, prompt, claudecode.WithCwd("/path/to/project"))
+```
+
+#### `WithAddDirs()`
+
+Add directories Claude can access.
+
+```go
+func WithAddDirs(dirs ...string) Option
+```
+
+#### `WithEnv()`
+
+Set environment variables.
+
+```go
+func WithEnv(env map[string]string) Option
+```
+
+```go
+claudecode.Query(ctx, prompt, claudecode.WithEnv(map[string]string{
+    "HTTP_PROXY": "http://proxy.example.com:8080",
+}))
+```
+
+#### `WithEnvVar()`
+
+Set a single environment variable.
+
+```go
+func WithEnvVar(key, value string) Option
+```
+
+### MCP Server Options
+
+#### `WithMcpServers()`
+
+Configure MCP servers.
+
+```go
+func WithMcpServers(servers map[string]McpServerConfig) Option
+```
+
+#### `WithSdkMcpServer()`
+
+Add an in-process SDK MCP server.
+
+```go
+func WithSdkMcpServer(name string, server *McpSdkServerConfig) Option
+```
+
+```go
+calculator := claudecode.CreateSDKMcpServer("calculator", "1.0.0", addTool, multiplyTool)
+claudecode.Query(ctx, prompt,
+    claudecode.WithSdkMcpServer("calc", calculator),
+    claudecode.WithAllowedTools("mcp__calc__add", "mcp__calc__multiply"),
+)
+```
+
+### Settings Options
+
+#### `WithSettings()`
+
+Path to a settings file.
+
+```go
+func WithSettings(settings string) Option
+```
+
+#### `WithSettingSources()`
+
+Control which filesystem settings to load.
+
+```go
+func WithSettingSources(sources ...SettingSource) Option
+```
+
+Available sources:
+- `SettingSourceUser` - `~/.claude/settings.json`
+- `SettingSourceProject` - `.claude/settings.json`
+- `SettingSourceLocal` - `.claude/settings.local.json`
+
+```go
+claudecode.Query(ctx, prompt, claudecode.WithSettingSources(claudecode.SettingSourceProject))
+```
+
+### Advanced Options
+
+#### `WithExtraArgs()`
+
+Pass additional CLI arguments.
+
+```go
+func WithExtraArgs(args map[string]*string) Option
+```
+
+#### `WithCLIPath()`
+
+Specify a custom CLI path.
+
+```go
+func WithCLIPath(path string) Option
+```
+
+#### `WithMaxBufferSize()`
+
+Set maximum buffer size for CLI output.
+
+```go
+func WithMaxBufferSize(size int) Option
+```
+
+#### `WithBetas()`
+
+Enable beta features.
+
+```go
+func WithBetas(betas ...SdkBeta) Option
+```
+
+```go
+claudecode.Query(ctx, prompt, claudecode.WithBetas(claudecode.SdkBetaContext1M))
+```
+
+### Streaming Options
+
+#### `WithIncludePartialMessages()`
+
+Include partial message streaming events.
+
+```go
+func WithIncludePartialMessages(include bool) Option
+```
+
+#### `WithPartialStreaming()`
+
+Enable partial message streaming (convenience wrapper).
+
+```go
+func WithPartialStreaming() Option
+```
+
+### File Checkpointing Options
+
+#### `WithEnableFileCheckpointing()`
+
+Enable file change tracking for rewinding.
+
+```go
+func WithEnableFileCheckpointing(enable bool) Option
+```
+
+#### `WithFileCheckpointing()`
+
+Enable file checkpointing (convenience wrapper).
+
+```go
+func WithFileCheckpointing() Option
+```
+
+### Agent Options
+
+#### `WithAgents()`
+
+Define multiple custom agents.
+
+```go
+func WithAgents(agents map[string]AgentDefinition) Option
+```
+
+```go
+claudecode.Query(ctx, prompt, claudecode.WithAgents(map[string]claudecode.AgentDefinition{
+    "security-reviewer": {
+        Description: "Reviews code for security vulnerabilities",
+        Prompt:      "You are a security expert...",
+        Tools:       []string{"Read", "Grep", "Glob"},
+        Model:       claudecode.AgentModelSonnet,
+    },
+}))
+```
+
+#### `WithAgent()`
+
+Define a single custom agent.
+
+```go
+func WithAgent(name string, agent AgentDefinition) Option
+```
+
+### Plugin Options
+
+#### `WithPlugins()`
+
+Configure multiple plugins.
+
+```go
+func WithPlugins(plugins []SdkPluginConfig) Option
+```
+
+#### `WithPlugin()`
+
+Add a single plugin.
+
+```go
+func WithPlugin(plugin SdkPluginConfig) Option
+```
+
+#### `WithLocalPlugin()`
+
+Add a local plugin by path.
+
+```go
+func WithLocalPlugin(path string) Option
+```
+
+### Sandbox Options
+
+#### `WithSandbox()`
+
+Configure sandbox settings.
+
+```go
+func WithSandbox(sandbox *SandboxSettings) Option
+```
+
+#### `WithSandboxEnabled()`
+
+Enable or disable sandbox mode.
+
+```go
+func WithSandboxEnabled(enabled bool) Option
+```
+
+#### `WithAutoAllowBashIfSandboxed()`
+
+Auto-approve bash commands when sandboxed.
+
+```go
+func WithAutoAllowBashIfSandboxed(autoAllow bool) Option
+```
+
+#### `WithSandboxExcludedCommands()`
+
+Commands that bypass sandbox restrictions.
+
+```go
+func WithSandboxExcludedCommands(commands ...string) Option
+```
+
+#### `WithSandboxNetwork()`
+
+Configure sandbox network settings.
+
+```go
+func WithSandboxNetwork(network *SandboxNetworkConfig) Option
+```
+
+### Output Format Options
+
+#### `WithOutputFormat()`
+
+Set structured output format.
+
+```go
+func WithOutputFormat(format *OutputFormat) Option
+```
+
+#### `WithJSONSchema()`
+
+Set JSON schema for structured output.
+
+```go
+func WithJSONSchema(schema map[string]any) Option
+```
+
+```go
+claudecode.Query(ctx, prompt, claudecode.WithJSONSchema(map[string]any{
+    "type": "object",
+    "properties": map[string]any{
+        "name":  map[string]any{"type": "string"},
+        "score": map[string]any{"type": "number"},
+    },
+    "required": []string{"name", "score"},
+}))
+```
+
+### Debug Options
+
+#### `WithDebugWriter()`
+
+Set a writer for debug output.
+
+```go
+func WithDebugWriter(w io.Writer) Option
+```
+
+#### `WithDebugStderr()`
+
+Write debug output to stderr.
+
+```go
+func WithDebugStderr() Option
+```
+
+#### `WithDebugDisabled()`
+
+Disable debug output.
+
+```go
+func WithDebugDisabled() Option
+```
+
+#### `WithStderrCallback()`
+
+Set a callback for stderr output.
+
+```go
+func WithStderrCallback(callback func(string)) Option
+```
+
+### Permission Callback Options
+
+#### `WithCanUseTool()`
+
+Set a callback for programmatic tool permission control.
+
+```go
+func WithCanUseTool(callback CanUseToolCallback) Option
+```
+
+```go
+claudecode.Query(ctx, prompt, claudecode.WithCanUseTool(
+    func(ctx context.Context, toolName string, input map[string]any, permCtx claudecode.ToolPermissionContext) (claudecode.PermissionResult, error) {
+        // Block writes to system directories
+        if toolName == "Write" {
+            if path, ok := input["file_path"].(string); ok && strings.HasPrefix(path, "/system/") {
+                return claudecode.NewPermissionResultDeny("System writes not allowed"), nil
+            }
+        }
+        return claudecode.NewPermissionResultAllow(), nil
+    },
+))
+```
+
+### Hook Options
+
+#### `WithHooks()`
+
+Configure multiple hooks.
+
+```go
+func WithHooks(hooks map[HookEvent][]HookMatcher) Option
+```
+
+#### `WithHook()`
+
+Add a single hook.
+
+```go
+func WithHook(event HookEvent, matcher string, callback HookCallback) Option
+```
+
+#### `WithPreToolUseHook()`
+
+Add a pre-tool-use hook.
+
+```go
+func WithPreToolUseHook(matcher string, callback HookCallback) Option
+```
+
+#### `WithPostToolUseHook()`
+
+Add a post-tool-use hook.
+
+```go
+func WithPostToolUseHook(matcher string, callback HookCallback) Option
+```
+
+---
+
+## Message Types
+
+### `Message`
+
+Interface implemented by all message types.
+
+```go
+type Message interface {
+    Type() string
+}
+```
+
+### `UserMessage`
+
+User input message.
+
+```go
+type UserMessage struct {
+    MessageType     string
+    Content         interface{} // string or []ContentBlock
+    UUID            *string
+    ParentToolUseID *string
+}
+```
+
+### `AssistantMessage`
+
+Assistant response message with content blocks.
+
+```go
+type AssistantMessage struct {
+    MessageType string
+    Content     []ContentBlock
+    Model       string
+    Error       *AssistantMessageError
+}
+```
+
+Methods:
+- `HasError() bool` - Check if message contains an error
+- `GetError() AssistantMessageError` - Get the error type
+- `IsRateLimited() bool` - Check if rate limited
+
+### `SystemMessage`
+
+System message with metadata.
+
+```go
+type SystemMessage struct {
+    MessageType string
+    Subtype     string
+    Data        map[string]any
+}
+```
+
+### `ResultMessage`
+
+Final result message with cost and usage information.
+
+```go
+type ResultMessage struct {
+    MessageType      string
+    Subtype          string
+    DurationMs       int
+    DurationAPIMs    int
+    IsError          bool
+    NumTurns         int
+    SessionID        string
+    TotalCostUSD     *float64
+    Usage            *map[string]any
+    Result           *string
+    StructuredOutput any
+}
+```
+
+### `StreamEvent`
+
+Stream event for partial message updates during streaming.
+
+```go
+type StreamEvent struct {
+    UUID            string
+    SessionID       string
+    Event           map[string]any
+    ParentToolUseID *string
+}
+```
+
+### `RawControlMessage`
+
+Raw control protocol message.
+
+```go
+type RawControlMessage struct {
+    MessageType string
+    Data        map[string]any
+}
+```
+
+### Message Type Constants
+
+```go
+const (
+    MessageTypeUser            = "user"
+    MessageTypeAssistant       = "assistant"
+    MessageTypeSystem          = "system"
+    MessageTypeResult          = "result"
+    MessageTypeControlRequest  = "control_request"
+    MessageTypeControlResponse = "control_response"
+    MessageTypeStreamEvent     = "stream_event"
+)
+```
+
+### AssistantMessageError Types
+
+```go
+const (
+    AssistantMessageErrorAuthFailed     = "authentication_failed"
+    AssistantMessageErrorBilling        = "billing_error"
+    AssistantMessageErrorRateLimit      = "rate_limit"
+    AssistantMessageErrorInvalidRequest = "invalid_request"
+    AssistantMessageErrorServer         = "server_error"
+    AssistantMessageErrorUnknown        = "unknown"
+)
+```
+
+---
+
+## Content Block Types
+
+### `ContentBlock`
+
+Interface implemented by all content block types.
+
+```go
+type ContentBlock interface {
+    BlockType() string
+}
+```
+
+### `TextBlock`
+
+Text content block.
+
+```go
+type TextBlock struct {
+    MessageType string
+    Text        string
+}
+```
+
+### `ThinkingBlock`
+
+Thinking content block (for models with thinking capability).
+
+```go
+type ThinkingBlock struct {
+    MessageType string
+    Thinking    string
+    Signature   string
+}
+```
+
+### `ToolUseBlock`
+
+Tool use request block.
+
+```go
+type ToolUseBlock struct {
+    MessageType string
+    ToolUseID   string
+    Name        string
+    Input       map[string]any
+}
+```
+
+### `ToolResultBlock`
+
+Tool execution result block.
+
+```go
+type ToolResultBlock struct {
+    MessageType string
+    ToolUseID   string
+    Content     interface{} // string or structured data
+    IsError     *bool
+}
+```
+
+### Content Block Type Constants
+
+```go
+const (
+    ContentBlockTypeText       = "text"
+    ContentBlockTypeThinking   = "thinking"
+    ContentBlockTypeToolUse    = "tool_use"
+    ContentBlockTypeToolResult = "tool_result"
+)
+```
+
+---
+
+## Error Types
+
+### `SDKError`
+
+Interface for all SDK errors.
+
+```go
+type SDKError interface {
+    error
+    Type() string
+}
+```
+
+### `BaseError`
+
+Base error type.
+
+```go
+type BaseError struct {
+    message string
+    cause   error
+}
+```
+
+### `ConnectionError`
+
+Raised when connection to Claude Code fails.
+
+```go
+type ConnectionError struct {
+    BaseError
+}
+
+func NewConnectionError(message string, cause error) *ConnectionError
+```
+
+### `CLINotFoundError`
+
+Raised when Claude Code CLI is not installed or not found.
+
+```go
+type CLINotFoundError struct {
+    BaseError
+    Path string
+}
+
+func NewCLINotFoundError(path, message string) *CLINotFoundError
+```
+
+### `ProcessError`
+
+Raised when the CLI process fails.
+
+```go
+type ProcessError struct {
+    BaseError
+    ExitCode int
+    Stderr   string
+}
+
+func NewProcessError(message string, exitCode int, stderr string) *ProcessError
+```
+
+### `JSONDecodeError`
+
+Raised when JSON parsing fails.
+
+```go
+type JSONDecodeError struct {
+    BaseError
+    Line          string
+    Position      int
+    OriginalError error
+}
+
+func NewJSONDecodeError(line string, position int, cause error) *JSONDecodeError
+```
+
+### `MessageParseError`
+
+Raised when message parsing fails.
+
+```go
+type MessageParseError struct {
+    BaseError
+    Data any
+}
+
+func NewMessageParseError(message string, data any) *MessageParseError
+```
+
+### Error Handling Example
+
+```go
+iterator, err := claudecode.Query(ctx, "Hello")
+if err != nil {
+    switch e := err.(type) {
+    case *claudecode.CLINotFoundError:
+        log.Fatal("Please install Claude Code: npm install -g @anthropic-ai/claude-code")
+    case *claudecode.ProcessError:
+        log.Fatalf("Process failed with exit code: %d\n%s", e.ExitCode, e.Stderr)
+    case *claudecode.JSONDecodeError:
+        log.Fatalf("Failed to parse response: %s", e.Line)
+    default:
+        log.Fatalf("Unexpected error: %v", err)
+    }
+}
+defer iterator.Close()
+```
+
+---
+
+## Hook Types
+
+### `HookEvent`
+
+Supported hook event types.
+
+```go
+type HookEvent string
+
+const (
+    HookEventPreToolUse        HookEvent = "PreToolUse"
+    HookEventPostToolUse       HookEvent = "PostToolUse"
+    HookEventUserPromptSubmit  HookEvent = "UserPromptSubmit"
+    HookEventStop              HookEvent = "Stop"
+    HookEventSubagentStop      HookEvent = "SubagentStop"
+    HookEventPreCompact        HookEvent = "PreCompact"
+)
+```
+
+### `HookCallback`
+
+Function signature for hook callbacks.
+
+```go
+type HookCallback func(ctx context.Context, input any, toolUseID *string, hookCtx HookContext) (HookJSONOutput, error)
+```
+
+### `HookContext`
+
+Context information for hook callbacks.
+
+```go
+type HookContext struct {
+    Signal context.Context
+}
+```
+
+### `HookMatcher`
+
+Hook matcher configuration.
+
+```go
+type HookMatcher struct {
+    Matcher string
+    Hooks   []HookCallback
+    Timeout *float64
+}
+```
+
+### `HookJSONOutput`
+
+Output from a hook callback.
+
+```go
+type HookJSONOutput struct {
+    Continue           *bool
+    SuppressOutput     *bool
+    StopReason         *string
+    Decision           *string
+    SystemMessage      *string
+    Reason             *string
+    HookSpecificOutput any
+}
+```
+
+### Hook Input Types
+
+#### `BaseHookInput`
+
+Common fields for all hook inputs.
+
+```go
+type BaseHookInput struct {
+    SessionID      string
+    TranscriptPath string
+    Cwd            string
+    PermissionMode string
+}
+```
+
+#### `PreToolUseHookInput`
+
+Input for PreToolUse hooks.
+
+```go
+type PreToolUseHookInput struct {
+    BaseHookInput
+    HookEventName string
+    ToolName      string
+    ToolInput     map[string]any
+}
+```
+
+#### `PostToolUseHookInput`
+
+Input for PostToolUse hooks.
+
+```go
+type PostToolUseHookInput struct {
+    BaseHookInput
+    HookEventName string
+    ToolName      string
+    ToolInput     map[string]any
+    ToolResponse  any
+}
+```
+
+#### `UserPromptSubmitHookInput`
+
+Input for UserPromptSubmit hooks.
+
+```go
+type UserPromptSubmitHookInput struct {
+    BaseHookInput
+    HookEventName string
+    Prompt        string
+}
+```
+
+#### `StopHookInput`
+
+Input for Stop hooks.
+
+```go
+type StopHookInput struct {
+    BaseHookInput
+    HookEventName  string
+    StopHookActive bool
+}
+```
+
+#### `SubagentStopHookInput`
+
+Input for SubagentStop hooks.
+
+```go
+type SubagentStopHookInput struct {
+    BaseHookInput
+    HookEventName  string
+    StopHookActive bool
+}
+```
+
+#### `PreCompactHookInput`
+
+Input for PreCompact hooks.
+
+```go
+type PreCompactHookInput struct {
+    BaseHookInput
+    HookEventName      string
+    Trigger            string
+    CustomInstructions *string
+}
+```
+
+### Hook-Specific Output Types
+
+#### `PreToolUseHookSpecificOutput`
+
+```go
+type PreToolUseHookSpecificOutput struct {
+    PermissionDecision       string
+    PermissionDecisionReason string
+    UpdatedInput             map[string]any
+}
+```
+
+#### `PostToolUseHookSpecificOutput`
+
+```go
+type PostToolUseHookSpecificOutput struct {
+    AdditionalContext string
+}
+```
+
+#### `UserPromptSubmitHookSpecificOutput`
+
+```go
+type UserPromptSubmitHookSpecificOutput struct {
+    AdditionalContext string
+}
+```
+
+### Hook Example
+
+```go
+err := claudecode.WithClient(ctx, func(client claudecode.Client) error {
+    return client.Query(ctx, "Run ls command")
+},
+    claudecode.WithAllowedTools("Bash"),
+    claudecode.WithPreToolUseHook("Bash", func(ctx context.Context, input any, toolUseID *string, hookCtx claudecode.HookContext) (claudecode.HookJSONOutput, error) {
+        hookInput := input.(claudecode.PreToolUseHookInput)
+        command := hookInput.ToolInput["command"].(string)
+
+        // Block dangerous commands
+        if strings.Contains(command, "rm -rf") {
+            return claudecode.HookJSONOutput{
+                HookSpecificOutput: claudecode.PreToolUseHookSpecificOutput{
+                    PermissionDecision:       "deny",
+                    PermissionDecisionReason: "Dangerous command blocked",
+                },
+            }, nil
+        }
+
+        return claudecode.HookJSONOutput{}, nil
+    }),
+)
+```
+
+---
+
+## MCP Types
+
+### `McpTool`
+
+Definition for an MCP tool.
+
+```go
+type McpTool struct {
+    name        string
+    description string
+    inputSchema map[string]any
+    handler     McpToolHandler
+}
+```
+
+Methods:
+- `Name() string`
+- `Description() string`
+- `InputSchema() map[string]any`
+- `Call(ctx context.Context, args map[string]any) (*McpToolResult, error)`
+
+### `McpToolHandler`
+
+Function signature for tool handlers.
+
+```go
+type McpToolHandler func(ctx context.Context, args map[string]any) (*McpToolResult, error)
+```
+
+### `McpToolResult`
+
+Result from a tool execution.
+
+```go
+type McpToolResult struct {
+    Content []McpContent
+    IsError bool
+}
+```
+
+### `McpContent`
+
+Content in a tool result.
+
+```go
+type McpContent struct {
+    Type     string // "text" or "image"
+    Text     string
+    Data     string // base64 for images
+    MimeType string
+}
+```
+
+### `McpToolDefinition`
+
+Tool definition for listing.
+
+```go
+type McpToolDefinition struct {
+    Name        string
+    Description string
+    InputSchema map[string]any
+}
+```
+
+### `McpServer`
+
+Interface for MCP servers.
+
+```go
+type McpServer interface {
+    Name() string
+    Version() string
+    ListTools(ctx context.Context) ([]McpToolDefinition, error)
+    CallTool(ctx context.Context, name string, args map[string]any) (*McpToolResult, error)
+}
+```
+
+### `SdkMcpServer`
+
+In-process MCP server implementation.
+
+```go
+type SdkMcpServer struct {
+    name    string
+    version string
+    tools   map[string]*McpTool
+}
+```
+
+### MCP Server Config Types
+
+#### `McpServerType`
+
+```go
+type McpServerType string
+
+const (
+    McpServerTypeStdio McpServerType = "stdio"
+    McpServerTypeSSE   McpServerType = "sse"
+    McpServerTypeHTTP  McpServerType = "http"
+    McpServerTypeSdk   McpServerType = "sdk"
+)
+```
+
+#### `McpStdioServerConfig`
+
+```go
+type McpStdioServerConfig struct {
+    Type    McpServerType
+    Command string
+    Args    []string
+    Env     map[string]string
+}
+```
+
+#### `McpSSEServerConfig`
+
+```go
+type McpSSEServerConfig struct {
+    Type    McpServerType
+    URL     string
+    Headers map[string]string
+}
+```
+
+#### `McpHTTPServerConfig`
+
+```go
+type McpHTTPServerConfig struct {
+    Type    McpServerType
+    URL     string
+    Headers map[string]string
+}
+```
+
+#### `McpSdkServerConfig`
+
+```go
+type McpSdkServerConfig struct {
+    Type     McpServerType
+    Name     string
+    Instance McpServer
+}
+```
+
+---
+
+## Permission Types
+
+### `PermissionMode`
+
+```go
+type PermissionMode string
+
+const (
+    PermissionModeDefault           PermissionMode = "default"
+    PermissionModeAcceptEdits       PermissionMode = "acceptEdits"
+    PermissionModePlan              PermissionMode = "plan"
+    PermissionModeBypassPermissions PermissionMode = "bypassPermissions"
+)
+```
+
+### `CanUseToolCallback`
+
+```go
+type CanUseToolCallback func(ctx context.Context, toolName string, input map[string]any, permCtx ToolPermissionContext) (PermissionResult, error)
+```
+
+### `ToolPermissionContext`
+
+```go
+type ToolPermissionContext struct {
+    Signal      any
+    Suggestions []PermissionUpdate
+}
+```
+
+### `PermissionResult`
+
+Interface for permission results (sealed).
+
+### `PermissionResultAllow`
+
+```go
+type PermissionResultAllow struct {
+    Behavior           string // always "allow"
+    UpdatedInput       map[string]any
+    UpdatedPermissions []PermissionUpdate
+}
+
+func NewPermissionResultAllow() PermissionResultAllow
+```
+
+### `PermissionResultDeny`
+
+```go
+type PermissionResultDeny struct {
+    Behavior  string // always "deny"
+    Message   string
+    Interrupt bool
+}
+
+func NewPermissionResultDeny(message string) PermissionResultDeny
+```
+
+### `PermissionUpdate`
+
+```go
+type PermissionUpdate struct {
+    Type        PermissionUpdateType
+    Rules       []PermissionRuleValue
+    Behavior    *string
+    Mode        *string
+    Directories []string
+    Destination *string
+}
+```
+
+### `PermissionUpdateType`
+
+```go
+const (
+    PermissionUpdateTypeAddRules         = "addRules"
+    PermissionUpdateTypeReplaceRules     = "replaceRules"
+    PermissionUpdateTypeRemoveRules      = "removeRules"
+    PermissionUpdateTypeSetMode          = "setMode"
+    PermissionUpdateTypeAddDirectories   = "addDirectories"
+    PermissionUpdateTypeRemoveDirectories = "removeDirectories"
+)
+```
+
+### `PermissionRuleValue`
+
+```go
+type PermissionRuleValue struct {
+    ToolName    string
+    RuleContent *string
+}
+```
+
+---
+
+## Sandbox Configuration
+
+### `SandboxSettings`
+
+```go
+type SandboxSettings struct {
+    Enabled                   bool
+    AutoAllowBashIfSandboxed  bool
+    ExcludedCommands          []string
+    AllowUnsandboxedCommands  bool
+    Network                   *SandboxNetworkConfig
+    IgnoreViolations          *SandboxIgnoreViolations
+    EnableWeakerNestedSandbox bool
+}
+```
+
+| Field | Type | Default | Description |
+|:------|:-----|:--------|:------------|
+| `Enabled` | `bool` | `false` | Enable sandbox mode |
+| `AutoAllowBashIfSandboxed` | `bool` | `false` | Auto-approve bash when sandboxed |
+| `ExcludedCommands` | `[]string` | `[]` | Commands that bypass sandbox |
+| `AllowUnsandboxedCommands` | `bool` | `false` | Allow model to request unsandboxed execution |
+| `Network` | `*SandboxNetworkConfig` | `nil` | Network configuration |
+| `IgnoreViolations` | `*SandboxIgnoreViolations` | `nil` | Violations to ignore |
+| `EnableWeakerNestedSandbox` | `bool` | `false` | Enable weaker sandbox for Docker |
+
+### `SandboxNetworkConfig`
+
+```go
+type SandboxNetworkConfig struct {
+    AllowUnixSockets    []string
+    AllowAllUnixSockets bool
+    AllowLocalBinding   bool
+    HTTPProxyPort       *int
+    SOCKSProxyPort      *int
+}
+```
+
+### `SandboxIgnoreViolations`
+
+```go
+type SandboxIgnoreViolations struct {
+    File    []string
+    Network []string
+}
+```
+
+### Sandbox Example
+
+```go
+claudecode.Query(ctx, "Build and test my project",
+    claudecode.WithSandbox(&claudecode.SandboxSettings{
+        Enabled:                  true,
+        AutoAllowBashIfSandboxed: true,
+        ExcludedCommands:         []string{"docker"},
+        Network: &claudecode.SandboxNetworkConfig{
+            AllowLocalBinding: true,
+            AllowUnixSockets:  []string{"/var/run/docker.sock"},
+        },
+    }),
+)
+```
+
+---
+
+## Agent Types
+
+### `AgentDefinition`
+
+```go
+type AgentDefinition struct {
+    Description string
+    Prompt      string
+    Tools       []string
+    Model       AgentModel
+}
+```
+
+### `AgentModel`
+
+```go
+type AgentModel string
+
+const (
+    AgentModelSonnet  AgentModel = "sonnet"
+    AgentModelOpus    AgentModel = "opus"
+    AgentModelHaiku   AgentModel = "haiku"
+    AgentModelInherit AgentModel = "inherit"
+)
+```
+
+---
+
+## Plugin Types
+
+### `SdkPluginConfig`
+
+```go
+type SdkPluginConfig struct {
+    Type SdkPluginType
+    Path string
+}
+```
+
+### `SdkPluginType`
+
+```go
+type SdkPluginType string
+
+const (
+    SdkPluginTypeLocal SdkPluginType = "local"
+)
+```
+
+---
+
+## Structured Output
+
+### `OutputFormat`
+
+```go
+type OutputFormat struct {
+    Type   string         // always "json_schema"
+    Schema map[string]any
+}
+```
+
+### Helper Function
+
+```go
+func OutputFormatJSONSchema(schema map[string]any) *OutputFormat
+```
+
+---
+
+## Beta Features
+
+### `SdkBeta`
+
+```go
+type SdkBeta string
+
+const (
+    SdkBetaContext1M SdkBeta = "context-1m-2025-08-07"
+)
+```
+
+---
+
+## Setting Sources
+
+### `SettingSource`
+
+```go
+type SettingSource string
+
+const (
+    SettingSourceUser    SettingSource = "user"
+    SettingSourceProject SettingSource = "project"
+    SettingSourceLocal   SettingSource = "local"
+)
+```
+
+---
+
+## Stream Validation
+
+### `StreamValidator`
+
+Validates stream integrity and tracks tool use/result pairs.
+
+```go
+type StreamValidator struct {
+    // internal fields
+}
+
+func NewStreamValidator() *StreamValidator
+```
+
+Methods:
+- `TrackMessage(msg Message)` - Track a message
+- `MarkStreamEnd()` - Mark stream as ended
+- `GetIssues() []StreamIssue` - Get validation issues
+- `GetStats() StreamStats` - Get stream statistics
+- `HasIssues() bool` - Check if there are issues
+
+### `StreamIssue`
+
+```go
+type StreamIssue struct {
+    Type        string
+    Description string
+    ToolUseID   string
+}
+```
+
+### `StreamStats`
+
+```go
+type StreamStats struct {
+    ToolsRequested int
+    ToolsReceived  int
+    PendingTools   []string
+    HasResult      bool
+    StreamEnded    bool
+}
+```
+
+---
+
+## Transport Interface
+
+### `Transport`
+
+Interface for CLI communication (primarily for testing).
+
+```go
+type Transport interface {
+    Connect(ctx context.Context) error
+    SendMessage(ctx context.Context, message StreamMessage) error
+    ReceiveMessages(ctx context.Context) (<-chan Message, <-chan error)
+    Interrupt(ctx context.Context) error
+    SetModel(ctx context.Context, model *string) error
+    SetPermissionMode(ctx context.Context, mode string) error
+    RewindFiles(ctx context.Context, userMessageID string) error
+    Close() error
+    GetValidator() *StreamValidator
+}
+```
+
+---
+
+## MessageIterator
+
+### `MessageIterator`
+
+Interface for iterating over messages.
+
+```go
+type MessageIterator interface {
+    Next(ctx context.Context) (Message, error)
+    Close() error
+}
+```
+
+### `ErrNoMoreMessages`
+
+Sentinel error indicating no more messages.
+
+```go
+var ErrNoMoreMessages = errors.New("no more messages")
+```
+
+---
+
+## See Also
+
+- [Feature Parity with Python SDK](parity.md)
+- [Examples Directory](../examples/README.md)
+- [pkg.go.dev Reference](https://pkg.go.dev/github.com/severity1/claude-agent-sdk-go)
