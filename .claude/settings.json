@@ -12,6 +12,8 @@
       "Bash(git push:*)",
       "Bash(gh run watch:*)",
       "WebFetch(domain:github.com)",
+      "WebFetch(domain:platform.claude.com)",
+      "WebFetch(domain:claude.ai)",
       "Bash(git add:*)",
       "Bash(gh issue view:*)",
       "Bash(gh issue list:*)",
