@@ -4,7 +4,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log"
 
@@ -70,18 +69,16 @@ func main() {
 		claudecode.WithSystemPrompt("You are a senior Go developer providing code reviews and architectural guidance."),
 		claudecode.WithAllowedTools("Read", "Write"), // Optional tools
 	)
-	// Advanced error handling
+	// Advanced error handling using As* helpers (Go-idiomatic if-init pattern)
 	if err != nil {
-		// Check for specific error types
-		var cliError *claudecode.CLINotFoundError
-		if errors.As(err, &cliError) {
+		// Check for specific error types using As* helpers
+		if cliError := claudecode.AsCLINotFoundError(err); cliError != nil {
 			fmt.Printf("[Error] Claude CLI not installed: %v\n", cliError)
 			fmt.Println("Install: npm install -g @anthropic-ai/claude-code")
 			return
 		}
 
-		var connError *claudecode.ConnectionError
-		if errors.As(err, &connError) {
+		if connError := claudecode.AsConnectionError(err); connError != nil {
 			fmt.Printf("[Warning] Connection failed: %v\n", connError)
 			fmt.Println("WithClient handled cleanup automatically")
 			return

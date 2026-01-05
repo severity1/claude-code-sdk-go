@@ -6,6 +6,12 @@ import (
 	"testing"
 )
 
+// Test constants to avoid magic strings.
+const (
+	testCLIPath      = "/usr/bin/claude"
+	testStderrOutput = "permission denied"
+)
+
 // =============================================================================
 // Test Functions (primary purpose - FIRST per project conventions)
 // =============================================================================
@@ -14,7 +20,7 @@ import (
 func TestIsErrorHelpers(t *testing.T) {
 	// Create test errors
 	connErr := NewConnectionError("connection failed", nil)
-	cliErr := NewCLINotFoundError("/usr/bin/claude", "CLI not found")
+	cliErr := NewCLINotFoundError(testCLIPath, "CLI not found")
 	procErr := NewProcessError("process failed", 1, "stderr output")
 	jsonErr := NewJSONDecodeError("invalid json", 0, errors.New("syntax error"))
 	msgErr := NewMessageParseError("parse failed", map[string]any{"type": "unknown"})
@@ -75,8 +81,8 @@ func TestIsErrorHelpers(t *testing.T) {
 func TestAsErrorHelpers(t *testing.T) {
 	// Create test errors
 	connErr := NewConnectionError("connection failed", nil)
-	cliErr := NewCLINotFoundError("/usr/bin/claude", "CLI not found")
-	procErr := NewProcessError("process failed", 1, "stderr output")
+	cliErr := NewCLINotFoundError(testCLIPath, "CLI not found")
+	procErr := NewProcessError("process failed", 1, testStderrOutput)
 	jsonErr := NewJSONDecodeError("invalid json", 0, errors.New("syntax error"))
 	msgErr := NewMessageParseError("parse failed", map[string]any{"type": "unknown"})
 
@@ -178,21 +184,19 @@ func TestAsErrorHelpers(t *testing.T) {
 // TestAsErrorHelpersFieldAccess tests that As* helpers return errors with accessible fields.
 func TestAsErrorHelpersFieldAccess(t *testing.T) {
 	t.Run("cli_not_found_error_path_field", func(t *testing.T) {
-		path := "/usr/bin/claude"
-		err := NewCLINotFoundError(path, "CLI not found")
+		err := NewCLINotFoundError(testCLIPath, "CLI not found")
 		result := AsCLINotFoundError(err)
 		if result == nil {
 			t.Fatal("AsCLINotFoundError returned nil")
 		}
-		if result.Path != path {
-			t.Errorf("Path field: got %q, want %q", result.Path, path)
+		if result.Path != testCLIPath {
+			t.Errorf("Path field: got %q, want %q", result.Path, testCLIPath)
 		}
 	})
 
 	t.Run("process_error_fields", func(t *testing.T) {
 		exitCode := 42
-		stderr := "permission denied"
-		err := NewProcessError("process failed", exitCode, stderr)
+		err := NewProcessError("process failed", exitCode, testStderrOutput)
 		result := AsProcessError(err)
 		if result == nil {
 			t.Fatal("AsProcessError returned nil")
@@ -200,8 +204,8 @@ func TestAsErrorHelpersFieldAccess(t *testing.T) {
 		if result.ExitCode != exitCode {
 			t.Errorf("ExitCode field: got %d, want %d", result.ExitCode, exitCode)
 		}
-		if result.Stderr != stderr {
-			t.Errorf("Stderr field: got %q, want %q", result.Stderr, stderr)
+		if result.Stderr != testStderrOutput {
+			t.Errorf("Stderr field: got %q, want %q", result.Stderr, testStderrOutput)
 		}
 	})
 
@@ -290,30 +294,3 @@ func TestErrorHelpersWithWrappedChain(t *testing.T) {
 	})
 }
 
-// =============================================================================
-// Helper Functions (utilities - LAST per project conventions)
-// =============================================================================
-
-// assertIsHelperResult is a test helper for Is* function results.
-func assertIsHelperResult(t *testing.T, name string, got, want bool) {
-	t.Helper()
-	if got != want {
-		t.Errorf("%s: got %v, want %v", name, got, want)
-	}
-}
-
-// assertAsHelperNotNil is a test helper for As* function non-nil results.
-func assertAsHelperNotNil(t *testing.T, name string, result any) {
-	t.Helper()
-	if result == nil {
-		t.Errorf("%s: expected non-nil result", name)
-	}
-}
-
-// assertAsHelperNil is a test helper for As* function nil results.
-func assertAsHelperNil(t *testing.T, name string, result any) {
-	t.Helper()
-	if result != nil {
-		t.Errorf("%s: expected nil result, got %v", name, result)
-	}
-}

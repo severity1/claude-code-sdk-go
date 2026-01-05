@@ -1,7 +1,10 @@
 // Package shared provides shared types and interfaces used across internal packages.
 package shared
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+)
 
 // SDKError is the base interface for all Claude Agent SDK errors.
 type SDKError interface {
@@ -48,6 +51,22 @@ func NewConnectionError(message string, cause error) *ConnectionError {
 	}
 }
 
+// IsConnectionError reports whether err is or wraps a ConnectionError.
+func IsConnectionError(err error) bool {
+	var target *ConnectionError
+	return errors.As(err, &target)
+}
+
+// AsConnectionError returns the error as a *ConnectionError if it is one,
+// or nil otherwise. This allows convenient field access after type checking.
+func AsConnectionError(err error) *ConnectionError {
+	var target *ConnectionError
+	if errors.As(err, &target) {
+		return target
+	}
+	return nil
+}
+
 // CLINotFoundError indicates the Claude CLI was not found.
 type CLINotFoundError struct {
 	BaseError
@@ -69,6 +88,22 @@ func NewCLINotFoundError(path, message string) *CLINotFoundError {
 		BaseError: BaseError{message: message},
 		Path:      path,
 	}
+}
+
+// IsCLINotFoundError reports whether err is or wraps a CLINotFoundError.
+func IsCLINotFoundError(err error) bool {
+	var target *CLINotFoundError
+	return errors.As(err, &target)
+}
+
+// AsCLINotFoundError returns the error as a *CLINotFoundError if it is one,
+// or nil otherwise. This allows convenient field access after type checking.
+func AsCLINotFoundError(err error) *CLINotFoundError {
+	var target *CLINotFoundError
+	if errors.As(err, &target) {
+		return target
+	}
+	return nil
 }
 
 // ProcessError represents subprocess execution failures.
@@ -101,6 +136,22 @@ func NewProcessError(message string, exitCode int, stderr string) *ProcessError 
 		ExitCode:  exitCode,
 		Stderr:    stderr,
 	}
+}
+
+// IsProcessError reports whether err is or wraps a ProcessError.
+func IsProcessError(err error) bool {
+	var target *ProcessError
+	return errors.As(err, &target)
+}
+
+// AsProcessError returns the error as a *ProcessError if it is one,
+// or nil otherwise. This allows convenient field access after type checking.
+func AsProcessError(err error) *ProcessError {
+	var target *ProcessError
+	if errors.As(err, &target) {
+		return target
+	}
+	return nil
 }
 
 // JSONDecodeError represents JSON parsing failures.
@@ -139,6 +190,22 @@ func (e *JSONDecodeError) Unwrap() error {
 	return e.OriginalError
 }
 
+// IsJSONDecodeError reports whether err is or wraps a JSONDecodeError.
+func IsJSONDecodeError(err error) bool {
+	var target *JSONDecodeError
+	return errors.As(err, &target)
+}
+
+// AsJSONDecodeError returns the error as a *JSONDecodeError if it is one,
+// or nil otherwise. This allows convenient field access after type checking.
+func AsJSONDecodeError(err error) *JSONDecodeError {
+	var target *JSONDecodeError
+	if errors.As(err, &target) {
+		return target
+	}
+	return nil
+}
+
 // MessageParseError represents message structure parsing failures.
 type MessageParseError struct {
 	BaseError
@@ -156,4 +223,20 @@ func NewMessageParseError(message string, data any) *MessageParseError {
 		BaseError: BaseError{message: message},
 		Data:      data,
 	}
+}
+
+// IsMessageParseError reports whether err is or wraps a MessageParseError.
+func IsMessageParseError(err error) bool {
+	var target *MessageParseError
+	return errors.As(err, &target)
+}
+
+// AsMessageParseError returns the error as a *MessageParseError if it is one,
+// or nil otherwise. This allows convenient field access after type checking.
+func AsMessageParseError(err error) *MessageParseError {
+	var target *MessageParseError
+	if errors.As(err, &target) {
+		return target
+	}
+	return nil
 }

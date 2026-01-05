@@ -39,3 +39,44 @@ var NewJSONDecodeError = shared.NewJSONDecodeError
 
 // NewMessageParseError creates a new message parse error.
 var NewMessageParseError = shared.NewMessageParseError
+
+// Error type checking helpers (Go-specific, follows os.IsNotExist pattern).
+// These use errors.As() internally to handle wrapped errors correctly.
+
+// IsConnectionError reports whether err is or wraps a ConnectionError.
+var IsConnectionError = shared.IsConnectionError
+
+// IsCLINotFoundError reports whether err is or wraps a CLINotFoundError.
+var IsCLINotFoundError = shared.IsCLINotFoundError
+
+// IsProcessError reports whether err is or wraps a ProcessError.
+var IsProcessError = shared.IsProcessError
+
+// IsJSONDecodeError reports whether err is or wraps a JSONDecodeError.
+var IsJSONDecodeError = shared.IsJSONDecodeError
+
+// IsMessageParseError reports whether err is or wraps a MessageParseError.
+var IsMessageParseError = shared.IsMessageParseError
+
+// Error type extraction helpers (Go-specific).
+// Returns typed pointer for field access, or nil if not matching type.
+
+// AsConnectionError returns the error as a *ConnectionError if it is one,
+// or nil otherwise.
+var AsConnectionError = shared.AsConnectionError
+
+// AsCLINotFoundError returns the error as a *CLINotFoundError if it is one,
+// or nil otherwise.
+var AsCLINotFoundError = shared.AsCLINotFoundError
+
+// AsProcessError returns the error as a *ProcessError if it is one,
+// or nil otherwise.
+var AsProcessError = shared.AsProcessError
+
+// AsJSONDecodeError returns the error as a *JSONDecodeError if it is one,
+// or nil otherwise.
+var AsJSONDecodeError = shared.AsJSONDecodeError
+
+// AsMessageParseError returns the error as a *MessageParseError if it is one,
+// or nil otherwise.
+var AsMessageParseError = shared.AsMessageParseError

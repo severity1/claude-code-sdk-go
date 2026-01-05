@@ -1053,8 +1053,8 @@ func assertBufferOverflowError(t *testing.T, err error) {
 	if err == nil {
 		t.Fatal("Expected buffer overflow error, got nil")
 	}
-	jsonDecodeErr, ok := err.(*shared.JSONDecodeError)
-	if !ok {
+	jsonDecodeErr := shared.AsJSONDecodeError(err)
+	if jsonDecodeErr == nil {
 		t.Fatalf("Expected JSONDecodeError, got %T", err)
 	}
 	if !strings.Contains(jsonDecodeErr.Error(), "buffer overflow") {
