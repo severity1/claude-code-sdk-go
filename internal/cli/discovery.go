@@ -8,13 +8,23 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/severity1/claude-agent-sdk-go/internal/shared"
 )
 
 const windowsOS = "windows"
+
+// MinimumCLIVersion is the minimum supported Claude Code CLI version.
+// Features may not work correctly with older versions.
+const MinimumCLIVersion = "2.0.76"
+
+// versionRegex matches semantic version X.Y.Z (mimics Python SDK regex).
+var versionRegex = regexp.MustCompile(`([0-9]+\.[0-9]+\.[0-9]+)`)
 
 // DiscoveryPaths defines the standard search paths for Claude CLI.
 var DiscoveryPaths = []string{
@@ -414,20 +424,68 @@ func ValidateWorkingDirectory(cwd string) error {
 	return nil
 }
 
-// DetectCLIVersion detects the Claude CLI version for compatibility checks.
-func DetectCLIVersion(ctx context.Context, cliPath string) (string, error) {
-	cmd := exec.CommandContext(ctx, cliPath, "--version")
+// CheckCLIVersion checks if CLI version is below minimum and returns a warning.
+// Mimics Python SDK _check_claude_version() behavior.
+// Non-blocking - errors are silently ignored.
+func CheckCLIVersion(ctx context.Context, cliPath string) (warning string) {
+	if os.Getenv("CLAUDE_AGENT_SDK_SKIP_VERSION_CHECK") != "" {
+		return ""
+	}
+
+	// 2-second timeout (matches Python SDK)
+	checkCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+
+	// Run CLI with -v flag (matches Python SDK)
+	cmd := exec.CommandContext(checkCtx, cliPath, "-v")
 	output, err := cmd.Output()
 	if err != nil {
-		return "", fmt.Errorf("failed to get CLI version: %w", err)
+		return "" // Silently ignore errors (matches Python SDK)
 	}
 
-	version := strings.TrimSpace(string(output))
+	versionOutput := strings.TrimSpace(string(output))
 
-	// Basic version format validation
-	if !strings.Contains(version, ".") {
-		return "", fmt.Errorf("invalid version format: %s", version)
+	// Extract version with regex (matches Python SDK)
+	match := versionRegex.FindStringSubmatch(versionOutput)
+	if len(match) < 2 {
+		return "" // No valid version found
+	}
+	version := match[1]
+
+	// Compare version parts (matches Python SDK list comparison)
+	if compareVersionParts(version, MinimumCLIVersion) < 0 {
+		return fmt.Sprintf(
+			"Warning: Claude Code version %s is unsupported in the Agent SDK. "+
+				"Minimum required version is %s. "+
+				"Some features may not work correctly.",
+			version, MinimumCLIVersion,
+		)
 	}
 
-	return version, nil
+	return ""
+}
+
+// compareVersionParts compares two X.Y.Z versions.
+// Returns -1 if v1 < v2, 0 if equal, 1 if v1 > v2.
+// Mimics Python SDK: [int(x) for x in version.split(".")] comparison.
+func compareVersionParts(v1, v2 string) int {
+	p1 := strings.Split(v1, ".")
+	p2 := strings.Split(v2, ".")
+
+	for i := 0; i < 3; i++ {
+		n1, n2 := 0, 0
+		if i < len(p1) {
+			n1, _ = strconv.Atoi(p1[i])
+		}
+		if i < len(p2) {
+			n2, _ = strconv.Atoi(p2[i])
+		}
+		if n1 < n2 {
+			return -1
+		}
+		if n1 > n2 {
+			return 1
+		}
+	}
+	return 0
 }

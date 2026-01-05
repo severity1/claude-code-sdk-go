@@ -404,16 +404,19 @@ func newTransportMockCLIWithOptions(options ...TransportMockOption) string {
 		switch {
 		case opts.shouldFail:
 			script = `@echo off
+if "%1"=="-v" (echo 3.0.0 & exit /b 0)
 echo Mock CLI failing >&2
 exit /b 1
 `
 		case opts.longRunning:
 			script = `@echo off
+if "%1"=="-v" (echo 3.0.0 & exit /b 0)
 echo {"type":"assistant","content":[{"type":"text","text":"Long running mock"}],"model":"claude-3"}
 timeout /t 30 /nobreak > NUL
 `
 		case opts.checkEnvironment:
 			script = `@echo off
+if "%1"=="-v" (echo 3.0.0 & exit /b 0)
 if "%CLAUDE_CODE_ENTRYPOINT%"=="sdk-go" (
     echo {"type":"assistant","content":[{"type":"text","text":"Environment OK"}],"model":"claude-3"}
 ) else (
@@ -424,6 +427,7 @@ timeout /t 1 /nobreak > NUL
 `
 		case opts.invalidOutput:
 			script = `@echo off
+if "%1"=="-v" (echo 3.0.0 & exit /b 0)
 echo This is not valid JSON output
 echo {"invalid": json}
 echo {"type":"assistant","content":[{"type":"text","text":"Valid after invalid"}],"model":"claude-3"}
@@ -431,6 +435,7 @@ timeout /t 1 /nobreak > NUL
 `
 		default:
 			script = `@echo off
+if "%1"=="-v" (echo 3.0.0 & exit /b 0)
 echo {"type":"assistant","content":[{"type":"text","text":"Mock response"}],"model":"claude-3"}
 timeout /t 1 /nobreak > NUL
 `
@@ -440,11 +445,15 @@ timeout /t 1 /nobreak > NUL
 		switch {
 		case opts.shouldFail:
 			script = `#!/bin/bash
+# Handle -v flag for version check
+if [ "$1" = "-v" ]; then echo "3.0.0"; exit 0; fi
 echo "Mock CLI failing" >&2
 exit 1
 `
 		case opts.longRunning:
 			script = `#!/bin/bash
+# Handle -v flag for version check
+if [ "$1" = "-v" ]; then echo "3.0.0"; exit 0; fi
 # Ignore SIGTERM initially to test 5-second timeout
 trap 'echo "Received SIGTERM, ignoring for 6 seconds"; sleep 6; exit 1' TERM
 echo '{"type":"assistant","content":[{"type":"text","text":"Long running mock"}],"model":"claude-3"}'
@@ -452,6 +461,8 @@ sleep 30  # Run long enough to test termination
 `
 		case opts.checkEnvironment:
 			script = `#!/bin/bash
+# Handle -v flag for version check
+if [ "$1" = "-v" ]; then echo "3.0.0"; exit 0; fi
 if [ "$CLAUDE_CODE_ENTRYPOINT" = "sdk-go" ]; then
     echo '{"type":"assistant","content":[{"type":"text","text":"Environment OK"}],"model":"claude-3"}'
 else
@@ -462,6 +473,8 @@ sleep 0.5
 `
 		case opts.invalidOutput:
 			script = `#!/bin/bash
+# Handle -v flag for version check
+if [ "$1" = "-v" ]; then echo "3.0.0"; exit 0; fi
 echo "This is not valid JSON output"
 echo '{"invalid": json}'
 echo '{"type":"assistant","content":[{"type":"text","text":"Valid after invalid"}],"model":"claude-3"}'
@@ -469,6 +482,8 @@ sleep 0.5
 `
 		default:
 			script = `#!/bin/bash
+# Handle -v flag for version check
+if [ "$1" = "-v" ]; then echo "3.0.0"; exit 0; fi
 echo '{"type":"assistant","content":[{"type":"text","text":"Mock response"}],"model":"claude-3"}'
 sleep 0.5
 `
@@ -1440,6 +1455,7 @@ func newTransportMockCLIWithStderr() string {
 	if runtime.GOOS == windowsOS {
 		extension = testBatExtension
 		script = `@echo off
+if "%1"=="-v" (echo 3.0.0 & exit /b 0)
 echo Stderr line 1 >&2
 echo Stderr line 2 >&2
 echo {"type":"assistant","content":[{"type":"text","text":"Mock response"}],"model":"claude-3"}
@@ -1448,6 +1464,8 @@ timeout /t 1 /nobreak > NUL
 	} else {
 		extension = ""
 		script = `#!/bin/bash
+# Handle -v flag for version check
+if [ "$1" = "-v" ]; then echo "3.0.0"; exit 0; fi
 echo "Stderr line 1" >&2
 echo "Stderr line 2" >&2
 echo '{"type":"assistant","content":[{"type":"text","text":"Mock response"}],"model":"claude-3"}'
@@ -1650,6 +1668,7 @@ func newTransportMockCLIWithControlProtocol() string {
 		extension = testBatExtension
 		// Windows batch script that echoes back control responses
 		script = `@echo off
+if "%1"=="-v" (echo 3.0.0 & exit /b 0)
 setlocal enabledelayedexpansion
 
 :loop
@@ -1673,6 +1692,8 @@ goto loop
 		extension = ""
 		// Bash script that reads control requests and echoes responses
 		script = `#!/bin/bash
+# Handle -v flag for version check
+if [ "$1" = "-v" ]; then echo "3.0.0"; exit 0; fi
 
 # Output a regular message first
 echo '{"type":"assistant","content":[{"type":"text","text":"Mock response"}],"model":"claude-3"}'

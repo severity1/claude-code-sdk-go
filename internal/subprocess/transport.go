@@ -162,6 +162,13 @@ func (t *Transport) Connect(ctx context.Context) error {
 		t.cmd.Dir = *t.options.Cwd
 	}
 
+	// Check CLI version and warn if outdated (non-blocking)
+	if warning := cli.CheckCLIVersion(ctx, t.cliPath); warning != "" {
+		if t.options != nil && t.options.StderrCallback != nil {
+			t.options.StderrCallback(warning)
+		}
+	}
+
 	// Set up I/O pipes
 	var err error
 	if t.promptArg == nil {
