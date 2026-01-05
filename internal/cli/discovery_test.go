@@ -248,14 +248,6 @@ func TestWorkingDirectoryValidation(t *testing.T) {
 	}
 }
 
-// TestCLIVersionDetection tests CLI version detection
-func TestCLIVersionDetection(t *testing.T) {
-	nonExistentPath := "/this/path/does/not/exist/claude"
-	ctx := context.Background()
-	_, err := DetectCLIVersion(ctx, nonExistentPath)
-	assertVersionDetectionError(t, err)
-}
-
 // Helper Functions
 
 func setupIsolatedEnvironment(t *testing.T) func() {
@@ -375,17 +367,6 @@ func assertValidationError(t *testing.T, err error, expectError bool, errorConta
 	}
 	if expectError && errorContains != "" && !strings.Contains(err.Error(), errorContains) {
 		t.Errorf("error = %v, expected message to contain %q", err, errorContains)
-	}
-}
-
-func assertVersionDetectionError(t *testing.T, err error) {
-	t.Helper()
-	if err == nil {
-		t.Error("Expected error when CLI path does not exist")
-		return
-	}
-	if !strings.Contains(err.Error(), "version") {
-		t.Error("Error message should mention version detection failure")
 	}
 }
 
@@ -657,76 +638,6 @@ func TestValidateNodeJSSuccess(t *testing.T) {
 	} else {
 		// Node.js found - validation should succeed
 		t.Log("Node.js validation succeeded")
-	}
-}
-
-// TestDetectCLIVersionSuccess tests successful version detection
-func TestDetectCLIVersionSuccess(t *testing.T) {
-	ctx := context.Background()
-
-	// Create a mock CLI that outputs a version
-	tempDir := t.TempDir()
-	mockCLI := filepath.Join(tempDir, "mock-claude")
-	if runtime.GOOS == windowsOS {
-		mockCLI += ".bat"
-	}
-
-	var script string
-	if runtime.GOOS == windowsOS {
-		script = "@echo off\necho 1.2.3"
-	} else {
-		script = "#!/bin/bash\necho '1.2.3'"
-	}
-
-	//nolint:gosec // G306: Test file needs execute permission for mock CLI binary
-	err := os.WriteFile(mockCLI, []byte(script), 0o700)
-	if err != nil {
-		t.Fatalf("Failed to create mock CLI: %v", err)
-	}
-
-	version, err := DetectCLIVersion(ctx, mockCLI)
-	if err != nil {
-		t.Errorf("Expected successful version detection, got error: %v", err)
-		return
-	}
-
-	if version != "1.2.3" {
-		t.Errorf("Expected version '1.2.3', got '%s'", version)
-	}
-}
-
-// TestDetectCLIVersionInvalidFormat tests version format validation
-func TestDetectCLIVersionInvalidFormat(t *testing.T) {
-	ctx := context.Background()
-
-	// Create a mock CLI that outputs invalid version format
-	tempDir := t.TempDir()
-	mockCLI := filepath.Join(tempDir, "mock-claude-invalid")
-	if runtime.GOOS == windowsOS {
-		mockCLI += ".bat"
-	}
-
-	var script string
-	if runtime.GOOS == windowsOS {
-		script = "@echo off\necho invalid-version-format"
-	} else {
-		script = "#!/bin/bash\necho 'invalid-version-format'"
-	}
-
-	//nolint:gosec // G306: Test file needs execute permission for mock CLI binary
-	err := os.WriteFile(mockCLI, []byte(script), 0o700)
-	if err != nil {
-		t.Fatalf("Failed to create mock CLI: %v", err)
-	}
-
-	_, err = DetectCLIVersion(ctx, mockCLI)
-	if err == nil {
-		t.Error("Expected error for invalid version format")
-		return
-	}
-
-	if !strings.Contains(err.Error(), "invalid version format") {
-		t.Errorf("Expected 'invalid version format' error, got: %v", err)
 	}
 }
 
@@ -1646,4 +1557,98 @@ func TestIncludePartialMessagesWithOtherOptions(t *testing.T) {
 	assertContainsArg(t, cmd, "--include-partial-messages")
 	assertContainsArgs(t, cmd, "--max-turns", "5")
 	assertContainsArg(t, cmd, "--continue")
+}
+
+// TestCompareVersionParts tests semantic version comparison (mimics Python SDK list comparison)
+func TestCompareVersionParts(t *testing.T) {
+	tests := []struct {
+		v1, v2 string
+		want   int
+	}{
+		{"2.0.76", "2.0.76", 0},
+		{"1.0.0", "2.0.76", -1},
+		{"2.0.75", "2.0.76", -1},
+		{"2.0.77", "2.0.76", 1},
+		{"3.0.0", "2.0.76", 1},
+		{"2.1.0", "2.0.76", 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.v1+"_vs_"+tt.v2, func(t *testing.T) {
+			if got := compareVersionParts(tt.v1, tt.v2); got != tt.want {
+				t.Errorf("compareVersionParts(%q, %q) = %d, want %d", tt.v1, tt.v2, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestCheckCLIVersion tests CLI version check (mimics Python SDK _check_claude_version)
+func TestCheckCLIVersion(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("outdated_returns_warning", func(t *testing.T) {
+		mockCLI := createVersionMockCLI(t, "1.0.0")
+		warning := CheckCLIVersion(ctx, mockCLI)
+		if warning == "" {
+			t.Error("Expected warning for outdated version")
+		}
+		if !strings.Contains(warning, "unsupported") {
+			t.Error("Warning should mention 'unsupported'")
+		}
+	})
+
+	t.Run("current_no_warning", func(t *testing.T) {
+		mockCLI := createVersionMockCLI(t, MinimumCLIVersion)
+		warning := CheckCLIVersion(ctx, mockCLI)
+		if warning != "" {
+			t.Errorf("Expected no warning, got: %s", warning)
+		}
+	})
+
+	t.Run("newer_no_warning", func(t *testing.T) {
+		mockCLI := createVersionMockCLI(t, "3.0.0")
+		warning := CheckCLIVersion(ctx, mockCLI)
+		if warning != "" {
+			t.Errorf("Expected no warning, got: %s", warning)
+		}
+	})
+
+	t.Run("invalid_path_silent", func(t *testing.T) {
+		warning := CheckCLIVersion(ctx, "/nonexistent/claude")
+		if warning != "" {
+			t.Errorf("Expected silent failure, got: %s", warning)
+		}
+	})
+}
+
+// TestCheckCLIVersionSkipEnvVar tests CLAUDE_AGENT_SDK_SKIP_VERSION_CHECK env var
+func TestCheckCLIVersionSkipEnvVar(t *testing.T) {
+	ctx := context.Background()
+	mockCLI := createVersionMockCLI(t, "1.0.0")
+
+	t.Setenv("CLAUDE_AGENT_SDK_SKIP_VERSION_CHECK", "1")
+
+	warning := CheckCLIVersion(ctx, mockCLI)
+	if warning != "" {
+		t.Errorf("Expected skip when env var set, got: %s", warning)
+	}
+}
+
+// createVersionMockCLI creates a mock CLI script that outputs the given version
+func createVersionMockCLI(t *testing.T, version string) string {
+	t.Helper()
+	tempDir := t.TempDir()
+	mockCLI := filepath.Join(tempDir, "mock-claude")
+	if runtime.GOOS == windowsOS {
+		mockCLI += ".bat"
+		//nolint:gosec // G306: Test file needs execute permission for mock CLI binary
+		if err := os.WriteFile(mockCLI, []byte("@echo off\necho "+version), 0o700); err != nil {
+			t.Fatalf("Failed to create mock CLI: %v", err)
+		}
+	} else {
+		//nolint:gosec // G306: Test file needs execute permission for mock CLI binary
+		if err := os.WriteFile(mockCLI, []byte("#!/bin/bash\necho '"+version+"'"), 0o700); err != nil {
+			t.Fatalf("Failed to create mock CLI: %v", err)
+		}
+	}
+	return mockCLI
 }
