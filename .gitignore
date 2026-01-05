@@ -33,3 +33,6 @@ go.work.sum
 
 # Others
 *_PLAN.md
+
+# Claude Code auto-memory
+.claude/auto-memory/dirty-files

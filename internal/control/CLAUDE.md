@@ -1,95 +1,54 @@
-# Control Protocol Context
+# Module: control
 
-**Context**: SDK control protocol for bidirectional communication with Claude CLI, enabling hooks, permissions, and MCP features.
+<!-- AUTO-MANAGED: module-description -->
+## Purpose
 
-## Component Focus
-- **Control Message Types** - SDKControlRequest, SDKControlResponse, and subtypes matching Python SDK
-- **Request/Response Correlation** - Channel-based correlation using unique request IDs
-- **Initialize Handshake** - 60-second timeout handshake for streaming mode
-- **Message Routing** - Discriminate control vs regular messages
+Bidirectional control protocol for Claude CLI communication. Manages request/response correlation, permission callbacks, lifecycle hooks, and SDK MCP server integration.
 
-## Package Purpose
+<!-- END AUTO-MANAGED -->
 
-This package implements the control protocol infrastructure that enables:
-- Tool permission callbacks (Issue #8)
-- Hook callbacks (Issue #9)
-- MCP message routing (Issue #7)
-- Runtime permission mode changes
-- Graceful interrupts via protocol
+<!-- AUTO-MANAGED: architecture -->
+## Module Architecture
 
-## Key Design Patterns
-
-### Request ID Format
-```go
-// Format: req_{counter}_{random_hex}
-// Example: req_1_a1b2c3d4
-func (p *Protocol) generateRequestID() string
+```
+control/
+├── protocol.go           # Protocol struct, Initialize, SendControlRequest
+├── protocol_test.go      # Protocol unit tests
+├── protocol_hook_test.go # Hook system tests
+├── protocol_mcp_test.go  # MCP server tests
+├── types.go              # Request/Response types, Initialize handshake
+├── types_hook.go         # Hook event types, HookMatcher, HookCallback
+└── types_hook_test.go    # Hook type tests
 ```
 
-### Channel-Based Correlation
-```go
-// Python uses Events, Go uses channels
-pendingRequests map[string]chan *ControlResponse
-```
+**Protocol Flow**:
+1. `Initialize()`: Handshake with CLI, negotiate capabilities
+2. `SendControlRequest()`: Send JSON-RPC style requests with correlation IDs
+3. `HandleIncomingMessage()`: Route responses to pending requests
+4. Hook/Permission callbacks: Invoked on tool use events
 
-### Control Message Types
-```go
-const (
-    MessageTypeControlRequest  = "control_request"
-    MessageTypeControlResponse = "control_response"
-)
+<!-- END AUTO-MANAGED -->
 
-const (
-    SubtypeInterrupt         = "interrupt"
-    SubtypeCanUseTool        = "can_use_tool"
-    SubtypeInitialize        = "initialize"
-    SubtypeSetPermissionMode = "set_permission_mode"
-    SubtypeHookCallback      = "hook_callback"
-    SubtypeMcpMessage        = "mcp_message"
-)
-```
+<!-- AUTO-MANAGED: conventions -->
+## Module-Specific Conventions
 
-## Python SDK Parity
+- Request correlation: Use unique request IDs for response matching
+- Thread safety: All state access protected by mutex
+- Timeout handling: Default 60s init timeout, configurable via `WithInitTimeout`
+- Hook registration: `RegisterHook()` returns callback ID for later removal
 
-This package maintains 100% behavioral parity with the Python SDK's control protocol:
+<!-- END AUTO-MANAGED -->
 
-| Feature | Python | Go |
-|---------|--------|-----|
-| Request ID format | `req_{counter}_{hex}` | Same |
-| Initialize timeout | 60 seconds | Same |
-| Response correlation | `anyio.Event` | `chan *ControlResponse` |
-| Message routing | Type-based switch | Type-based switch |
+<!-- AUTO-MANAGED: dependencies -->
+## Key Dependencies
 
-## Integration Points
+- `control.Transport`: Interface for stdin/stdout communication (implemented by subprocess)
+- `crypto/rand`: Generate unique request IDs
+- `sync`: Mutex for thread-safe state management
 
-### Parser Integration
-Control messages are passed through as `RawControlMessage`:
-```go
-case shared.MessageTypeControlRequest, shared.MessageTypeControlResponse:
-    return &shared.RawControlMessage{MessageType: msgType, Data: data}, nil
-```
+<!-- END AUTO-MANAGED -->
 
-### Transport Interface
-Protocol uses a minimal Transport interface:
-```go
-type Transport interface {
-    Write(ctx context.Context, data []byte) error
-    Read(ctx context.Context) <-chan []byte
-    Close() error
-}
-```
+<!-- MANUAL -->
+## Notes
 
-## Thread Safety
-
-- All Protocol methods are thread-safe via `sync.Mutex`
-- Request correlation handles concurrent requests
-- Mock transport in tests is thread-safe
-
-## Future Extensions
-
-Issues that build on this foundation:
-- **Issue #7**: MCP message routing via `SubtypeMcpMessage`
-- **Issue #8**: Permission callbacks via `SubtypeCanUseTool`
-- **Issue #9**: Hook callbacks via `SubtypeHookCallback`
-
-Each will add handlers to the Protocol struct without modifying core correlation logic.
+<!-- END MANUAL -->

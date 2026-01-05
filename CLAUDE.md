@@ -1,144 +1,111 @@
 # CLAUDE.md
 
-## Project Context
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-**Claude Agent SDK for Go** - Provides programmatic interaction with Claude Code CLI through `Query()` (one-shot) and `Client` (streaming) APIs with 100% Python SDK parity.
+<!-- AUTO-MANAGED: project-description -->
+## Overview
 
-**Module**: `github.com/severity1/claude-agent-sdk-go`
-**Package**: `claudecode`
-**Import**: `import "github.com/severity1/claude-agent-sdk-go"`
+**Claude Agent SDK for Go** - Unofficial Go SDK for Claude Code CLI integration. Provides programmatic interaction through `Query()` (one-shot) and `Client` (streaming) APIs with 100% Python SDK parity.
 
-## Development Commands
+- **Module**: `github.com/severity1/claude-agent-sdk-go`
+- **Package**: `claudecode`
+- **Go Version**: 1.18+
+
+<!-- END AUTO-MANAGED -->
+
+<!-- AUTO-MANAGED: build-commands -->
+## Build & Development Commands
 
 ```bash
 # Build and test
 go build ./...                    # Build all packages
-go test ./...                     # Run all tests with proper output
+go test ./...                     # Run all tests
 go test -race ./...               # Race condition detection
 go test -cover ./...              # Coverage analysis
 
-# Specific test patterns (table-driven tests)
-go test -v -run TestClient        # Run all client tests (verbose output)
-go test -run "TestClient.*Application" # Run specific client test categories
-go test -count=3 -run TestClient  # Run client tests multiple times for consistency
-
-# Performance testing
-go test -bench=. -benchmem        # Benchmark tests with memory stats
-go test -v -count=3 -run TestClient # Performance consistency validation
+# Specific test patterns
+go test -v -run TestClient        # Run client tests (verbose)
+go test -count=3 -run TestClient  # Run tests multiple times for consistency
 
 # Code quality (run before commits)
 go fmt ./...                      # Format code
 go vet ./...                      # Static analysis
-golangci-lint run                 # Comprehensive linting (if available)
+golangci-lint run                 # Comprehensive linting
 ```
 
-## Code Style & Conventions
+<!-- END AUTO-MANAGED -->
 
-**Idiomatic Go**: Write Go-native code using `gofmt` formatting with no exceptions. Follow standard Go naming conventions and prefer Go idioms over Python patterns.
+<!-- AUTO-MANAGED: architecture -->
+## Architecture
 
-**Interface-Driven Design**: All message types implement `Message`, all content blocks implement `ContentBlock`. Use interfaces for testability and Go-native polymorphism.
-
-**Error Handling**: Use structured error types with `fmt.Errorf` and `%w` verb for wrapping. Include contextual information (exit codes, file paths). Follow Go error handling patterns, not exceptions.
-
-**Context-First**: All functions that can block should accept `context.Context` as first parameter for cancellation and timeouts (Go-native concurrency pattern).
-
-**JSON Handling**: Use custom `UnmarshalJSON` methods for union types, discriminate on `"type"` field with `json.RawMessage` for delayed parsing (Go-native JSON handling).
-
-## Critical Implementation Notes
-
-**Transport Interface**: Central abstraction for CLI communication. Use `MockTransport` for unit tests, real subprocess for integration tests.
-
-**Process Cleanup**: Follow exact pattern: SIGTERM → wait 5 seconds → SIGKILL for proper resource cleanup.
-
-**Buffer Protection**: Implement 1MB buffer limit with overflow protection to prevent memory exhaustion attacks.
-
-**Environment Variables**: Set `CLAUDE_CODE_ENTRYPOINT` to `"sdk-go"` or `"sdk-go-client"` to identify SDK to CLI.
-
-## Development Methodology
-
-**TDD Approach**: Follow RED-GREEN-BLUE cycle strictly. Write failing tests first, implement to make them pass. Never use dummy code or placeholder implementations.
-
-**Component Memory**: This project uses auto-discovery memory system with component-specific CLAUDE.md files in subdirectories.
-
-## Testing Standards & Patterns
-
-**Reference Implementation**: Use `client_test.go` as the gold standard for all test files. It demonstrates exemplary Go testing practices and organization.
-
-**Test File Organization** (mandatory structure):
-```go
-// 1. Test functions first (primary purpose)
-func TestFeatureBasicBehavior(t *testing.T) {...}
-func TestFeatureErrorHandling(t *testing.T) {...}
-
-// 2. Mock/fake implementations (supporting types)
-type mockInterface struct {...}
-func (m *mockInterface) Method() {...}
-
-// 3. Helper functions (utilities)
-func setupTest(t *testing.T) {...}
-func assertExpected(t *testing.T, ...) {...}
+```
+.
+├── client.go              # Client interface and WithClient context manager
+├── query.go               # Query API (one-shot operations)
+├── errors.go              # Structured error types
+├── transport.go           # Transport interface abstraction
+├── internal/
+│   ├── cli/               # CLI discovery and command building
+│   ├── control/           # Bidirectional control protocol (hooks, permissions, MCP)
+│   ├── parser/            # JSON message parsing with speculative parsing
+│   ├── shared/            # Shared types (Message, ContentBlock interfaces)
+│   └── subprocess/        # Subprocess management and protocol adapter
+└── examples/              # Usage examples (numbered by complexity)
 ```
 
-**Table-Driven Tests**: Use for complex scenarios with multiple test cases:
-```go
-tests := []struct {
-    name     string
-    setup    func() *mockType
-    wantErr  bool
-    validate func(*testing.T, result)
-}{...}
-```
+**Data Flow**:
+1. `Query()`/`Client` -> `Transport` interface -> `subprocess.Transport` -> Claude CLI
+2. CLI stdout -> `parser.Parser` -> `shared.Message` types -> User code
+3. Control protocol: `control.Protocol` <-> CLI (hooks, permissions, MCP)
 
-**Helper Functions**: Always call `t.Helper()` in test utilities:
-```go
-func setupTestContext(t *testing.T, timeout time.Duration) (context.Context, context.CancelFunc) {
-    t.Helper()  // Critical for correct line reporting
-    return context.WithTimeout(context.Background(), timeout)
-}
-```
+<!-- END AUTO-MANAGED -->
 
-**Mock Design**: Use functional options for flexible mock configuration:
-```go
-type MockOption func(*mockType)
-func WithError(err error) MockOption { return func(m *mockType) { m.err = err } }
+<!-- AUTO-MANAGED: conventions -->
+## Code Conventions
 
-// Usage: newMockWithOptions(WithError(expectedErr))
-```
+- **Idiomatic Go**: Use `gofmt` formatting, standard naming conventions
+- **Interface-driven**: All message types implement `Message`, all content blocks implement `ContentBlock`
+- **Error handling**: Use `fmt.Errorf` with `%w` verb for wrapping, include contextual information
+- **Context-first**: All blocking functions accept `context.Context` as first parameter
+- **JSON handling**: Custom `UnmarshalJSON` for union types, discriminate on `"type"` field
 
-**Context Management**: Only add context when tests actually need it (blocking operations, timeouts, cancellation). Don't add unused context just for consistency:
-```go
-// ✅ Good - context used for blocking operations
-ctx, cancel := setupTestContext(t, 10*time.Second)
-defer cancel()
-err := client.Connect(ctx)
+<!-- END AUTO-MANAGED -->
 
-// ❌ Avoid - unused context violates Go principles
-ctx, cancel := setupTestContext(t, 10*time.Second)
-defer cancel()
-_ = ctx // Don't do this
-err := NewConnectionError("test", nil)  // No blocking operation
-```
+<!-- AUTO-MANAGED: patterns -->
+## Detected Patterns
 
-**Resource Cleanup**: Test defer behavior and cleanup:
-```go
-func() {
-    resource := setupResource(t)
-    defer cleanupResource(t, resource)  // Test cleanup
-    // ... test logic
-}() // Scoped cleanup verification
-```
+- **Transport interface**: Central abstraction for CLI communication; use `MockTransport` for tests
+- **Process cleanup**: SIGTERM -> wait 5 seconds -> SIGKILL pattern
+- **Buffer protection**: 1MB limit to prevent memory exhaustion
+- **Environment variables**: Set `CLAUDE_CODE_ENTRYPOINT` to identify SDK to CLI
+- **Table-driven tests**: Use for complex scenarios with multiple test cases
+- **Functional options**: `WithXxx()` pattern for configuration
 
-**Thread Safety**: All mocks must be thread-safe with proper mutex usage for concurrent testing.
+<!-- END AUTO-MANAGED -->
 
-**Self-Contained Test Files**: Each test file should have its own helper functions with descriptive names to avoid dependencies between test files:
-```go
-// ✅ Good - each file has its own helpers
-// client_test.go
-func setupClientTestContext(t *testing.T, timeout time.Duration) (context.Context, context.CancelFunc) {...}
+<!-- AUTO-MANAGED: git-insights -->
+## Git Insights
 
-// errors_test.go  
-func setupErrorTestContext(t *testing.T, timeout time.Duration) (context.Context, context.CancelFunc) {...}
+- Conventional commit messages: `feat:`, `fix:`, `docs:`, `test:`, `chore:`
+- Issue references in commits: `(Issue #N)` or `(#N)`
+- PR-based workflow with CI checks
 
-// ❌ Avoid - shared helpers create hidden dependencies
-// Shared setupTestContext used across multiple test files
-```
+<!-- END AUTO-MANAGED -->
+
+<!-- AUTO-MANAGED: best-practices -->
+## Best Practices
+
+- **TDD approach**: Write failing tests first, implement to make them pass
+- **Test file organization**: Test functions first, then mocks, then helpers
+- **Helper functions**: Always call `t.Helper()` in test utilities
+- **Thread safety**: All mocks must be thread-safe with proper mutex usage
+- **Self-contained tests**: Each test file has its own helpers to avoid dependencies
+
+<!-- END AUTO-MANAGED -->
+
+<!-- MANUAL -->
+## Custom Notes
+
+Add project-specific notes here. This section is never auto-modified.
+
+<!-- END MANUAL -->
