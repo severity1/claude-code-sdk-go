@@ -123,6 +123,15 @@ func runTaskExtractionExample() {
 	)
 
 	if err != nil {
+		if cliErr := claudecode.AsCLINotFoundError(err); cliErr != nil {
+			fmt.Printf("Claude CLI not found: %v\n", cliErr)
+			fmt.Println("Install with: npm install -g @anthropic-ai/claude-code")
+			return
+		}
+		if connErr := claudecode.AsConnectionError(err); connErr != nil {
+			fmt.Printf("Connection failed: %v\n", connErr)
+			return
+		}
 		fmt.Printf("Error: %v\n", err)
 		return
 	}
@@ -222,6 +231,15 @@ func runContactExtractionExample() {
 	)
 
 	if err != nil {
+		if cliErr := claudecode.AsCLINotFoundError(err); cliErr != nil {
+			fmt.Printf("Claude CLI not found: %v\n", cliErr)
+			fmt.Println("Install with: npm install -g @anthropic-ai/claude-code")
+			return
+		}
+		if connErr := claudecode.AsConnectionError(err); connErr != nil {
+			fmt.Printf("Connection failed: %v\n", connErr)
+			return
+		}
 		fmt.Printf("Error: %v\n", err)
 		return
 	}
@@ -297,6 +315,15 @@ func runExplicitOutputFormatExample() {
 	)
 
 	if err != nil {
+		if cliErr := claudecode.AsCLINotFoundError(err); cliErr != nil {
+			fmt.Printf("Claude CLI not found: %v\n", cliErr)
+			fmt.Println("Install with: npm install -g @anthropic-ai/claude-code")
+			return
+		}
+		if connErr := claudecode.AsConnectionError(err); connErr != nil {
+			fmt.Printf("Connection failed: %v\n", connErr)
+			return
+		}
 		fmt.Printf("Error: %v\n", err)
 		return
 	}

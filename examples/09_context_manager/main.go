@@ -22,6 +22,15 @@ func main() {
 	fmt.Println("[+] Guaranteed cleanup on errors")
 
 	if err := demonstrateWithClient(ctx, question); err != nil {
+		if cliErr := claudecode.AsCLINotFoundError(err); cliErr != nil {
+			fmt.Printf("Claude CLI not found: %v\n", cliErr)
+			fmt.Println("Install with: npm install -g @anthropic-ai/claude-code")
+			return
+		}
+		if connErr := claudecode.AsConnectionError(err); connErr != nil {
+			fmt.Printf("Connection failed: %v\n", connErr)
+			return
+		}
 		log.Printf("WithClient failed: %v", err)
 	}
 
@@ -31,6 +40,15 @@ func main() {
 	fmt.Println("[!] Easy to forget cleanup")
 
 	if err := demonstrateManualPattern(ctx, question); err != nil {
+		if cliErr := claudecode.AsCLINotFoundError(err); cliErr != nil {
+			fmt.Printf("Claude CLI not found: %v\n", cliErr)
+			fmt.Println("Install with: npm install -g @anthropic-ai/claude-code")
+			return
+		}
+		if connErr := claudecode.AsConnectionError(err); connErr != nil {
+			fmt.Printf("Connection failed: %v\n", connErr)
+			return
+		}
 		log.Printf("Manual pattern failed: %v", err)
 	}
 

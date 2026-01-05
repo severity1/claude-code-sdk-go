@@ -250,6 +250,15 @@ func demonstrateServerDiagnostics() {
 	)
 
 	if err != nil {
+		if cliErr := claudecode.AsCLINotFoundError(err); cliErr != nil {
+			fmt.Printf("Claude CLI not found: %v\n", cliErr)
+			fmt.Println("Install with: npm install -g @anthropic-ai/claude-code")
+			return
+		}
+		if connErr := claudecode.AsConnectionError(err); connErr != nil {
+			fmt.Printf("Connection failed: %v\n", connErr)
+			return
+		}
 		// Don't fail the example if CLI is not available
 		fmt.Printf("Note: %v\n", err)
 		fmt.Println("(Diagnostics methods require an active connection)")
