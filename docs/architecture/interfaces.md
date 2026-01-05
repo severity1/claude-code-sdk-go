@@ -203,6 +203,7 @@ func (b *TextBlock) BlockType() string { return "text" }
 type ThinkingBlock struct {
     MessageType string `json:"type"`      // Always "thinking"
     Thinking    string `json:"thinking"`
+    Signature   string `json:"signature"`
 }
 
 func (b *ThinkingBlock) BlockType() string { return "thinking" }
@@ -219,10 +220,10 @@ func (b *ToolUseBlock) BlockType() string { return "tool_use" }
 
 // ToolResultBlock contains the result of a tool execution.
 type ToolResultBlock struct {
-    MessageType string `json:"type"`       // Always "tool_result"
-    ToolUseID   string `json:"tool_use_id"`
-    Content     string `json:"content"`
-    IsError     bool   `json:"is_error,omitempty"`
+    MessageType string      `json:"type"`       // Always "tool_result"
+    ToolUseID   string      `json:"tool_use_id"`
+    Content     interface{} `json:"content"`    // string or structured data
+    IsError     *bool       `json:"is_error,omitempty"`
 }
 
 func (b *ToolResultBlock) BlockType() string { return "tool_result" }
