@@ -30,8 +30,9 @@ type Transport interface {
     SetModel(ctx context.Context, model *string) error
 
     // SetPermissionMode changes permission handling during a session.
-    // Valid modes: default, acceptEdits, plan, bypassPermissions
-    SetPermissionMode(ctx context.Context, mode string) error
+    // Valid modes: PermissionModeDefault, PermissionModeAcceptEdits,
+    // PermissionModePlan, PermissionModeBypassPermissions.
+    SetPermissionMode(ctx context.Context, mode PermissionMode) error
 
     // RewindFiles reverts tracked files to state at a specific message.
     // Requires file checkpointing to be enabled.
@@ -114,10 +115,9 @@ func (m *UserMessage) Type() string { return "user" }
 
 // AssistantMessage represents Claude's response.
 type AssistantMessage struct {
-    MessageType string         `json:"type"`      // Always "assistant"
-    Content     []ContentBlock `json:"content"`   // Text, thinking, tool use blocks
-    Model       *string        `json:"model,omitempty"`
-    StopReason  *string        `json:"stop_reason,omitempty"`
+    MessageType string                 `json:"type"`    // Always "assistant"
+    Content     []ContentBlock         `json:"content"` // Text, thinking, tool use blocks
+    Model       string                 `json:"model"`   // Model used for response
     Error       *AssistantMessageError `json:"error,omitempty"`
 }
 
@@ -125,23 +125,26 @@ func (m *AssistantMessage) Type() string { return "assistant" }
 
 // SystemMessage represents system-level messages.
 type SystemMessage struct {
-    MessageType string `json:"type"`      // Always "system"
-    Subtype     string `json:"subtype"`   // "init", "result", etc.
-    Data        any    `json:"data,omitempty"`
+    MessageType string         `json:"type"`    // Always "system"
+    Subtype     string         `json:"subtype"` // "init", "result", etc.
+    Data        map[string]any `json:"-"`       // Preserved original data (not serialized)
 }
 
 func (m *SystemMessage) Type() string { return "system" }
 
 // ResultMessage represents the final result of an operation.
 type ResultMessage struct {
-    MessageType      string  `json:"type"`       // Always "result"
-    Subtype          string  `json:"subtype"`
-    CostUSD          float64 `json:"cost_usd"`
-    Duration         float64 `json:"duration_ms"`
-    IsError          bool    `json:"is_error"`
-    Result           *string `json:"result,omitempty"`
-    SessionID        string  `json:"session_id"`
-    StructuredOutput any     `json:"structured_output,omitempty"`
+    MessageType      string          `json:"type"`                       // Always "result"
+    Subtype          string          `json:"subtype"`
+    DurationMs       int             `json:"duration_ms"`                // Total duration in ms
+    DurationAPIMs    int             `json:"duration_api_ms"`            // API call duration
+    IsError          bool            `json:"is_error"`
+    NumTurns         int             `json:"num_turns"`                  // Number of conversation turns
+    SessionID        string          `json:"session_id"`
+    TotalCostUSD     *float64        `json:"total_cost_usd,omitempty"`   // Total cost in USD
+    Usage            *map[string]any `json:"usage,omitempty"`            // Token usage details
+    Result           *string         `json:"result,omitempty"`
+    StructuredOutput any             `json:"structured_output,omitempty"`
 }
 
 func (m *ResultMessage) Type() string { return "result" }

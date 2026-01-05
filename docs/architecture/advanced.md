@@ -131,6 +131,8 @@ client := claudecode.NewClient(
 
 ### Hook Results
 
+Hook callbacks return a `HookResult` that controls execution flow:
+
 ```go
 // Allow execution to continue
 claudecode.HookResultContinue()
@@ -140,6 +142,45 @@ claudecode.HookResultBlock("Reason for blocking")
 
 // Modify context (PreToolUse only)
 claudecode.HookResultModify(modifiedData)
+```
+
+### Hook Output Structure
+
+The underlying `HookJSONOutput` structure controls hook behavior:
+
+```go
+type HookJSONOutput struct {
+    // Continue indicates whether Claude should proceed (default: true)
+    Continue *bool `json:"continue,omitempty"`
+
+    // SuppressOutput hides stdout from transcript mode
+    SuppressOutput *bool `json:"suppressOutput,omitempty"`
+
+    // StopReason is the message shown when Continue is false
+    StopReason *string `json:"stopReason,omitempty"`
+
+    // Decision can be "block" to indicate blocking behavior
+    Decision *string `json:"decision,omitempty"`
+
+    // SystemMessage is a warning message displayed to the user
+    SystemMessage *string `json:"systemMessage,omitempty"`
+
+    // Reason is feedback for Claude about the decision
+    Reason *string `json:"reason,omitempty"`
+
+    // HookSpecificOutput contains event-specific output fields
+    HookSpecificOutput any `json:"hookSpecificOutput,omitempty"`
+}
+```
+
+**Usage Example:**
+```go
+// Block with explanation using StopReason
+return claudecode.HookResult{
+    Continue:   boolPtr(false),
+    StopReason: stringPtr("Dangerous command detected - execution halted"),
+    Reason:     stringPtr("Command matched blocked pattern: sudo"),
+}, nil
 ```
 
 ## MCP Server Integration
