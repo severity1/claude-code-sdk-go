@@ -30,9 +30,9 @@ type Transport interface {
     SetModel(ctx context.Context, model *string) error
 
     // SetPermissionMode changes permission handling during a session.
-    // Valid modes: PermissionModeDefault, PermissionModeAcceptEdits,
-    // PermissionModePlan, PermissionModeBypassPermissions.
-    SetPermissionMode(ctx context.Context, mode PermissionMode) error
+    // Valid modes: "default", "acceptEdits", "plan", "bypassPermissions".
+    // Note: Transport uses string; Client uses typed PermissionMode and converts.
+    SetPermissionMode(ctx context.Context, mode string) error
 
     // RewindFiles reverts tracked files to state at a specific message.
     // Requires file checkpointing to be enabled.
@@ -49,20 +49,21 @@ type Transport interface {
 
 ### Implementation
 
-The concrete implementation is in `internal/subprocess/transport.go`:
+The concrete implementation is in `internal/subprocess/transport.go`. Key fields shown below (simplified - actual struct has 20+ fields):
 
 ```go
 type Transport struct {
     cmd             *exec.Cmd
     stdin           io.WriteCloser
     stdout          io.ReadCloser
-    stderr          io.ReadCloser
+    stderr          *os.File          // Temporary file for stderr isolation
+    stderrPipe      io.ReadCloser     // Pipe for callback-based stderr handling
     parser          *parser.Parser
     msgChan         chan Message
     errChan         chan error
     validator       *StreamValidator
     controlProtocol *control.Protocol
-    // ... additional fields
+    // ... see transport.go for complete definition
 }
 ```
 
