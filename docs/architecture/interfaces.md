@@ -193,36 +193,36 @@ type ContentBlock interface {
 ```go
 // TextBlock contains text content from Claude.
 type TextBlock struct {
-    Type string `json:"type"`  // Always "text"
-    Text string `json:"text"`
+    MessageType string `json:"type"`  // Always "text"
+    Text        string `json:"text"`
 }
 
 func (b *TextBlock) BlockType() string { return "text" }
 
 // ThinkingBlock contains Claude's reasoning (extended thinking).
 type ThinkingBlock struct {
-    Type     string `json:"type"`      // Always "thinking"
-    Thinking string `json:"thinking"`
+    MessageType string `json:"type"`      // Always "thinking"
+    Thinking    string `json:"thinking"`
 }
 
 func (b *ThinkingBlock) BlockType() string { return "thinking" }
 
 // ToolUseBlock represents Claude requesting to use a tool.
 type ToolUseBlock struct {
-    Type  string         `json:"type"`   // Always "tool_use"
-    ID    string         `json:"id"`
-    Name  string         `json:"name"`
-    Input map[string]any `json:"input"`
+    MessageType string         `json:"type"`        // Always "tool_use"
+    ToolUseID   string         `json:"tool_use_id"`
+    Name        string         `json:"name"`
+    Input       map[string]any `json:"input"`
 }
 
 func (b *ToolUseBlock) BlockType() string { return "tool_use" }
 
 // ToolResultBlock contains the result of a tool execution.
 type ToolResultBlock struct {
-    Type      string `json:"type"`       // Always "tool_result"
-    ToolUseID string `json:"tool_use_id"`
-    Content   string `json:"content"`
-    IsError   bool   `json:"is_error,omitempty"`
+    MessageType string `json:"type"`       // Always "tool_result"
+    ToolUseID   string `json:"tool_use_id"`
+    Content     string `json:"content"`
+    IsError     bool   `json:"is_error,omitempty"`
 }
 
 func (b *ToolResultBlock) BlockType() string { return "tool_result" }
