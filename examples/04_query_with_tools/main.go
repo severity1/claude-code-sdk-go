@@ -71,6 +71,12 @@ func queryWithTools(ctx context.Context, question string, allowedTools []string)
 		claudecode.WithSystemPrompt("You are a helpful assistant. Explain your file operations clearly."),
 	)
 	if err != nil {
+		if cliErr := claudecode.AsCLINotFoundError(err); cliErr != nil {
+			return fmt.Errorf("Claude CLI not found: %w (Install with: npm install -g @anthropic-ai/claude-code)", cliErr)
+		}
+		if connErr := claudecode.AsConnectionError(err); connErr != nil {
+			return fmt.Errorf("connection failed: %w", connErr)
+		}
 		return fmt.Errorf("query failed: %w", err)
 	}
 	defer iterator.Close()

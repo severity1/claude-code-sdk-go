@@ -205,6 +205,25 @@ The Go SDK (`github.com/severity1/claude-agent-sdk-go`) implements all features 
 | `"server_error"` | `AssistantMessageErrorServer` | PARITY |
 | `"unknown"` | `AssistantMessageErrorUnknown` | PARITY |
 
+### Go-Specific Error Type Helpers
+
+Go SDK provides idiomatic helper functions following the `os.IsNotExist` pattern. These work with wrapped errors (using `errors.As` internally).
+
+| Function | Description | Status |
+|:---------|:------------|:-------|
+| `IsConnectionError(err)` | Check if error is ConnectionError | GO-NATIVE |
+| `IsCLINotFoundError(err)` | Check if error is CLINotFoundError | GO-NATIVE |
+| `IsProcessError(err)` | Check if error is ProcessError | GO-NATIVE |
+| `IsJSONDecodeError(err)` | Check if error is JSONDecodeError | GO-NATIVE |
+| `IsMessageParseError(err)` | Check if error is MessageParseError | GO-NATIVE |
+| `AsConnectionError(err)` | Extract *ConnectionError or nil | GO-NATIVE |
+| `AsCLINotFoundError(err)` | Extract *CLINotFoundError or nil | GO-NATIVE |
+| `AsProcessError(err)` | Extract *ProcessError or nil | GO-NATIVE |
+| `AsJSONDecodeError(err)` | Extract *JSONDecodeError or nil | GO-NATIVE |
+| `AsMessageParseError(err)` | Extract *MessageParseError or nil | GO-NATIVE |
+
+**Note**: Python uses `isinstance()` for error type checking. Go SDK provides these helpers as a more idiomatic alternative to manual type assertions.
+
 ---
 
 ## Hook Types

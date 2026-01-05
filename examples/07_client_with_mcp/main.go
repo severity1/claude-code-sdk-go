@@ -57,6 +57,15 @@ func main() {
 			"mcp__time__convert_time"),
 		claudecode.WithSystemPrompt("You are a helpful assistant. Use the MCP time server to get and convert times between timezones."))
 	if err != nil {
+		if cliErr := claudecode.AsCLINotFoundError(err); cliErr != nil {
+			fmt.Printf("Claude CLI not found: %v\n", cliErr)
+			fmt.Println("Install with: npm install -g @anthropic-ai/claude-code")
+			return
+		}
+		if connErr := claudecode.AsConnectionError(err); connErr != nil {
+			fmt.Printf("Connection failed: %v\n", connErr)
+			return
+		}
 		log.Fatalf("Time workflow failed: %v", err)
 	}
 }

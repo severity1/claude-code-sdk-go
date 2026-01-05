@@ -371,9 +371,14 @@ claudecode.WithToolsPreset("my_custom_preset")
 ```go
 iterator, err := claudecode.Query(ctx, "test")
 if err != nil {
-    var cliError *claudecode.CLINotFoundError
-    if errors.As(err, &cliError) {
+    // Use As* helpers for typed error extraction with field access
+    if cliErr := claudecode.AsCLINotFoundError(err); cliErr != nil {
+        fmt.Printf("CLI not found at: %s\n", cliErr.Path)
         fmt.Println("Please install: npm install -g @anthropic-ai/claude-code")
+        return
+    }
+    if connErr := claudecode.AsConnectionError(err); connErr != nil {
+        fmt.Printf("Connection failed: %v\n", connErr)
         return
     }
     log.Fatal(err)

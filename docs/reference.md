@@ -1369,23 +1369,59 @@ type MessageParseError struct {
 func NewMessageParseError(message string, data any) *MessageParseError
 ```
 
+### Error Type Helper Functions
+
+Go-native helper functions following the `os.IsNotExist` pattern from the standard library. These helpers work with wrapped errors (using `errors.As` internally).
+
+#### Is* Functions (Boolean Checks)
+
+```go
+func IsConnectionError(err error) bool
+func IsCLINotFoundError(err error) bool
+func IsProcessError(err error) bool
+func IsJSONDecodeError(err error) bool
+func IsMessageParseError(err error) bool
+```
+
+#### As* Functions (Type Extraction)
+
+```go
+func AsConnectionError(err error) *ConnectionError
+func AsCLINotFoundError(err error) *CLINotFoundError
+func AsProcessError(err error) *ProcessError
+func AsJSONDecodeError(err error) *JSONDecodeError
+func AsMessageParseError(err error) *MessageParseError
+```
+
 ### Error Handling Example
 
 ```go
 iterator, err := claudecode.Query(ctx, "Hello")
 if err != nil {
-    switch e := err.(type) {
-    case *claudecode.CLINotFoundError:
-        log.Fatal("Please install Claude Code: npm install -g @anthropic-ai/claude-code")
-    case *claudecode.ProcessError:
-        log.Fatalf("Process failed with exit code: %d\n%s", e.ExitCode, e.Stderr)
-    case *claudecode.JSONDecodeError:
-        log.Fatalf("Failed to parse response: %s", e.Line)
-    default:
-        log.Fatalf("Unexpected error: %v", err)
+    // Check for specific error types using As* helpers
+    if cliErr := claudecode.AsCLINotFoundError(err); cliErr != nil {
+        fmt.Printf("Claude CLI not found: %v\n", cliErr)
+        fmt.Println("Install with: npm install -g @anthropic-ai/claude-code")
+        return
     }
+    if connErr := claudecode.AsConnectionError(err); connErr != nil {
+        fmt.Printf("Connection failed: %v\n", connErr)
+        return
+    }
+    if procErr := claudecode.AsProcessError(err); procErr != nil {
+        log.Fatalf("Process failed with exit code: %d\n%s", procErr.ExitCode, procErr.Stderr)
+    }
+    if jsonErr := claudecode.AsJSONDecodeError(err); jsonErr != nil {
+        log.Fatalf("Failed to parse response: %s", jsonErr.Line)
+    }
+    log.Fatalf("Unexpected error: %v", err)
 }
 defer iterator.Close()
+
+// Alternative: Boolean checks for simple conditionals
+if claudecode.IsCLINotFoundError(err) {
+    // Handle CLI not found
+}
 ```
 
 ---
