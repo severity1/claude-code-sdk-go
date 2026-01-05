@@ -50,13 +50,16 @@ golangci-lint run                 # Comprehensive linting
 │   ├── parser/            # JSON message parsing with speculative parsing
 │   ├── shared/            # Shared types (Message, ContentBlock interfaces)
 │   └── subprocess/        # Subprocess management and protocol adapter
-└── examples/              # Usage examples (numbered by complexity)
+├── examples/              # Usage examples (numbered by complexity)
+└── docs/architecture/     # Detailed architecture documentation
 ```
 
 **Data Flow**:
 1. `Query()`/`Client` -> `Transport` interface -> `subprocess.Transport` -> Claude CLI
 2. CLI stdout -> `parser.Parser` -> `shared.Message` types -> User code
 3. Control protocol: `control.Protocol` <-> CLI (hooks, permissions, MCP)
+
+**Documentation**: See ARCHITECTURE.md and CONTRIBUTING.md for comprehensive details on design patterns, interfaces, data flow, and contribution guidelines.
 
 <!-- END AUTO-MANAGED -->
 
