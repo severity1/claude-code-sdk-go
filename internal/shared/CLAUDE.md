@@ -1,36 +1,56 @@
-# Shared Types Context
+# Module: shared
 
-**Context**: Shared types and interfaces used across internal packages to resolve import cycles
+<!-- AUTO-MANAGED: module-description -->
+## Purpose
 
-## Component Focus
-- **Core Types** - Message types, Options struct, error types shared across packages  
-- **Import Cycle Resolution** - Neutral location for types that both main and internal packages need
-- **Interface Contracts** - Shared contracts without circular dependencies
+Shared types used across the SDK. Defines the `Message` and `ContentBlock` interfaces, concrete message types, error types, options, and streaming utilities.
 
-## Package Purpose
-This package exists solely to break the circular dependency between the main package and internal packages like subprocess, parser, and cli. It contains only the minimal set of types that need to be shared.
+<!-- END AUTO-MANAGED -->
 
-## Design Principles
-- **Minimal Surface Area** - Only types that cause import cycles
-- **No Business Logic** - Pure data types and interfaces only
-- **No External Dependencies** - Keep imports minimal
-- **Stable API** - Changes here affect multiple packages
+<!-- AUTO-MANAGED: architecture -->
+## Module Architecture
 
-## Types Included
-- **Options** - Configuration struct used by CLI, subprocess, and main package
-- **Message Types** - User/Assistant/System/Result messages used by parser and main
-- **Error Types** - SDK errors used by subprocess, CLI, and main package  
-- **StreamMessage** - Stream communication type used by transport layer
-
-## Usage Pattern
-Internal packages import from here instead of main package:
-```go
-import "github.com/severity1/claude-agent-sdk-go/internal/shared"
+```
+shared/
+├── message.go           # Message interface, UserMessage, AssistantMessage, ResultMessage
+├── message_test.go      # Message type tests
+├── errors.go            # CLINotFoundError, ConnectionError, etc.
+├── errors_test.go       # Error type tests
+├── errors_helpers_test.go # Error helper tests
+├── options.go           # Options struct, functional options
+├── options_test.go      # Options tests
+├── stream.go            # StreamIssue, StreamStats
+├── stream_test.go       # Stream tests
+└── validator.go         # Input validation
 ```
 
-Main package re-exports types for public API compatibility:
-```go  
-type Options = shared.Options
-```
+**Type Hierarchy**:
+- `Message` interface: `Type() string`
+- `ContentBlock` interface: `BlockType() string`
+- Concrete types: `UserMessage`, `AssistantMessage`, `SystemMessage`, `ResultMessage`
+- Content blocks: `TextBlock`, `ThinkingBlock`, `ToolUseBlock`, `ToolResultBlock`
 
-This maintains public API while breaking import cycles.
+<!-- END AUTO-MANAGED -->
+
+<!-- AUTO-MANAGED: conventions -->
+## Module-Specific Conventions
+
+- Interface-driven polymorphism: All message types implement `Message`
+- Custom JSON unmarshaling: Use `json.RawMessage` for delayed parsing
+- Type discrimination: Switch on `"type"` field for union types
+- Error wrapping: Use `%w` verb for error chain support
+
+<!-- END AUTO-MANAGED -->
+
+<!-- AUTO-MANAGED: dependencies -->
+## Key Dependencies
+
+- `encoding/json`: JSON serialization/deserialization
+- Standard library only (no external dependencies)
+
+<!-- END AUTO-MANAGED -->
+
+<!-- MANUAL -->
+## Notes
+
+<!-- END MANUAL -->

@@ -1,70 +1,63 @@
-# Usage Patterns Context
+# Module: examples
 
-**Context**: Example usage patterns for Claude Agent SDK Go with Query vs Client API patterns, tool integration, and Go-native concurrency
+<!-- AUTO-MANAGED: module-description -->
+## Purpose
 
-## Component Focus
-- **Query API Patterns** - One-shot automation, scripting, CI/CD integration with automatic cleanup
-- **Client API Patterns** - Interactive conversations, multi-turn workflows, streaming responses with persistent connections
-- **Tool Integration Patterns** - Core tools (Read/Write/Edit) and MCP tools (AWS, databases) with security restrictions
-- **Go-Native Concurrency** - Goroutines, channels, context patterns for SDK users
-- **Error Handling Examples** - Proper error handling and resource cleanup patterns
+Working examples demonstrating SDK usage patterns. Examples are numbered by complexity (01-20) from beginner to advanced, covering Query API, Client API, tools, MCP integration, and production patterns.
 
-## Required Usage Patterns
+<!-- END AUTO-MANAGED -->
 
-### Query API (One-Shot Operations)
-**Use Cases**: Automation scripts, batch processing, CI/CD pipelines, documentation generation
-**Pattern**: Resource acquisition → defer cleanup → iterator processing with proper error handling
+<!-- AUTO-MANAGED: architecture -->
+## Module Architecture
 
-### Query with Tool Security Restrictions
-**Pattern**: Tool allowlists for file operations, MCP integration with safety controls using `WithAllowedTools()` and `WithDisallowedTools()`
+```
+examples/
+├── 01_quickstart/           # Basic Query API usage
+├── 02_client_streaming/     # Real-time streaming responses
+├── 03_client_multi_turn/    # Multi-turn conversations
+├── 04_query_with_tools/     # File operations with Query API
+├── 05_client_with_tools/    # Interactive file workflows
+├── 06_query_with_mcp/       # MCP server integration (Query)
+├── 07_client_with_mcp/      # MCP server integration (Client)
+├── 08_client_advanced/      # Error handling, model switching
+├── 09_context_manager/      # WithClient pattern
+├── 10_session_management/   # Session isolation
+├── 11_permission_callback/  # Tool permission control
+├── 12_hooks/                # Lifecycle hooks
+├── 13_file_checkpointing/   # File rewind capabilities
+├── 14_sdk_mcp_server/       # In-process custom tools
+├── 15_programmatic_subagents/ # Agent definitions
+├── 16_structured_output/    # JSON schema constraints
+├── 17_plugins/              # Plugin configuration
+├── 18_sandbox_security/     # Command isolation
+├── 19_partial_streaming/    # Real-time delta updates
+├── 20_debugging_and_diagnostics/ # Debug output, health monitoring
+└── README.md                # Example documentation
+```
 
-### Client API (Streaming/Multi-Turn)
-**Use Cases**: Interactive conversations, progressive workflows, context preservation
-**Pattern**: Connect → defer cleanup → channel-based streaming with context preservation across interactions
+<!-- END AUTO-MANAGED -->
 
-## Tool Integration Patterns
+<!-- AUTO-MANAGED: conventions -->
+## Module-Specific Conventions
 
-### Core File Tools Security Model
-**Pattern**: Principle of least privilege with read-only restrictions for security audits, progressive file workflows with Client API context preservation
+- Each example is self-contained in its own directory
+- All examples have a `main.go` with runnable code
+- Run with `go run main.go` from the example directory
+- Prerequisites noted in README.md (e.g., MCP servers need `uvx`)
 
-### MCP Tool Security Patterns
-**Pattern**: Least privilege with explicit tool names (no wildcards), read-only database operations (SELECT only), multi-service integration with explicit boundaries
+<!-- END AUTO-MANAGED -->
 
-## Required Go-Native Patterns
+<!-- AUTO-MANAGED: dependencies -->
+## Key Dependencies
 
-### Context-First Design
-**Pattern**: Context as first parameter throughout, timeout/cancellation handling, context propagation to all blocking operations
+- Root `claudecode` package
+- Claude CLI installed (`npm install -g @anthropic-ai/claude-code`)
+- Go 1.18+
+- Optional: `uvx` for MCP server examples
 
-### Concurrent Query Pattern
-**Pattern**: Goroutines with proper closure variable capture, channel-based result collection, essential resource cleanup in concurrent operations
+<!-- END AUTO-MANAGED -->
 
-## Error Handling Requirements
+<!-- MANUAL -->
+## Notes
 
-### Structured Error Handling
-**Pattern**: Type-specific error checking with `errors.As()`, error wrapping with `%w`, normal completion vs error differentiation in iterators
-
-### Resource Cleanup Requirements
-**Pattern**: Immediate defer after resource acquisition, goroutine panic recovery with resource cleanup, connection lifecycle management
-
-## Example Directory Structure (Learning Path)
-
-### Numbered Examples (Easiest → Hardest)
-- `01_quickstart/` - Basic Query API usage, message handling
-- `02_client_streaming/` - Real-time streaming patterns with Client API
-- `03_client_multi_turn/` - Context preservation across interactions
-- `04_query_with_tools/` - File operations with Query API
-- `05_client_with_tools/` - Interactive file workflows with Client API
-- `06_query_with_mcp/` - MCP tool integration (AWS) with Query API
-- `07_client_with_mcp/` - Interactive MCP workflows with Client API
-- `08_client_advanced/` - Error handling, retries, production patterns
-- `09_client_vs_query/` - API comparison and selection guidance
-- `10_context_manager/` - WithClient pattern vs manual connection management
-
-### Integration Requirements
-- All examples must demonstrate proper resource cleanup
-- Context-first design throughout all patterns
-- Tool security restrictions as primary examples
-- Go-native concurrency patterns where applicable
-- Explicit MCP tool names (no wildcards) for security compliance
-- Progressive complexity from basic queries to advanced cloud workflows
-- WithClient pattern demonstration for automatic resource management
+<!-- END MANUAL -->
