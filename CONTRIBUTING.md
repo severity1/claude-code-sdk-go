@@ -29,8 +29,30 @@ Run these before every commit:
 ```bash
 go fmt ./...           # Format code
 go vet ./...           # Static analysis
-golangci-lint run      # Comprehensive linting (if available)
+golangci-lint run      # Comprehensive linting
+gocyclo -over 15 .     # Cyclomatic complexity check
+
+# Or use Makefile (recommended)
+make check             # Run all checks
 ```
+
+### Cyclomatic Complexity
+
+We use `gocyclo` to track function complexity. The threshold is **15** - functions above this should be refactored.
+
+```bash
+# Install gocyclo
+go install github.com/fzipp/gocyclo/cmd/gocyclo@latest
+
+# Check complexity
+make cyclo             # Show functions over threshold
+gocyclo -over 15 .     # Direct usage
+```
+
+**Guidelines:**
+- Keep functions under complexity 15
+- Higher complexity is acceptable for: table-driven tests, examples, orchestration code
+- When complexity grows, extract helper methods
 
 ### Go Conventions
 

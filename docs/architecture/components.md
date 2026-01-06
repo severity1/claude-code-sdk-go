@@ -107,6 +107,9 @@ Helper functions: `AsCLINotFoundError()`, `AsConnectionError()`, `AsMessageParse
 
 **Key Files**:
 - `protocol.go` - Request/response correlation, message routing
+- `hooks.go` - Hook callback handling, input parsing
+- `mcp.go` - MCP JSONRPC message routing
+- `permissions.go` - Permission callback handling
 - `types.go` - Control request/response types
 - `types_hook.go` - Hook event types and callbacks
 
@@ -152,7 +155,10 @@ Helper functions: `AsCLINotFoundError()`, `AsConnectionError()`, `AsMessageParse
 **Purpose**: Subprocess management and transport layer
 
 **Key Files**:
-- `transport.go` - `Transport` struct, process lifecycle
+- `transport.go` - Transport struct, Connect, lifecycle orchestration
+- `io.go` - Stdout/stderr handling, message parsing
+- `process.go` - Process termination, cleanup
+- `config.go` - MCP config, environment, protocol options
 - `protocol_adapter.go` - Adapter for control protocol
 
 **Responsibilities**:

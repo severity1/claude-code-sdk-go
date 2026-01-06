@@ -7,13 +7,17 @@ GOGET=$(GOCMD) get
 GOMOD=$(GOCMD) mod
 GOFMT=gofmt
 GOLINT=golangci-lint
+GOCYCLO=gocyclo
+
+# Complexity threshold (functions over this are flagged)
+CYCLO_THRESHOLD=15
 
 # Version (for documentation and tooling)
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 COMMIT ?= $(shell git rev-parse HEAD 2>/dev/null || echo "unknown")
 DATE ?= $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-.PHONY: all test test-verbose test-race test-cover clean deps fmt lint vet check examples help
+.PHONY: all test test-verbose test-race test-cover clean deps fmt lint vet cyclo cyclo-check check examples help
 
 all: test
 
@@ -67,7 +71,16 @@ lint: ## Run linter
 vet: ## Run go vet
 	$(GOCMD) vet ./...
 
-check: fmt-check vet lint ## Run all checks
+cyclo: ## Show cyclomatic complexity (functions over threshold)
+	@$(GOCMD) install github.com/fzipp/gocyclo/cmd/gocyclo@latest 2>/dev/null || true
+	@echo "Functions with cyclomatic complexity > $(CYCLO_THRESHOLD):"
+	@$(GOCYCLO) -over $(CYCLO_THRESHOLD) . || true
+
+cyclo-check: ## Fail if complexity exceeds threshold (CI use)
+	@$(GOCMD) install github.com/fzipp/gocyclo/cmd/gocyclo@latest 2>/dev/null || true
+	@$(GOCYCLO) -over $(CYCLO_THRESHOLD) -avg .
+
+check: fmt-check vet lint cyclo ## Run all checks (includes complexity)
 
 ## Security
 security: ## Run security checks

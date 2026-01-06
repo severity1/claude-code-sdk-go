@@ -12,12 +12,15 @@ Bidirectional control protocol for Claude CLI communication. Manages request/res
 
 ```
 control/
-├── protocol.go           # Protocol struct, Initialize, SendControlRequest
-├── protocol_test.go      # Protocol unit tests
-├── protocol_hook_test.go # Hook system tests
-├── protocol_mcp_test.go  # MCP server tests
+├── protocol.go           # Protocol struct, Initialize, SendControlRequest, message routing
+├── hooks.go              # Hook callback handling, input parsing, registration
+├── mcp.go                # MCP JSONRPC message routing, method dispatch
+├── permissions.go        # Permission callback handling, response building
 ├── types.go              # Request/Response types, Initialize handshake
 ├── types_hook.go         # Hook event types, HookMatcher, HookCallback
+├── protocol_test.go      # Protocol unit tests
+├── hooks_test.go         # Hook system tests
+├── mcp_test.go           # MCP server tests
 └── types_hook_test.go    # Hook type tests
 ```
 
@@ -25,7 +28,8 @@ control/
 1. `Initialize()`: Handshake with CLI, negotiate capabilities
 2. `SendControlRequest()`: Send JSON-RPC style requests with correlation IDs
 3. `HandleIncomingMessage()`: Route responses to pending requests
-4. Hook/Permission callbacks: Invoked on tool use events
+4. Hook/Permission callbacks: Invoked on tool use events (hooks.go, permissions.go)
+5. MCP messages: Route to SDK MCP servers (mcp.go)
 
 <!-- END AUTO-MANAGED -->
 
