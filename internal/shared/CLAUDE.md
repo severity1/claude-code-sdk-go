@@ -12,16 +12,17 @@ Shared types used across the SDK. Defines the `Message` and `ContentBlock` inter
 
 ```
 shared/
-├── message.go           # Message interface, UserMessage, AssistantMessage, ResultMessage
-├── message_test.go      # Message type tests
-├── errors.go            # CLINotFoundError, ConnectionError, etc.
-├── errors_test.go       # Error type tests
+├── message.go             # Message interface, UserMessage, AssistantMessage, ResultMessage
+├── message_test.go        # Message type tests
+├── message_bench_test.go  # Message benchmarks
+├── errors.go              # CLINotFoundError, ConnectionError, etc.
+├── errors_test.go         # Error type tests
 ├── errors_helpers_test.go # Error helper tests
-├── options.go           # Options struct, functional options
-├── options_test.go      # Options tests
-├── stream.go            # StreamIssue, StreamStats
-├── stream_test.go       # Stream tests
-└── validator.go         # Input validation
+├── options.go             # Options struct, functional options
+├── options_test.go        # Options tests
+├── stream.go              # StreamIssue, StreamStats
+├── stream_test.go         # Stream tests
+└── validator.go           # Input validation
 ```
 
 **Type Hierarchy**:
