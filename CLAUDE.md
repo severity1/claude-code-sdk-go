@@ -22,10 +22,12 @@ go build ./...                    # Build all packages
 go test ./...                     # Run all tests
 go test -race ./...               # Race condition detection
 go test -cover ./...              # Coverage analysis
+make test-cover                   # Tests with coverage + HTML report
 
 # Specific test patterns
 go test -v -run TestClient        # Run client tests (verbose)
 go test -count=3 -run TestClient  # Run tests multiple times for consistency
+make bench                        # Run benchmarks
 
 # Code quality (run before commits)
 go fmt ./...                      # Format code
@@ -35,8 +37,13 @@ gocyclo -over 15 .                # Cyclomatic complexity check
 
 # Makefile targets (recommended)
 make check                        # Run all checks (fmt, vet, lint, cyclo)
-make test-race                    # Tests with race detection
 make cyclo                        # Show complex functions (threshold: 15)
+make cyclo-check                  # Fail if complexity exceeds threshold (CI)
+make fmt-check                    # Verify code formatting
+make security                     # Run security vulnerability checks
+make sdk-test                     # Test SDK as consumer would use it
+make release-check                # Pre-release validation
+make ci                           # Run full CI pipeline locally
 ```
 
 <!-- END AUTO-MANAGED -->
@@ -77,6 +84,9 @@ make cyclo                        # Show complex functions (threshold: 15)
 - **Error handling**: Use `fmt.Errorf` with `%w` verb for wrapping, include contextual information
 - **Context-first**: All blocking functions accept `context.Context` as first parameter
 - **JSON handling**: Custom `UnmarshalJSON` for union types, discriminate on `"type"` field
+- **Cyclomatic complexity**: Keep functions under complexity 15 (measured by gocyclo); higher acceptable for table-driven tests, examples, orchestration code
+- **Naming patterns**: Interfaces describe behavior, implementations use concrete names, options use `WithXxx()`, errors use `XxxError` suffix
+- **No unnecessary exports**: Keep identifiers unexported unless needed by external consumers
 
 <!-- END AUTO-MANAGED -->
 
@@ -95,9 +105,11 @@ make cyclo                        # Show complex functions (threshold: 15)
 <!-- AUTO-MANAGED: git-insights -->
 ## Git Insights
 
-- Conventional commit messages: `feat:`, `fix:`, `docs:`, `test:`, `chore:`
-- Issue references in commits: `(Issue #N)` or `(#N)`
+- Conventional commit messages: `feat:`, `fix:`, `docs:`, `test:`, `refactor:`, `chore:`
+- Issue references in commits: `(Issue #N)` or `(#N)`, use `Closes #N` in PR body
 - PR-based workflow with CI checks
+- Recent focus: Cyclomatic complexity monitoring with gocyclo (commit 1c0e86c)
+- Makefile integration: All code quality checks (fmt, vet, lint, cyclo) unified under `make check`
 
 <!-- END AUTO-MANAGED -->
 
