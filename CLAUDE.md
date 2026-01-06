@@ -31,6 +31,12 @@ go test -count=3 -run TestClient  # Run tests multiple times for consistency
 go fmt ./...                      # Format code
 go vet ./...                      # Static analysis
 golangci-lint run                 # Comprehensive linting
+gocyclo -over 15 .                # Cyclomatic complexity check
+
+# Makefile targets (recommended)
+make check                        # Run all checks (fmt, vet, lint, cyclo)
+make test-race                    # Tests with race detection
+make cyclo                        # Show complex functions (threshold: 15)
 ```
 
 <!-- END AUTO-MANAGED -->
