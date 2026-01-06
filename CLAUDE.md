@@ -57,6 +57,8 @@ make ci                           # Run full CI pipeline locally
 ├── query.go               # Query API (one-shot operations)
 ├── errors.go              # Structured error types
 ├── transport.go           # Transport interface abstraction
+├── options.go             # Options types and functional options
+├── options_bench_test.go  # Options performance benchmarks
 ├── internal/
 │   ├── cli/               # CLI discovery and command building
 │   ├── control/           # Bidirectional control protocol (hooks, permissions, MCP)
@@ -99,6 +101,7 @@ make ci                           # Run full CI pipeline locally
 - **Environment variables**: Set `CLAUDE_CODE_ENTRYPOINT` to identify SDK to CLI
 - **Table-driven tests**: Use for complex scenarios with multiple test cases
 - **Functional options**: `WithXxx()` pattern for configuration
+- **Benchmark tests**: Use `var sink any` to prevent dead code elimination, always call `b.ReportAllocs()` and `b.ResetTimer()`
 
 <!-- END AUTO-MANAGED -->
 
@@ -108,7 +111,8 @@ make ci                           # Run full CI pipeline locally
 - Conventional commit messages: `feat:`, `fix:`, `docs:`, `test:`, `refactor:`, `chore:`
 - Issue references in commits: `(Issue #N)` or `(#N)`, use `Closes #N` in PR body
 - PR-based workflow with CI checks
-- Recent focus: Cyclomatic complexity monitoring with gocyclo (commit 1c0e86c)
+- Recent focus: Comprehensive benchmarking for performance-critical modules (Issue #74, commits e1c48f3, 368fa3e)
+- Benchmark organization: Table-driven benchmarks across all core modules (options, parser, shared, control, cli)
 - Makefile integration: All code quality checks (fmt, vet, lint, cyclo) unified under `make check`
 
 <!-- END AUTO-MANAGED -->
@@ -121,6 +125,7 @@ make ci                           # Run full CI pipeline locally
 - **Helper functions**: Always call `t.Helper()` in test utilities
 - **Thread safety**: All mocks must be thread-safe with proper mutex usage
 - **Self-contained tests**: Each test file has its own helpers to avoid dependencies
+- **Benchmark organization**: Use table-driven benchmarks with realistic scenarios, measure allocations with `b.ReportAllocs()`
 
 <!-- END AUTO-MANAGED -->
 

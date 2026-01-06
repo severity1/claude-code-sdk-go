@@ -144,6 +144,68 @@ func (m *mockTransport) SendMessage(msg Message) {
 }
 ```
 
+### Benchmarks
+
+Run benchmarks to measure performance:
+
+```bash
+make bench                           # Run all benchmarks
+go test -bench=. -benchmem ./...     # Direct usage
+go test -bench=. -benchmem ./internal/parser/  # Specific package
+```
+
+**Benchmark Best Practices:**
+
+```go
+// Sink prevents dead code elimination by the compiler
+var sink any
+
+func BenchmarkFeature(b *testing.B) {
+    // Setup outside timed section
+    fixture := setupFixture()
+
+    b.ReportAllocs()  // Always track allocations
+    b.ResetTimer()    // Exclude setup time
+
+    for i := 0; i < b.N; i++ {
+        result := functionUnderTest(fixture)
+        sink = result  // Prevent optimization
+    }
+}
+```
+
+**Table-Driven Benchmarks:**
+
+```go
+func BenchmarkProcessLine(b *testing.B) {
+    tests := []struct {
+        name string
+        input string
+    }{
+        {"simple", `{"type":"user","content":"hello"}`},
+        {"complex", `{"type":"assistant","content":[...]}`},
+    }
+
+    for _, tc := range tests {
+        b.Run(tc.name, func(b *testing.B) {
+            b.ReportAllocs()
+            b.ResetTimer()
+            for i := 0; i < b.N; i++ {
+                result, _ := Process(tc.input)
+                sink = result
+            }
+        })
+    }
+}
+```
+
+**Key Points:**
+- Use `var sink any` at package level to prevent dead code elimination
+- Always call `b.ReportAllocs()` to track memory allocations
+- Call `b.ResetTimer()` after setup code
+- Reset mutable state between iterations (e.g., `parser.Reset()`)
+- Use `b.Run()` for table-driven sub-benchmarks
+
 ## Commit Conventions
 
 Use conventional commit messages:

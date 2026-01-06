@@ -12,8 +12,9 @@ JSON message parsing with speculative parsing and buffer management. Handles str
 
 ```
 parser/
-├── json.go       # Parser struct, ProcessLine, speculative parsing
-└── json_test.go  # Parser tests
+├── json.go            # Parser struct, ProcessLine, speculative parsing
+├── json_test.go       # Parser tests
+└── json_bench_test.go # Performance benchmarks
 ```
 
 **Parsing Strategy**:
