@@ -12,8 +12,9 @@ CLI discovery and command building functionality. Locates the Claude CLI binary,
 
 ```
 cli/
-├── discovery.go       # FindCLI(), version checking, path resolution
-└── discovery_test.go  # Discovery tests
+├── discovery.go            # FindCLI(), version checking, path resolution
+├── discovery_test.go       # Discovery tests
+└── discovery_bench_test.go # Performance benchmarks
 ```
 
 **Key Functions**:
