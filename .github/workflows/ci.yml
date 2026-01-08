@@ -67,8 +67,17 @@ jobs:
 
     - name: Run fuzz tests
       run: |
-        go test -fuzz=. -fuzztime=30s ./internal/parser
-        go test -fuzz=. -fuzztime=30s ./internal/shared
+        # internal/parser
+        for func in $(go test -list 'Fuzz' ./internal/parser | grep ^Fuzz); do
+          echo "Fuzzing $func"
+          go test -fuzz="^$func$" -fuzztime=30s ./internal/parser
+        done
+
+        # internal/shared
+        for func in $(go test -list 'Fuzz' ./internal/shared | grep ^Fuzz); do
+          echo "Fuzzing $func"
+          go test -fuzz="^$func$" -fuzztime=30s ./internal/shared
+        done
 
   lint:
     name: Lint
