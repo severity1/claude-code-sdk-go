@@ -198,12 +198,14 @@ func (t *Transport) setupControlProtocol(ctx context.Context) error {
 	t.protocol = control.NewProtocol(t.protocolAdapter, t.buildProtocolOptions()...)
 
 	if err := t.protocol.Start(ctx); err != nil {
+		t.cleanup()
 		return fmt.Errorf("failed to start control protocol: %w", err)
 	}
 
 	// Perform handshake when hooks, permissions, checkpointing, or SDK MCP servers configured
 	if t.needsProtocolHandshake() {
 		if _, err := t.protocol.Initialize(ctx); err != nil {
+			t.cleanup()
 			return fmt.Errorf("failed to initialize control protocol: %w", err)
 		}
 	}
