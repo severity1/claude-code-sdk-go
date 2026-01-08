@@ -1,0 +1,2 @@
+go test fuzz v1
+string("\"\\u0000\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n\\u0000\n0\n0\n0\n0\n0\n0\n0\n\\u000\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0")

@@ -1,0 +1,2 @@
+go test fuzz v1
+string("\xe2\n\x8d\n\xe2\n\xe2\n\x8d\n\xe2\n\x8d\n\xe2")

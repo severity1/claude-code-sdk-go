@@ -1,0 +1,2 @@
+go test fuzz v1
+string("{\"type\": \"u\xd8\xd8\xd8\xd8\xd8 \"message\": {\"content\": [{\"type\": \"text\", \"text\": \"test\"}]}}")

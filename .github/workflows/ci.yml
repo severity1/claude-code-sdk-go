@@ -51,6 +51,25 @@ jobs:
         name: codecov-umbrella
         token: ${{ secrets.CODECOV_TOKEN }}
 
+  fuzz:
+    name: Fuzz Testing
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ env.GO_VERSION }}
+        cache: true
+
+    - name: Run fuzz tests
+      run: |
+        go test -fuzz=. -fuzztime=30s ./internal/parser
+        go test -fuzz=. -fuzztime=30s ./internal/shared
+
   lint:
     name: Lint
     runs-on: ubuntu-latest

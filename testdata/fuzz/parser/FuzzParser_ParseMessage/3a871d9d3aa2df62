@@ -1,0 +1,2 @@
+go test fuzz v1
+string("\"熏珏熏珏珆熏珏珏\"")

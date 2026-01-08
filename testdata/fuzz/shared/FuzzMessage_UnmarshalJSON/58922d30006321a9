@@ -1,0 +1,2 @@
+go test fuzz v1
+string("\"\xed\x86\xe8\x83\xe8\xae0\"")
