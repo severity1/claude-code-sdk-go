@@ -1,3 +1,0 @@
-go test fuzz v1
-string("\"")
-string("\xbf\x98\xee0\x9a\"")

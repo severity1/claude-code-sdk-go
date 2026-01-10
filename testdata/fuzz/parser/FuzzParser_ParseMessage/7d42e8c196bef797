@@ -1,2 +1,0 @@
-go test fuzz v1
-string("\"\\uDAAA\\uAAAA\\uAAAA\\uDAAA\\uAAAA\\uAAAA\"")

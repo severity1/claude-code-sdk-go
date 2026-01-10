@@ -1,2 +1,0 @@
-go test fuzz v1
-string("\"煅煅煅煅煅煅煅煅煅\ue145煅煅煅\ue145煅煅\"")

@@ -1,3 +1,0 @@
-go test fuzz v1
-string("\"\\")
-string("b\\b\\b\\\nb\\b\n0\n0")

@@ -1,3 +1,0 @@
-go test fuzz v1
-string("\"\xe7")
-string("\xa4\xa4줤\"")

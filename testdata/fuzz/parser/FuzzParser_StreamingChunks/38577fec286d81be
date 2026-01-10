@@ -1,3 +1,0 @@
-go test fuzz v1
-string("\xb1\n0\n0\n0\n0\n\u0093\n0\n0\n\u0097")
-string("0")

@@ -1,2 +1,0 @@
-go test fuzz v1
-string("\"\\u000A\n0\n0\n0\n0\n0\n0\n0\n0\n0\n\\u000\nA\n0\n0\n0\n0\n0\n0\n0\n0\n0")

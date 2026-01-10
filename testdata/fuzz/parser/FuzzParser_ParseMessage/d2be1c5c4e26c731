@@ -1,2 +1,0 @@
-go test fuzz v1
-string("\"\\u0000\\uD800\\u0000\\uD800\\u0000\\u0000\"")

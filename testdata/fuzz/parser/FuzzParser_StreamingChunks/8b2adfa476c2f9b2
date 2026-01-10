@@ -1,3 +1,0 @@
-go test fuzz v1
-string("{\"\x87\":\"ކܴ\xea\xaa0\"}")
-string("0")

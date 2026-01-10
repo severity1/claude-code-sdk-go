@@ -1,3 +1,0 @@
-go test fuzz v1
-string("ꣀ")
-string("0\n\x9b\n\xe5\xa2\n\xf9\xb3\n0\n\xcd\xec\n0\xbb\n0\x84\n0\n\xc9\n\x9f")

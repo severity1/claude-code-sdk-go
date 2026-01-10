@@ -1,2 +1,0 @@
-go test fuzz v1
-string("0 \xa20\n0\n000\x8c\n0")

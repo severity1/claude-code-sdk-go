@@ -1,2 +1,0 @@
-go test fuzz v1
-string("000\x8a\n000\xc4\n000\xef\n000\xcc\n000\x93\n000\xaa\n\xaa00\x85")

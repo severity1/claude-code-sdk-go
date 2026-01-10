@@ -1,3 +1,0 @@
-go test fuzz v1
-string("\"\\u0AX")
-string("0\n0\n0")

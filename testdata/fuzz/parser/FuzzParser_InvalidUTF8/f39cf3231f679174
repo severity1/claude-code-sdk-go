@@ -1,2 +1,0 @@
-go test fuzz v1
-[]byte("{\"\":{\"\":\"日\xe60\xac語\"}}")

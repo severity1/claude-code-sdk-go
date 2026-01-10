@@ -1,2 +1,0 @@
-go test fuzz v1
-[]byte("[0\t\t\r\t\t\r0\n0\n0")

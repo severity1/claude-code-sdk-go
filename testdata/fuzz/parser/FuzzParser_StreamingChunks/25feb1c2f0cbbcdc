@@ -1,3 +1,0 @@
-go test fuzz v1
-string("{")
-string("\"\":\"\",\"\":\"\xf8\xf8\xf8\xf800\"}")

@@ -1,2 +1,0 @@
-go test fuzz v1
-string("{\"type\": \"syste\", \"asubtypem\": \"\"}\n{\"type\":\xeb\"systemx, yb\"suept\": \"b\"}a\xc1 \xfb.\xa1\xac\x1b")

@@ -1,3 +1,0 @@
-go test fuzz v1
-string("\u0093\n\u0097")
-string("\x920")

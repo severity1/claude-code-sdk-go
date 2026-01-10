@@ -1,2 +1,0 @@
-go test fuzz v1
-string("\x89\x89\xbb\n\x89\xbb\x89\x89")

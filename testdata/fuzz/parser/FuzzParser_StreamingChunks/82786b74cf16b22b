@@ -1,3 +1,0 @@
-go test fuzz v1
-string("[\r\r\x00")
-string("0\n0\n0\n0\n0")

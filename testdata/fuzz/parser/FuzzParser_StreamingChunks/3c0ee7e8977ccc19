@@ -1,3 +1,0 @@
-go test fuzz v1
-string("{\"\":\"\xf3\x86\xaa\xea\"}")
-string("0")

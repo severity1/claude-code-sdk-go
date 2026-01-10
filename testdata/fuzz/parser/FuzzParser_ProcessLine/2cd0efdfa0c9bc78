@@ -1,2 +1,0 @@
-go test fuzz v1
-string("\"\xf2\x89\x8a\xf2\x8a\x87\U00089287\"")

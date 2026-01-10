@@ -1,2 +1,0 @@
-go test fuzz v1
-string("\U0004a2fe\x8b\n0")

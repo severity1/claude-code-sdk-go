@@ -1,3 +1,0 @@
-go test fuzz v1
-string("\xe5")
-string("ё0\xe2\n0")

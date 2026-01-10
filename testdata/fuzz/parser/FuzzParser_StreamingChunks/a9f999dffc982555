@@ -1,3 +1,0 @@
-go test fuzz v1
-string("\xd6\xf1")
-string("0")

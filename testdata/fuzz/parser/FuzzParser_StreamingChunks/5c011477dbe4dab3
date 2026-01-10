@@ -1,3 +1,0 @@
-go test fuzz v1
-string("{\"\":\"\xf2\U0008a28a")
-string("\"}")

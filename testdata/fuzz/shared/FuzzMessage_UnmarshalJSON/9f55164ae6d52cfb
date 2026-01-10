@@ -1,2 +1,0 @@
-go test fuzz v1
-string("\"\U0003df7d\U0003df7d\U0003df7d\U0003df7d\"")

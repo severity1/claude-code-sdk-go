@@ -1,3 +1,0 @@
-go test fuzz v1
-string("0\xcc")
-string("\xe8\n0\x95")

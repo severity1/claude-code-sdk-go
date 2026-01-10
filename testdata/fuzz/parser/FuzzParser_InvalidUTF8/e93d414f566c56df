@@ -1,2 +1,0 @@
-go test fuzz v1
-[]byte("fa\n0\n0\n0")

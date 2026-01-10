@@ -1,3 +1,0 @@
-go test fuzz v1
-string("{\"00\xb8\xb8\xb8\xb8\xb8\xb8\xb800\":")
-string("\"\"}")

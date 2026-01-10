@@ -1,3 +1,0 @@
-go test fuzz v1
-string("\xe3\xa2\xd4\n0")
-string("0")

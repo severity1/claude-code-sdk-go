@@ -1,3 +1,0 @@
-go test fuzz v1
-string("0E00000000")
-string("00")

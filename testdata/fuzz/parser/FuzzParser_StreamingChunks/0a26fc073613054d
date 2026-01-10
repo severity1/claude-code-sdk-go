@@ -1,3 +1,0 @@
-go test fuzz v1
-string("0\x10\n\n000\x94\n悒\xaf\n0\n000\x91\n0\xd4\n000\xd8\n\xd20")
-string("0\xf2")

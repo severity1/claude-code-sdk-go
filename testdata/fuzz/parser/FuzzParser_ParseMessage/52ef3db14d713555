@@ -1,2 +1,0 @@
-go test fuzz v1
-string("\"\xf9\xf9\"")

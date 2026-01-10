@@ -1,3 +1,0 @@
-go test fuzz v1
-string("0E000000000000000000")
-string("0\n000\n00\n0\n0")

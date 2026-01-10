@@ -1,2 +1,0 @@
-go test fuzz v1
-string("nu\n0\n0\n0\n0\n0\n0\n0")

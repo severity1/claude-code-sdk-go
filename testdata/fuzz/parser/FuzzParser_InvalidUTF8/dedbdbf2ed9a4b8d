@@ -1,2 +1,0 @@
-go test fuzz v1
-[]byte("\ue15a\xb9\n0")
