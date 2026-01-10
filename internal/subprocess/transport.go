@@ -112,28 +112,9 @@ func (t *Transport) Connect(ctx context.Context) error {
 	}
 
 	// Generate MCP config file if McpServers are specified
-	opts := t.options
-	if t.options != nil && len(t.options.McpServers) > 0 {
-		mcpConfigPath, err := t.generateMcpConfigFile()
-		if err != nil {
-			return fmt.Errorf("failed to generate MCP config file: %w", err)
-		}
-
-		// Create modified options with mcp-config in ExtraArgs
-		// We don't want to mutate the user's options, so create a shallow copy
-		optsCopy := *t.options
-		if optsCopy.ExtraArgs == nil {
-			optsCopy.ExtraArgs = make(map[string]*string)
-		} else {
-			// Deep copy the ExtraArgs map
-			extraArgsCopy := make(map[string]*string, len(optsCopy.ExtraArgs)+1)
-			for k, v := range optsCopy.ExtraArgs {
-				extraArgsCopy[k] = v
-			}
-			optsCopy.ExtraArgs = extraArgsCopy
-		}
-		optsCopy.ExtraArgs["mcp-config"] = &mcpConfigPath
-		opts = &optsCopy
+	opts, err := t.prepareMcpConfig()
+	if err != nil {
+		return err
 	}
 
 	// Build command with all options
@@ -160,29 +141,10 @@ func (t *Transport) Connect(ctx context.Context) error {
 	}
 
 	// Check CLI version and warn if outdated (non-blocking)
-	if warning := cli.CheckCLIVersion(ctx, t.cliPath); warning != "" {
-		if t.options != nil && t.options.StderrCallback != nil {
-			t.options.StderrCallback(warning)
-		}
-	}
+	t.emitCLIVersionWarning(ctx)
 
 	// Set up I/O pipes
-	var err error
-	if t.promptArg == nil {
-		// Only create stdin pipe if we need to send messages via stdin
-		t.stdin, err = t.cmd.StdinPipe()
-		if err != nil {
-			return fmt.Errorf("failed to create stdin pipe: %w", err)
-		}
-	}
-
-	t.stdout, err = t.cmd.StdoutPipe()
-	if err != nil {
-		return fmt.Errorf("failed to create stdout pipe: %w", err)
-	}
-
-	// Handle stderr configuration
-	if err := t.setupStderr(); err != nil {
+	if err := t.setupIoPipes(); err != nil {
 		return err
 	}
 
@@ -217,31 +179,49 @@ func (t *Transport) Connect(ctx context.Context) error {
 	// stdin will be closed after sending the message in SendMessage()
 
 	// Set up control protocol for streaming mode only
-	// One-shot mode (closeStdin=true) doesn't need control protocol
-	if !t.closeStdin {
-		t.protocolAdapter = NewProtocolAdapter(t.stdin)
-		t.protocol = control.NewProtocol(t.protocolAdapter, t.buildProtocolOptions()...)
-
-		// Start the protocol's background goroutine
-		// Note: The protocol's readLoop will block on the closed channel from the adapter,
-		// which is intentional - we route messages via handleStdout() -> HandleIncomingMessage()
-		if err := t.protocol.Start(t.ctx); err != nil {
-			t.cleanup()
-			return fmt.Errorf("failed to start control protocol: %w", err)
-		}
-
-		// Perform control protocol handshake when hooks, permission callbacks,
-		// file checkpointing, or SDK MCP servers are configured
-		if t.options != nil && (t.options.Hooks != nil || t.options.CanUseTool != nil || t.options.EnableFileCheckpointing || t.hasSdkMcpServers()) {
-			if _, err := t.protocol.Initialize(t.ctx); err != nil {
-				t.cleanup()
-				return fmt.Errorf("failed to initialize control protocol: %w", err)
-			}
-		}
+	if err := t.setupControlProtocol(t.ctx); err != nil {
+		return err
 	}
 
 	t.connected = true
 	return nil
+}
+
+// setupControlProtocol initializes control protocol for streaming mode.
+// Returns nil immediately for one-shot mode (closeStdin == true).
+func (t *Transport) setupControlProtocol(ctx context.Context) error {
+	if t.closeStdin {
+		return nil // One-shot mode doesn't need control protocol
+	}
+
+	t.protocolAdapter = NewProtocolAdapter(t.stdin)
+	t.protocol = control.NewProtocol(t.protocolAdapter, t.buildProtocolOptions()...)
+
+	if err := t.protocol.Start(ctx); err != nil {
+		t.cleanup()
+		return fmt.Errorf("failed to start control protocol: %w", err)
+	}
+
+	// Perform handshake when hooks, permissions, checkpointing, or SDK MCP servers configured
+	if t.needsProtocolHandshake() {
+		if _, err := t.protocol.Initialize(ctx); err != nil {
+			t.cleanup()
+			return fmt.Errorf("failed to initialize control protocol: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// needsProtocolHandshake returns true if control protocol handshake is required.
+func (t *Transport) needsProtocolHandshake() bool {
+	if t.options == nil {
+		return false
+	}
+	return t.options.Hooks != nil ||
+		t.options.CanUseTool != nil ||
+		t.options.EnableFileCheckpointing ||
+		t.hasSdkMcpServers()
 }
 
 // SendMessage sends a message to the CLI subprocess.

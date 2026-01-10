@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/severity1/claude-agent-sdk-go/internal/cli"
 	"github.com/severity1/claude-agent-sdk-go/internal/control"
 	"github.com/severity1/claude-agent-sdk-go/internal/shared"
 )
@@ -237,4 +238,41 @@ func (t *Transport) buildEnvironment() []string {
 	}
 
 	return env
+}
+
+// prepareMcpConfig generates MCP config file if needed and returns modified options.
+// Returns the original options unchanged if no MCP servers are configured.
+func (t *Transport) prepareMcpConfig() (*shared.Options, error) {
+	if t.options == nil || len(t.options.McpServers) == 0 {
+		return t.options, nil
+	}
+
+	mcpConfigPath, err := t.generateMcpConfigFile()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate MCP config file: %w", err)
+	}
+
+	// Create shallow copy with mcp-config in ExtraArgs
+	optsCopy := *t.options
+	if optsCopy.ExtraArgs == nil {
+		optsCopy.ExtraArgs = make(map[string]*string)
+	} else {
+		extraArgsCopy := make(map[string]*string, len(optsCopy.ExtraArgs)+1)
+		for k, v := range optsCopy.ExtraArgs {
+			extraArgsCopy[k] = v
+		}
+		optsCopy.ExtraArgs = extraArgsCopy
+	}
+	optsCopy.ExtraArgs["mcp-config"] = &mcpConfigPath
+	return &optsCopy, nil
+}
+
+// emitCLIVersionWarning performs a non-blocking CLI version check and emits
+// a warning via StderrCallback if the CLI version is outdated.
+func (t *Transport) emitCLIVersionWarning(ctx context.Context) {
+	if warning := cli.CheckCLIVersion(ctx, t.cliPath); warning != "" {
+		if t.options != nil && t.options.StderrCallback != nil {
+			t.options.StderrCallback(warning)
+		}
+	}
 }
