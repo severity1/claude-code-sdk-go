@@ -38,6 +38,16 @@ test-cover: ## Run tests with coverage
 bench: ## Run benchmarks
 	$(GOTEST) -bench=. -benchmem ./...
 
+## Fuzz Testing
+fuzz-test: ## Verify fuzz test corpus (CI mode - fast)
+	@$(GOTEST) ./internal/parser ./internal/shared -v
+
+fuzz: ## Run all fuzz tests (5m each, ~40min total)
+	@for test in ProcessLine ParseMessage DeeplyNestedJSON LongStrings InvalidUTF8 BufferExhaustion StreamingChunks; do \
+		$(GOTEST) -fuzz=FuzzParser_$$test -fuzztime=5m ./internal/parser; \
+	done
+	@$(GOTEST) -fuzz=FuzzMessage_UnmarshalJSON -fuzztime=5m ./internal/shared
+
 ## Clean
 clean: ## Clean build artifacts
 	$(GOCLEAN)
@@ -80,7 +90,7 @@ cyclo-check: ## Fail if complexity exceeds threshold (CI use)
 	@$(GOCMD) install github.com/fzipp/gocyclo/cmd/gocyclo@latest 2>/dev/null || true
 	@$(GOCYCLO) -over $(CYCLO_THRESHOLD) -avg .
 
-check: fmt-check vet lint cyclo ## Run all checks (includes complexity)
+check: fmt-check vet lint cyclo fuzz-test ## Run all checks (includes fuzz corpus)
 
 ## Security
 security: ## Run security checks
@@ -163,7 +173,7 @@ release-dry: ## Dry run release
 	goreleaser release --snapshot --clean --skip-publish
 
 ## CI/CD helpers
-ci: deps-verify test-race check examples sdk-test ## Run CI pipeline locally (SDK focused)
+ci: deps-verify test-race check examples sdk-test fuzz-test ## Run CI pipeline locally (includes fuzz)
 
 ci-coverage: ## Run CI with coverage
 	$(GOTEST) -race -coverprofile=coverage.out ./...
