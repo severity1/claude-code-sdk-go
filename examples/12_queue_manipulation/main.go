@@ -34,19 +34,19 @@ func main() {
 	// Enqueue messages - they stay in queue
 	msg1, err := qm.Enqueue(ctx, sessionID, "What is 2+2?")
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal(err) //nolint:gocritic // intentional exit-on-error for example code
 	}
 	fmt.Printf("   ✓ Enqueued message 1: %s\n", msg1.ID)
 
 	msg2, err := qm.Enqueue(ctx, sessionID, "What is 3+3?")
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal(err) //nolint:gocritic // intentional exit-on-error for example code
 	}
 	fmt.Printf("   ✓ Enqueued message 2: %s\n", msg2.ID)
 
 	msg3, err := qm.Enqueue(ctx, sessionID, "What is 4+4?")
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal(err) //nolint:gocritic // intentional exit-on-error for example code
 	}
 	fmt.Printf("   ✓ Enqueued message 3: %s\n", msg3.ID)
 
@@ -57,7 +57,7 @@ func main() {
 	// Get queue status
 	status, err := qm.GetQueueStatus(sessionID)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal(err) //nolint:gocritic // intentional exit-on-error for example code
 	}
 	fmt.Printf("   Status: %d pending\n", len(status.PendingMessages))
 

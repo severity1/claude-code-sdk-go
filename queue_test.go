@@ -1044,7 +1044,7 @@ func (m *mockClientForQueue) Query(_ context.Context, _ string) error {
 	return nil
 }
 
-func (m *mockClientForQueue) QueryWithSession(ctx context.Context, prompt string, sessionID string) error {
+func (m *mockClientForQueue) QueryWithSession(_ context.Context, _ string, _ string) error {
 	return nil
 }
 
@@ -1052,11 +1052,11 @@ func (m *mockClientForQueue) QueryAsync(ctx context.Context, prompt string) (Que
 	return m.QueryWithSessionAsync(ctx, prompt, defaultSessionID)
 }
 
-func (m *mockClientForQueue) QueryStream(ctx context.Context, messages <-chan StreamMessage) error {
+func (m *mockClientForQueue) QueryStream(_ context.Context, _ <-chan StreamMessage) error {
 	return nil
 }
 
-func (m *mockClientForQueue) ReceiveMessages(ctx context.Context) <-chan Message {
+func (m *mockClientForQueue) ReceiveMessages(_ context.Context) <-chan Message {
 	return nil
 }
 
