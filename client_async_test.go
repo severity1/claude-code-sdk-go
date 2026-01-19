@@ -285,7 +285,7 @@ func TestQueryHandleCancellation(t *testing.T) {
 
 	// Wait should return quickly due to cancellation
 	startTime := time.Now()
-	waitErr := handle.Wait()
+	_ = handle.Wait()
 	elapsed := time.Since(startTime)
 
 	// Should complete faster than the 5 second delay
@@ -681,9 +681,6 @@ func TestQueryHandleInterfaceCompliance(t *testing.T) {
 	handle, err := client.QueryAsync(ctx, "test query")
 	assertNoError(t, err)
 
-	// Verify interface compliance at compile time
-	var _ QueryHandle = handle
-
 	// Test all interface methods
 
 	// ID() returns non-empty string
@@ -757,7 +754,7 @@ func TestQueryHandleInterfaceCompliance(t *testing.T) {
 
 	for _, qs := range statuses {
 		str := qs.String()
-		if str == "" || str == "unknown" {
+		if str == "" || str == statusUnknown {
 			t.Errorf("Status %d String() returned invalid string: '%s'", qs, str)
 		}
 	}
@@ -836,9 +833,9 @@ func (m *mockTransportForAsync) SendMessage(ctx context.Context, message StreamM
 		// Check if we should simulate error
 		if shouldError != nil {
 			m.clientMockTransport.mu.Lock()
-			if m.clientMockTransport.errChan != nil {
+			if m.errChan != nil {
 				select {
-				case m.clientMockTransport.errChan <- shouldError:
+				case m.errChan <- shouldError:
 				default:
 				}
 			}
@@ -849,10 +846,10 @@ func (m *mockTransportForAsync) SendMessage(ctx context.Context, message StreamM
 		// Send simulated messages if configured
 		if len(messages) > 0 {
 			m.clientMockTransport.mu.Lock()
-			if m.clientMockTransport.msgChan != nil {
+			if m.msgChan != nil {
 				for _, msg := range messages {
 					select {
-					case m.clientMockTransport.msgChan <- msg:
+					case m.msgChan <- msg:
 					default:
 					}
 				}
@@ -863,7 +860,7 @@ func (m *mockTransportForAsync) SendMessage(ctx context.Context, message StreamM
 		// If success flag set, send a ResultMessage to signal completion
 		if success {
 			m.clientMockTransport.mu.Lock()
-			if m.clientMockTransport.msgChan != nil {
+			if m.msgChan != nil {
 				// Send a ResultMessage to signal query completion
 				resultMsg := &ResultMessage{
 					MessageType:   MessageTypeResult,
@@ -875,7 +872,7 @@ func (m *mockTransportForAsync) SendMessage(ctx context.Context, message StreamM
 					SessionID:     "default",
 				}
 				select {
-				case m.clientMockTransport.msgChan <- resultMsg:
+				case m.msgChan <- resultMsg:
 				default:
 				}
 			}

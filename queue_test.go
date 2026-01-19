@@ -8,6 +8,12 @@ import (
 	"time"
 )
 
+// Test constants
+const (
+	testSessionID = "test-session-1"
+	testMessage1  = "Message 1"
+)
+
 // ===== TEST FUNCTIONS (PRIMARY PURPOSE) =====
 
 // TestQueueManagerEnqueue tests adding messages to queue without immediate sending
@@ -19,7 +25,7 @@ func TestQueueManagerEnqueue(t *testing.T) {
 	qm, mockClient := setupQueueTestManager(t)
 	defer closeQueueSafely(t, qm)
 
-	sessionID := "test-session-1"
+	sessionID := testSessionID
 
 	// Enqueue a message
 	queuedMsg, err := qm.Enqueue(ctx, sessionID, "First message")
@@ -88,14 +94,14 @@ func TestQueueManagerRemoveFromQueue(t *testing.T) {
 	qm, mockClient := setupQueueTestManager(t)
 	defer closeQueueSafely(t, qm)
 
-	sessionID := "test-session-1"
+	sessionID := testSessionID
 
 	// Pause queue to prevent automatic processing
 	err := qm.PauseQueue(sessionID)
 	assertNoError(t, err)
 
 	// Enqueue multiple messages
-	_, err = qm.Enqueue(ctx, sessionID, "Message 1")
+	_, err = qm.Enqueue(ctx, sessionID, testMessage1)
 	assertNoError(t, err)
 
 	msg2, err := qm.Enqueue(ctx, sessionID, "Message 2")
@@ -144,7 +150,7 @@ func TestQueueManagerRemoveFromQueue(t *testing.T) {
 
 	for _, query := range sentQueries {
 		switch query.prompt {
-		case "Message 1":
+		case testMessage1:
 			hasMsg1 = true
 		case "Message 2":
 			hasMsg2 = true
@@ -154,7 +160,7 @@ func TestQueueManagerRemoveFromQueue(t *testing.T) {
 	}
 
 	if !hasMsg1 {
-		t.Error("Expected Message 1 to be sent")
+		t.Error("Expected testMessage1 to be sent")
 	}
 	if hasMsg2 {
 		t.Error("Expected Message 2 to NOT be sent (was removed)")
@@ -179,7 +185,7 @@ func TestQueueManagerRemoveDuringProcessing(t *testing.T) {
 	qm, mockClient := setupQueueTestManager(t)
 	defer closeQueueSafely(t, qm)
 
-	sessionID := "test-session-1"
+	sessionID := testSessionID
 
 	// Configure mock client to simulate slow processing
 	mockClient.setQueryDelay(500 * time.Millisecond)
@@ -215,13 +221,13 @@ func TestQueueManagerClearQueue(t *testing.T) {
 	qm, mockClient := setupQueueTestManager(t)
 	defer closeQueueSafely(t, qm)
 
-	sessionID := "test-session-1"
+	sessionID := testSessionID
 
 	// Configure slow processing to allow queue buildup
 	mockClient.setQueryDelay(500 * time.Millisecond)
 
 	// Enqueue multiple messages
-	_, err := qm.Enqueue(ctx, sessionID, "Message 1")
+	_, err := qm.Enqueue(ctx, sessionID, testMessage1)
 	assertNoError(t, err)
 
 	// Wait a bit for msg1 to start processing
@@ -265,13 +271,13 @@ func TestQueueManagerClearQueue(t *testing.T) {
 		t.Fatalf("Expected 1 sent query, got %d", len(sentQueries))
 	}
 
-	if sentQueries[0].prompt != "Message 1" {
-		t.Errorf("Expected 'Message 1' to be sent, got '%s'", sentQueries[0].prompt)
+	if sentQueries[0].prompt != testMessage1 {
+		t.Errorf("Expected 'testMessage1' to be sent, got '%s'", sentQueries[0].prompt)
 	}
 
 	// Verify currently processing message completed normally (msg1)
-	if sentQueries[0].prompt != "Message 1" {
-		t.Errorf("Expected processing message 'Message 1', got '%s'", sentQueries[0].prompt)
+	if sentQueries[0].prompt != testMessage1 {
+		t.Errorf("Expected processing message 'testMessage1', got '%s'", sentQueries[0].prompt)
 	}
 }
 
@@ -284,7 +290,7 @@ func TestQueueManagerGetQueueStatus(t *testing.T) {
 	qm, mockClient := setupQueueTestManager(t)
 	defer closeQueueSafely(t, qm)
 
-	sessionID := "test-session-1"
+	sessionID := testSessionID
 
 	// Test status with empty queue
 	status, err := qm.GetQueueStatus(sessionID)
@@ -382,7 +388,7 @@ func TestQueueManagerGetQueueLength(t *testing.T) {
 	qm, mockClient := setupQueueTestManager(t)
 	defer closeQueueSafely(t, qm)
 
-	sessionID := "test-session-1"
+	sessionID := testSessionID
 
 	// Test empty queue
 	length := qm.GetQueueLength(sessionID)
@@ -395,7 +401,7 @@ func TestQueueManagerGetQueueLength(t *testing.T) {
 	assertNoError(t, err)
 
 	// Test queue with 1 message
-	_, err = qm.Enqueue(ctx, sessionID, "Message 1")
+	_, err = qm.Enqueue(ctx, sessionID, testMessage1)
 	assertNoError(t, err)
 
 	length = qm.GetQueueLength(sessionID)
@@ -445,7 +451,7 @@ func TestQueueManagerProcessingOrder(t *testing.T) {
 	qm, mockClient := setupQueueTestManager(t)
 	defer closeQueueSafely(t, qm)
 
-	sessionID := "test-session-1"
+	sessionID := testSessionID
 
 	// Pause queue to enqueue all messages first
 	err := qm.PauseQueue(sessionID)
@@ -500,7 +506,7 @@ func TestQueueManagerConcurrentEnqueue(t *testing.T) {
 	qm, mockClient := setupQueueTestManager(t)
 	defer closeQueueSafely(t, qm)
 
-	sessionID := "test-session-1"
+	sessionID := testSessionID
 
 	// Pause queue to prevent processing during enqueuing
 	err := qm.PauseQueue(sessionID)
@@ -590,14 +596,14 @@ func TestQueueManagerPauseResume(t *testing.T) {
 	qm, mockClient := setupQueueTestManager(t)
 	defer closeQueueSafely(t, qm)
 
-	sessionID := "test-session-1"
+	sessionID := testSessionID
 
 	// Start with paused queue
 	err := qm.PauseQueue(sessionID)
 	assertNoError(t, err)
 
 	// Enqueue messages while paused
-	_, err = qm.Enqueue(ctx, sessionID, "Message 1")
+	_, err = qm.Enqueue(ctx, sessionID, testMessage1)
 	assertNoError(t, err)
 
 	_, err = qm.Enqueue(ctx, sessionID, "Message 2")
@@ -822,10 +828,10 @@ func TestQueueManagerClose(t *testing.T) {
 
 	qm, mockClient := setupQueueTestManager(t)
 
-	sessionID := "test-session-1"
+	sessionID := testSessionID
 
 	// Enqueue messages
-	_, err := qm.Enqueue(ctx, sessionID, "Message 1")
+	_, err := qm.Enqueue(ctx, sessionID, testMessage1)
 	assertNoError(t, err)
 
 	_, err = qm.Enqueue(ctx, sessionID, "Message 2")
@@ -881,7 +887,6 @@ type mockClientForQueue struct {
 
 	// Mock QueryHandle to return
 	mockHandles []*mockQueryHandleForQueue
-	handleIndex int
 
 	// Interface implementation stubs
 	connected bool
@@ -1021,7 +1026,7 @@ func (m *mockQueryHandleForQueue) Done() <-chan struct{} {
 
 // Stub implementations of Client interface methods (not used in queue testing)
 
-func (m *mockClientForQueue) Connect(ctx context.Context, prompt ...StreamMessage) error {
+func (m *mockClientForQueue) Connect(_ context.Context, _ ...StreamMessage) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.connected = true
@@ -1035,7 +1040,7 @@ func (m *mockClientForQueue) Disconnect() error {
 	return nil
 }
 
-func (m *mockClientForQueue) Query(ctx context.Context, prompt string) error {
+func (m *mockClientForQueue) Query(_ context.Context, _ string) error {
 	return nil
 }
 

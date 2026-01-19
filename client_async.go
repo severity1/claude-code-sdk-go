@@ -178,10 +178,3 @@ func (c *ClientImpl) untrackQuery(queryID string) {
 	delete(c.activeQueries, queryID)
 }
 
-// getActiveQueryCount returns the number of active queries.
-// Used for testing and debugging.
-func (c *ClientImpl) getActiveQueryCount() int {
-	c.queriesMu.RLock()
-	defer c.queriesMu.RUnlock()
-	return len(c.activeQueries)
-}

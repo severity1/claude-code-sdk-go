@@ -54,6 +54,9 @@ const (
 	QueryStatusCancelled
 )
 
+// statusUnknown is the string representation for unknown status values.
+const statusUnknown = "unknown"
+
 // String returns the string representation of the query status.
 func (qs QueryStatus) String() string {
 	switch qs {
@@ -68,7 +71,7 @@ func (qs QueryStatus) String() string {
 	case QueryStatusCancelled:
 		return "cancelled"
 	default:
-		return "unknown"
+		return statusUnknown
 	}
 }
 

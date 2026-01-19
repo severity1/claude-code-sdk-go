@@ -16,16 +16,16 @@ func main() {
 
 	// Create and connect client
 	client := claudecode.NewClient()
-	defer client.Disconnect()
 
 	ctx := context.Background()
 	if err := client.Connect(ctx); err != nil {
 		log.Fatal(err)
 	}
+	defer func() { _ = client.Disconnect() }()
 
 	// Create queue manager
 	qm := claudecode.NewQueueManager(client)
-	defer qm.Close()
+	defer func() { _ = qm.Close() }()
 
 	sessionID := "demo-session"
 
@@ -96,11 +96,4 @@ func main() {
 	fmt.Println("   Message 3 (most recent) was successfully removed from the queue before being sent.")
 	fmt.Println("   This demonstrates the 'up arrow' functionality from Claude CLI.")
 	fmt.Println("   Up arrow removes the LAST message you added to the queue.")
-}
-
-func boolToInt(b bool) int {
-	if b {
-		return 1
-	}
-	return 0
 }

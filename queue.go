@@ -27,7 +27,6 @@ type MessageQueue struct {
 	messages   []*QueuedMessage
 	processing *QueuedMessage
 	mu         sync.RWMutex
-	pauseChan  chan struct{}
 	paused     bool
 	resumeChan chan struct{}
 }
@@ -76,7 +75,7 @@ func (ms MessageStatus) String() string {
 	case MessageStatusRemoved:
 		return "removed"
 	default:
-		return "unknown"
+		return statusUnknown
 	}
 }
 
@@ -100,7 +99,7 @@ func NewQueueManager(client Client) *QueueManager {
 
 // Enqueue adds a message to the queue for the specified session.
 // Messages stay in queue until processor picks them up (not sent immediately).
-func (qm *QueueManager) Enqueue(ctx context.Context, sessionID, message string) (*QueuedMessage, error) {
+func (qm *QueueManager) Enqueue(_ context.Context, sessionID, message string) (*QueuedMessage, error) {
 	// Check if QueueManager is closed
 	select {
 	case <-qm.ctx.Done():
