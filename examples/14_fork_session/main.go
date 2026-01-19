@@ -22,7 +22,7 @@ func main() {
 	// Fork from the original session to explore an alternative approach
 	forkOptions := claudecode.NewOptions(
 		claudecode.WithResume(originalSessionID),
-		claudecode.WithForkSession(), // Creates new session with old context
+		claudecode.WithForkSession(true), // Creates new session with old context
 		claudecode.WithSystemPrompt("Let's explore an alternative approach"),
 	)
 
@@ -42,7 +42,7 @@ func main() {
 	// Fork 1: Optimization-focused approach
 	fork1 := claudecode.NewOptions(
 		claudecode.WithResume(baseSessionID),
-		claudecode.WithForkSession(),
+		claudecode.WithForkSession(true),
 		claudecode.WithExtraArg("experiment-type", "optimization"),
 		claudecode.WithSystemPrompt("Focus on performance optimization"),
 	)
@@ -50,7 +50,7 @@ func main() {
 	// Fork 2: Readability-focused approach
 	fork2 := claudecode.NewOptions(
 		claudecode.WithResume(baseSessionID),
-		claudecode.WithForkSession(),
+		claudecode.WithForkSession(true),
 		claudecode.WithExtraArg("experiment-type", "readability"),
 		claudecode.WithSystemPrompt("Focus on code readability"),
 	)
@@ -70,7 +70,7 @@ func main() {
 	knownGoodSessionID := "uuid-known-good-state"
 	recoveryOptions := claudecode.NewOptions(
 		claudecode.WithResume(knownGoodSessionID),
-		claudecode.WithForkSession(),
+		claudecode.WithForkSession(true),
 		claudecode.WithSystemPrompt("Retry with corrected input"),
 		claudecode.WithExtraArg("retry-attempt", "2"),
 	)
@@ -95,7 +95,7 @@ func main() {
 	fmt.Printf("   err := claudecode.WithClient(ctx, func(client claudecode.Client) error {\n")
 	fmt.Printf("       return client.Query(ctx, \"Let's try a different approach\")\n")
 	fmt.Printf("   }, claudecode.WithResume(%q),\n", existingSessionID)
-	fmt.Printf("      claudecode.WithForkSession())\n")
+	fmt.Printf("      claudecode.WithForkSession(true))\n")
 	fmt.Println()
 
 	// Example 5: Complete workflow comparison
@@ -121,7 +121,7 @@ func main() {
 
 	complexOptions := claudecode.NewOptions(
 		claudecode.WithResume("session-to-fork"),
-		claudecode.WithForkSession(),
+		claudecode.WithForkSession(true),
 		claudecode.WithModel("claude-3-5-sonnet-20241022"),
 		claudecode.WithMaxTurns(10),
 		claudecode.WithAllowedTools("Read", "Write", "Edit"),
@@ -154,7 +154,7 @@ func demonstrateErrorHandling(ctx context.Context, sessionID string) {
 	fmt.Println("       // Create fork options")
 	fmt.Println("       opts := claudecode.NewOptions(")
 	fmt.Println("           claudecode.WithResume(sessionID),")
-	fmt.Println("           claudecode.WithForkSession(),")
+	fmt.Println("           claudecode.WithForkSession(true),")
 	fmt.Println("       )")
 	fmt.Println()
 	fmt.Println("       // Use with error handling")
