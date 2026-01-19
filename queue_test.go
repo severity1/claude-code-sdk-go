@@ -1060,11 +1060,11 @@ func (m *mockClientForQueue) ReceiveMessages(_ context.Context) <-chan Message {
 	return nil
 }
 
-func (m *mockClientForQueue) ReceiveResponse(ctx context.Context) MessageIterator {
+func (m *mockClientForQueue) ReceiveResponse(_ context.Context) MessageIterator {
 	return nil
 }
 
-func (m *mockClientForQueue) Interrupt(ctx context.Context) error {
+func (m *mockClientForQueue) Interrupt(_ context.Context) error {
 	return nil
 }
 
