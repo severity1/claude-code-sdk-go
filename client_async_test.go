@@ -312,9 +312,7 @@ func TestQueryHandleCancellation(t *testing.T) {
 	handle.Cancel()
 
 	// Multiple Wait() calls after cancel should still work
-	waitErr = handle.Wait()
-	// Should not block or panic
-	_ = waitErr
+	_ = handle.Wait()
 }
 
 // TestQueryHandleErrorPropagation tests errors flow through error channel
