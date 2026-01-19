@@ -230,8 +230,8 @@ func TestQueueManagerClearQueue(t *testing.T) {
 	_, err := qm.Enqueue(ctx, sessionID, testMessage1)
 	assertNoError(t, err)
 
-	// Wait a bit for msg1 to start processing
-	time.Sleep(100 * time.Millisecond)
+	// Wait for processing to start (initial delay 100ms + processing loop start)
+	time.Sleep(250 * time.Millisecond)
 
 	// Enqueue more messages (these should be pending)
 	_, err = qm.Enqueue(ctx, sessionID, "Message 2")
