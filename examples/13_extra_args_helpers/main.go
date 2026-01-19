@@ -1,3 +1,4 @@
+// Package main demonstrates the ExtraArgs helper functions for configuring Claude Code queries.
 package main
 
 import (
@@ -89,7 +90,7 @@ func main() {
 	if err != nil {
 		log.Printf("   Error: %v\n", err)
 	} else {
-		defer iterator.Close()
+		defer func() { _ = iterator.Close() }()
 		// Iterate through messages and find the final assistant message
 		for {
 			msg, err := iterator.Next(ctx)

@@ -1,3 +1,4 @@
+// Package main demonstrates the fork session functionality for branching conversations.
 package main
 
 import (
@@ -149,7 +150,7 @@ func main() {
 }
 
 // demonstrateErrorHandling shows the recommended pattern for using fork-session in production
-func demonstrateErrorHandling(ctx context.Context, sessionID string) {
+func demonstrateErrorHandling(_ context.Context, _ string) {
 	fmt.Println("   func processWithFork(ctx context.Context, sessionID string) error {")
 	fmt.Println("       // Create fork options")
 	fmt.Println("       opts := claudecode.NewOptions(")

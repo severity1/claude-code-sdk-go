@@ -8,6 +8,12 @@ import (
 	"testing"
 )
 
+// Test constants
+const (
+	testModelSonnet = testModelSonnet
+	testValue       = "value"
+)
+
 // Ensure context is used (for mock transport)
 var _ = context.Background
 
@@ -172,7 +178,7 @@ func TestSessionContinuationOptions(t *testing.T) {
 // T020: Model Specification Options
 func TestModelSpecificationOptions(t *testing.T) {
 	// Test model and permission_prompt_tool_name
-	model := "claude-3-5-sonnet-20241022"
+	model := testModelSonnet
 	toolName := "CustomTool"
 
 	options := NewOptions(
@@ -203,7 +209,7 @@ func TestFunctionalOptionsPattern(t *testing.T) {
 		WithAllowedTools("Read", "Write"),
 		WithDisallowedTools("Bash"),
 		WithPermissionMode(PermissionModeAcceptEdits),
-		WithModel("claude-3-5-sonnet-20241022"),
+		WithModel(testModelSonnet),
 		WithContinueConversation(true),
 		WithResume("session-456"),
 		WithCwd("/tmp/test"),
@@ -231,8 +237,8 @@ func TestFunctionalOptionsPattern(t *testing.T) {
 		t.Errorf("Expected PermissionMode = %q, got %v", PermissionModeAcceptEdits, options.PermissionMode)
 	}
 
-	if options.Model == nil || *options.Model != "claude-3-5-sonnet-20241022" {
-		t.Errorf("Expected Model = %q, got %v", "claude-3-5-sonnet-20241022", options.Model)
+	if options.Model == nil || *options.Model != testModelSonnet {
+		t.Errorf("Expected Model = %q, got %v", testModelSonnet, options.Model)
 	}
 
 	if options.ContinueConversation != true {
@@ -618,7 +624,7 @@ func TestWithTransport(t *testing.T) {
 
 		// Check existing arg is preserved
 		existing, exists := options.ExtraArgs["existing"]
-		if !exists || existing == nil || *existing != "value" {
+		if !exists || existing == nil || *existing != testValue {
 			t.Error("Expected existing ExtraArgs to be preserved")
 		}
 
@@ -1233,6 +1239,8 @@ func TestWithExtraArg(t *testing.T) {
 }
 
 // TestExtraHelpersIntegration tests WithExtraFlag and WithExtraArg together
+//
+//nolint:gocyclo // Test function with many assertions
 func TestExtraHelpersIntegration(t *testing.T) {
 	t.Run("mixed_flags_and_args", func(t *testing.T) {
 		options := NewOptions(
@@ -1279,7 +1287,7 @@ func TestExtraHelpersIntegration(t *testing.T) {
 		if value, exists := options.ExtraArgs["fork-session"]; !exists || value != nil {
 			t.Error("Expected fork-session to be boolean flag")
 		}
-		if value, exists := options.ExtraArgs["custom"]; !exists || value == nil || *value != "value" {
+		if value, exists := options.ExtraArgs["custom"]; !exists || value == nil || *value != testValue {
 			t.Error("Expected custom = value")
 		}
 	})
@@ -1411,7 +1419,7 @@ func TestExtraHelperEdgeCases(t *testing.T) {
 			t.Errorf("Expected 1 arg, got %d", len(options.ExtraArgs))
 		}
 
-		if value, exists := options.ExtraArgs["same"]; !exists || value == nil || *value != "value" {
+		if value, exists := options.ExtraArgs["same"]; !exists || value == nil || *value != testValue {
 			t.Error("Expected same = value (arg overwrites flag)")
 		}
 	})
@@ -1498,7 +1506,7 @@ func TestWithForkSession(t *testing.T) {
 					WithSystemPrompt("Test prompt"),
 					WithResume("session-123"),
 					WithForkSession(true),
-					WithModel("claude-3-5-sonnet-20241022"),
+					WithModel(testModelSonnet),
 					WithMaxTurns(10),
 				)
 			},
@@ -1511,7 +1519,7 @@ func TestWithForkSession(t *testing.T) {
 				if opts.Resume == nil || *opts.Resume != "session-123" {
 					t.Error("Expected Resume to be preserved")
 				}
-				if opts.Model == nil || *opts.Model != "claude-3-5-sonnet-20241022" {
+				if opts.Model == nil || *opts.Model != testModelSonnet {
 					t.Error("Expected Model to be preserved")
 				}
 				if opts.MaxTurns != 10 {
@@ -1559,7 +1567,7 @@ func TestWithForkSession(t *testing.T) {
 				}
 				// Verify valued arg
 				value, exists := opts.ExtraArgs["setting"]
-				if !exists || value == nil || *value != "value" {
+				if !exists || value == nil || *value != testValue {
 					t.Error("Expected setting arg to be 'value'")
 				}
 			},
@@ -1696,7 +1704,7 @@ func TestWithEnvIntegration(t *testing.T) {
 	options := NewOptions(
 		WithSystemPrompt("You are a helpful assistant"),
 		WithEnvVar("DEBUG", "1"),
-		WithModel("claude-3-5-sonnet-20241022"),
+		WithModel(testModelSonnet),
 		WithEnv(map[string]string{
 			"HTTP_PROXY": "http://proxy:8080",
 			"CUSTOM":     "value",
@@ -1715,7 +1723,7 @@ func TestWithEnvIntegration(t *testing.T) {
 
 	// Test that other options are preserved
 	assertOptionsSystemPrompt(t, options, "You are a helpful assistant")
-	assertOptionsModel(t, options, "claude-3-5-sonnet-20241022")
+	assertOptionsModel(t, options, testModelSonnet)
 }
 
 // Helper function following client_test.go patterns
@@ -1767,7 +1775,7 @@ func TestFallbackModelOption(t *testing.T) {
 		model    string
 		expected string
 	}{
-		{"sonnet_model", "claude-3-5-sonnet-20241022", "claude-3-5-sonnet-20241022"},
+		{"sonnet_model", testModelSonnet, testModelSonnet},
 		{"opus_model", "claude-opus-4", "claude-opus-4"},
 		{"empty_model", "", ""},
 	}
@@ -1843,7 +1851,7 @@ func TestNewConfigOptionsIntegration(t *testing.T) {
 	// Test all new options together with existing options
 	options := NewOptions(
 		WithSystemPrompt("You are a helpful assistant"),
-		WithModel("claude-3-5-sonnet-20241022"),
+		WithModel(testModelSonnet),
 		WithMaxBudgetUSD(50.00),
 		WithFallbackModel("claude-opus-4"),
 		WithUser("user-test-123"),
@@ -1858,7 +1866,7 @@ func TestNewConfigOptionsIntegration(t *testing.T) {
 
 	// Verify existing options still work
 	assertOptionsSystemPrompt(t, options, "You are a helpful assistant")
-	assertOptionsModel(t, options, "claude-3-5-sonnet-20241022")
+	assertOptionsModel(t, options, testModelSonnet)
 }
 
 // Helper functions for new options
@@ -2514,7 +2522,7 @@ func TestWithDebugWriterIntegration(t *testing.T) {
 	options := NewOptions(
 		WithSystemPrompt("You are a helpful assistant"),
 		WithDebugWriter(&debugBuf),
-		WithModel("claude-3-5-sonnet-20241022"),
+		WithModel(testModelSonnet),
 		WithPermissionMode(PermissionModeAcceptEdits),
 	)
 
@@ -2525,7 +2533,7 @@ func TestWithDebugWriterIntegration(t *testing.T) {
 
 	// Verify other options are preserved
 	assertOptionsSystemPrompt(t, options, "You are a helpful assistant")
-	assertOptionsModel(t, options, "claude-3-5-sonnet-20241022")
+	assertOptionsModel(t, options, testModelSonnet)
 	assertOptionsPermissionMode(t, options, PermissionModeAcceptEdits)
 }
 
@@ -2685,14 +2693,14 @@ func TestOutputFormatIntegration(t *testing.T) {
 	opts := NewOptions(
 		WithSystemPrompt("You are helpful"),
 		WithJSONSchema(schema),
-		WithModel("claude-3-5-sonnet-20241022"),
+		WithModel(testModelSonnet),
 		WithPermissionMode(PermissionModeAcceptEdits),
 	)
 
 	// Verify all options are set correctly
 	assertOptionsSystemPrompt(t, opts, "You are helpful")
 	assertOutputFormatType(t, opts, "json_schema")
-	assertOptionsModel(t, opts, "claude-3-5-sonnet-20241022")
+	assertOptionsModel(t, opts, testModelSonnet)
 	assertOptionsPermissionMode(t, opts, PermissionModeAcceptEdits)
 }
 
@@ -2948,7 +2956,7 @@ func TestSandboxOptionOverride(t *testing.T) {
 func TestSandboxIntegrationWithOtherOptions(t *testing.T) {
 	options := NewOptions(
 		WithSystemPrompt("You are a helpful assistant"),
-		WithModel("claude-3-5-sonnet-20241022"),
+		WithModel(testModelSonnet),
 		WithSandbox(&SandboxSettings{
 			Enabled:                  true,
 			AutoAllowBashIfSandboxed: true,
@@ -2958,7 +2966,7 @@ func TestSandboxIntegrationWithOtherOptions(t *testing.T) {
 
 	// Verify sandbox settings preserved alongside other options
 	assertOptionsSystemPrompt(t, options, "You are a helpful assistant")
-	assertOptionsModel(t, options, "claude-3-5-sonnet-20241022")
+	assertOptionsModel(t, options, testModelSonnet)
 	assertOptionsPermissionMode(t, options, PermissionModeAcceptEdits)
 	assertOptionsSandboxNotNil(t, options)
 	assertOptionsSandboxEnabled(t, options, true)
@@ -3241,7 +3249,7 @@ func TestAgentModelConstants(t *testing.T) {
 func TestAgentOptionsIntegration(t *testing.T) {
 	options := NewOptions(
 		WithSystemPrompt("System prompt"),
-		WithModel("claude-3-5-sonnet-20241022"),
+		WithModel(testModelSonnet),
 		WithAgent("code-reviewer", AgentDefinition{
 			Description: "Reviews code",
 			Prompt:      "You are a reviewer...",
@@ -3253,7 +3261,7 @@ func TestAgentOptionsIntegration(t *testing.T) {
 
 	// Verify agents work with other options
 	assertOptionsSystemPrompt(t, options, "System prompt")
-	assertOptionsModel(t, options, "claude-3-5-sonnet-20241022")
+	assertOptionsModel(t, options, testModelSonnet)
 	assertOptionsAgentsLength(t, options, 1)
 	assertOptionsSettingSources(t, options, []SettingSource{SettingSourceProject})
 }
@@ -3481,7 +3489,7 @@ func TestStderrCallbackIntegration(t *testing.T) {
 		WithSystemPrompt("You are a helpful assistant"),
 		WithDebugWriter(&debugBuf),
 		WithStderrCallback(func(_ string) {}),
-		WithModel("claude-3-5-sonnet-20241022"),
+		WithModel(testModelSonnet),
 		WithPermissionMode(PermissionModeAcceptEdits),
 	)
 
@@ -3497,7 +3505,7 @@ func TestStderrCallbackIntegration(t *testing.T) {
 
 	// Verify other options are preserved
 	assertOptionsSystemPrompt(t, options, "You are a helpful assistant")
-	assertOptionsModel(t, options, "claude-3-5-sonnet-20241022")
+	assertOptionsModel(t, options, testModelSonnet)
 	assertOptionsPermissionMode(t, options, PermissionModeAcceptEdits)
 }
 
@@ -3771,7 +3779,7 @@ func TestWithCanUseTool(t *testing.T) {
 func TestCanUseToolIntegration(t *testing.T) {
 	options := NewOptions(
 		WithSystemPrompt("You are a helpful assistant"),
-		WithModel("claude-3-5-sonnet-20241022"),
+		WithModel(testModelSonnet),
 		WithPermissionMode(PermissionModeAcceptEdits),
 		WithCanUseTool(func(
 			_ context.Context,
@@ -3790,7 +3798,7 @@ func TestCanUseToolIntegration(t *testing.T) {
 
 	// Verify other options are preserved
 	assertOptionsSystemPrompt(t, options, "You are a helpful assistant")
-	assertOptionsModel(t, options, "claude-3-5-sonnet-20241022")
+	assertOptionsModel(t, options, testModelSonnet)
 	assertOptionsPermissionMode(t, options, PermissionModeAcceptEdits)
 }
 
@@ -4072,7 +4080,7 @@ func TestHookOptionsWithOtherOptions(t *testing.T) {
 
 	options := NewOptions(
 		WithSystemPrompt("You are a helpful assistant"),
-		WithModel("claude-3-5-sonnet-20241022"),
+		WithModel(testModelSonnet),
 		WithHook(HookEventPreToolUse, "Bash", callback),
 		WithPermissionMode(PermissionModeAcceptEdits),
 	)
@@ -4084,7 +4092,7 @@ func TestHookOptionsWithOtherOptions(t *testing.T) {
 
 	// Verify other options are preserved
 	assertOptionsSystemPrompt(t, options, "You are a helpful assistant")
-	assertOptionsModel(t, options, "claude-3-5-sonnet-20241022")
+	assertOptionsModel(t, options, testModelSonnet)
 	assertOptionsPermissionMode(t, options, PermissionModeAcceptEdits)
 }
 
