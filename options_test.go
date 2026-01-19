@@ -8,10 +8,10 @@ import (
 	"testing"
 )
 
-// Test constants
+// Test constants - prefixed to avoid conflicts with client_test.go constants
 const (
-	testModelSonnet = testModelSonnet
-	testValue       = "value"
+	optTestModelSonnet = "claude-3-5-sonnet-20241022"
+	optTestValue       = "value"
 )
 
 // Ensure context is used (for mock transport)
@@ -178,7 +178,7 @@ func TestSessionContinuationOptions(t *testing.T) {
 // T020: Model Specification Options
 func TestModelSpecificationOptions(t *testing.T) {
 	// Test model and permission_prompt_tool_name
-	model := testModelSonnet
+	model := optTestModelSonnet
 	toolName := "CustomTool"
 
 	options := NewOptions(
@@ -209,7 +209,7 @@ func TestFunctionalOptionsPattern(t *testing.T) {
 		WithAllowedTools("Read", "Write"),
 		WithDisallowedTools("Bash"),
 		WithPermissionMode(PermissionModeAcceptEdits),
-		WithModel(testModelSonnet),
+		WithModel(optTestModelSonnet),
 		WithContinueConversation(true),
 		WithResume("session-456"),
 		WithCwd("/tmp/test"),
@@ -237,8 +237,8 @@ func TestFunctionalOptionsPattern(t *testing.T) {
 		t.Errorf("Expected PermissionMode = %q, got %v", PermissionModeAcceptEdits, options.PermissionMode)
 	}
 
-	if options.Model == nil || *options.Model != testModelSonnet {
-		t.Errorf("Expected Model = %q, got %v", testModelSonnet, options.Model)
+	if options.Model == nil || *options.Model != optTestModelSonnet {
+		t.Errorf("Expected Model = %q, got %v", optTestModelSonnet, options.Model)
 	}
 
 	if options.ContinueConversation != true {
@@ -624,7 +624,7 @@ func TestWithTransport(t *testing.T) {
 
 		// Check existing arg is preserved
 		existing, exists := options.ExtraArgs["existing"]
-		if !exists || existing == nil || *existing != testValue {
+		if !exists || existing == nil || *existing != optTestValue {
 			t.Error("Expected existing ExtraArgs to be preserved")
 		}
 
@@ -1274,7 +1274,7 @@ func TestExtraHelpersIntegration(t *testing.T) {
 	t.Run("with_other_options", func(t *testing.T) {
 		options := NewOptions(
 			WithSystemPrompt("Test prompt"),
-			WithExtraFlag("fork-session"),
+			WithExtraFlag("verbose"),
 			WithModel("claude-sonnet-3-5-20241022"),
 			WithExtraArg("custom", "value"),
 		)
@@ -1284,10 +1284,10 @@ func TestExtraHelpersIntegration(t *testing.T) {
 		assertOptionsModel(t, options, "claude-sonnet-3-5-20241022")
 
 		// Check extra args
-		if value, exists := options.ExtraArgs["fork-session"]; !exists || value != nil {
-			t.Error("Expected fork-session to be boolean flag")
+		if value, exists := options.ExtraArgs["verbose"]; !exists || value != nil {
+			t.Error("Expected verbose to be boolean flag")
 		}
-		if value, exists := options.ExtraArgs["custom"]; !exists || value == nil || *value != testValue {
+		if value, exists := options.ExtraArgs["custom"]; !exists || value == nil || *value != optTestValue {
 			t.Error("Expected custom = value")
 		}
 	})
@@ -1347,16 +1347,16 @@ func TestExtraHelpersIntegration(t *testing.T) {
 	})
 
 	t.Run("real_world_example_fork_session", func(t *testing.T) {
-		// Example from issue: WithExtraFlag('fork-session')
+		// Use WithForkSession(true) for the proper fork-session setting
 		options := NewOptions(
 			WithSystemPrompt("You are a helpful assistant"),
-			WithExtraFlag("fork-session"),
+			WithForkSession(true),
 			WithModel("claude-sonnet-3-5-20241022"),
 		)
 
 		// Verify fork-session flag
-		if value, exists := options.ExtraArgs["fork-session"]; !exists || value != nil {
-			t.Error("Expected fork-session to be boolean flag")
+		if !options.ForkSession {
+			t.Error("Expected ForkSession to be true")
 		}
 
 		// Verify other options
@@ -1419,7 +1419,7 @@ func TestExtraHelperEdgeCases(t *testing.T) {
 			t.Errorf("Expected 1 arg, got %d", len(options.ExtraArgs))
 		}
 
-		if value, exists := options.ExtraArgs["same"]; !exists || value == nil || *value != testValue {
+		if value, exists := options.ExtraArgs["same"]; !exists || value == nil || *value != optTestValue {
 			t.Error("Expected same = value (arg overwrites flag)")
 		}
 	})
@@ -1463,15 +1463,8 @@ func TestWithForkSession(t *testing.T) {
 			},
 			validate: func(t *testing.T, opts *Options) {
 				t.Helper()
-				if opts.ExtraArgs == nil {
-					t.Fatal("Expected ExtraArgs to be initialized")
-				}
-				value, exists := opts.ExtraArgs["fork-session"]
-				if !exists {
-					t.Error("Expected fork-session flag to exist")
-				}
-				if value != nil {
-					t.Errorf("Expected fork-session to be nil (boolean flag), got %v", value)
+				if !opts.ForkSession {
+					t.Error("Expected ForkSession to be true")
 				}
 			},
 		},
@@ -1490,12 +1483,8 @@ func TestWithForkSession(t *testing.T) {
 					t.Error("Expected Resume to be set to 'original-session-uuid'")
 				}
 				// Verify fork-session flag
-				value, exists := opts.ExtraArgs["fork-session"]
-				if !exists {
-					t.Error("Expected fork-session flag to exist")
-				}
-				if value != nil {
-					t.Errorf("Expected fork-session to be nil (boolean flag), got %v", value)
+				if !opts.ForkSession {
+					t.Error("Expected ForkSession to be true")
 				}
 			},
 		},
@@ -1506,7 +1495,7 @@ func TestWithForkSession(t *testing.T) {
 					WithSystemPrompt("Test prompt"),
 					WithResume("session-123"),
 					WithForkSession(true),
-					WithModel(testModelSonnet),
+					WithModel(optTestModelSonnet),
 					WithMaxTurns(10),
 				)
 			},
@@ -1519,19 +1508,15 @@ func TestWithForkSession(t *testing.T) {
 				if opts.Resume == nil || *opts.Resume != "session-123" {
 					t.Error("Expected Resume to be preserved")
 				}
-				if opts.Model == nil || *opts.Model != testModelSonnet {
+				if opts.Model == nil || *opts.Model != optTestModelSonnet {
 					t.Error("Expected Model to be preserved")
 				}
 				if opts.MaxTurns != 10 {
 					t.Error("Expected MaxTurns to be preserved")
 				}
 				// Verify fork-session flag
-				value, exists := opts.ExtraArgs["fork-session"]
-				if !exists {
-					t.Error("Expected fork-session flag to exist")
-				}
-				if value != nil {
-					t.Errorf("Expected fork-session to be nil (boolean flag), got %v", value)
+				if !opts.ForkSession {
+					t.Error("Expected ForkSession to be true")
 				}
 			},
 		},
@@ -1547,16 +1532,17 @@ func TestWithForkSession(t *testing.T) {
 			},
 			validate: func(t *testing.T, opts *Options) {
 				t.Helper()
-				if len(opts.ExtraArgs) != 4 {
-					t.Errorf("Expected 4 ExtraArgs, got %d", len(opts.ExtraArgs))
+				// ForkSession is a separate field, not in ExtraArgs
+				if !opts.ForkSession {
+					t.Error("Expected ForkSession to be true")
+				}
+				// ExtraArgs should contain verbose, debug, setting (3 items)
+				if len(opts.ExtraArgs) != 3 {
+					t.Errorf("Expected 3 ExtraArgs, got %d", len(opts.ExtraArgs))
 				}
 				// Verify all flags exist
-				expectedFlags := map[string]bool{
-					"verbose":      true,
-					"fork-session": true,
-					"debug":        true,
-				}
-				for flag := range expectedFlags {
+				expectedFlags := []string{"verbose", "debug"}
+				for _, flag := range expectedFlags {
 					value, exists := opts.ExtraArgs[flag]
 					if !exists {
 						t.Errorf("Expected %q flag to exist", flag)
@@ -1567,7 +1553,7 @@ func TestWithForkSession(t *testing.T) {
 				}
 				// Verify valued arg
 				value, exists := opts.ExtraArgs["setting"]
-				if !exists || value == nil || *value != testValue {
+				if !exists || value == nil || *value != optTestValue {
 					t.Error("Expected setting arg to be 'value'")
 				}
 			},
@@ -1582,12 +1568,13 @@ func TestWithForkSession(t *testing.T) {
 			},
 			validate: func(t *testing.T, opts *Options) {
 				t.Helper()
-				if len(opts.ExtraArgs) != 1 {
-					t.Errorf("Expected 1 ExtraArg, got %d", len(opts.ExtraArgs))
+				// ForkSession is a bool field, not in ExtraArgs
+				if !opts.ForkSession {
+					t.Error("Expected ForkSession to be true")
 				}
-				value, exists := opts.ExtraArgs["fork-session"]
-				if !exists || value != nil {
-					t.Error("Expected fork-session to be boolean flag")
+				// ExtraArgs should be empty since ForkSession is a separate field
+				if len(opts.ExtraArgs) != 0 {
+					t.Errorf("Expected 0 ExtraArgs, got %d", len(opts.ExtraArgs))
 				}
 			},
 		},
@@ -1619,9 +1606,8 @@ func TestWithForkSessionIntegration(t *testing.T) {
 			t.Error("Expected Resume to reference original session")
 		}
 
-		value, exists := forkOptions.ExtraArgs["fork-session"]
-		if !exists || value != nil {
-			t.Error("Expected fork-session flag to be set correctly")
+		if !forkOptions.ForkSession {
+			t.Error("Expected ForkSession to be true")
 		}
 
 		if forkOptions.SystemPrompt == nil || *forkOptions.SystemPrompt != "Continue with alternative approach" {
@@ -1655,11 +1641,10 @@ func TestWithForkSessionIntegration(t *testing.T) {
 			t.Error("Fork 2 should reference base session")
 		}
 
-		// Both should have fork-session flag
+		// Both should have ForkSession set
 		for i, fork := range []*Options{fork1, fork2} {
-			value, exists := fork.ExtraArgs["fork-session"]
-			if !exists || value != nil {
-				t.Errorf("Fork %d should have fork-session flag", i+1)
+			if !fork.ForkSession {
+				t.Errorf("Fork %d should have ForkSession set to true", i+1)
 			}
 		}
 
@@ -1688,9 +1673,8 @@ func TestWithForkSessionIntegration(t *testing.T) {
 			t.Error("Expected Resume to reference known good state")
 		}
 
-		value, exists := recoveryOptions.ExtraArgs["fork-session"]
-		if !exists || value != nil {
-			t.Error("Expected fork-session flag for recovery")
+		if !recoveryOptions.ForkSession {
+			t.Error("Expected ForkSession to be true for recovery")
 		}
 
 		if retry, exists := recoveryOptions.ExtraArgs["retry-attempt"]; !exists || retry == nil || *retry != "2" {
@@ -1704,7 +1688,7 @@ func TestWithEnvIntegration(t *testing.T) {
 	options := NewOptions(
 		WithSystemPrompt("You are a helpful assistant"),
 		WithEnvVar("DEBUG", "1"),
-		WithModel(testModelSonnet),
+		WithModel(optTestModelSonnet),
 		WithEnv(map[string]string{
 			"HTTP_PROXY": "http://proxy:8080",
 			"CUSTOM":     "value",
@@ -1723,7 +1707,7 @@ func TestWithEnvIntegration(t *testing.T) {
 
 	// Test that other options are preserved
 	assertOptionsSystemPrompt(t, options, "You are a helpful assistant")
-	assertOptionsModel(t, options, testModelSonnet)
+	assertOptionsModel(t, options, optTestModelSonnet)
 }
 
 // Helper function following client_test.go patterns
@@ -1775,7 +1759,7 @@ func TestFallbackModelOption(t *testing.T) {
 		model    string
 		expected string
 	}{
-		{"sonnet_model", testModelSonnet, testModelSonnet},
+		{"sonnet_model", optTestModelSonnet, optTestModelSonnet},
 		{"opus_model", "claude-opus-4", "claude-opus-4"},
 		{"empty_model", "", ""},
 	}
@@ -1851,7 +1835,7 @@ func TestNewConfigOptionsIntegration(t *testing.T) {
 	// Test all new options together with existing options
 	options := NewOptions(
 		WithSystemPrompt("You are a helpful assistant"),
-		WithModel(testModelSonnet),
+		WithModel(optTestModelSonnet),
 		WithMaxBudgetUSD(50.00),
 		WithFallbackModel("claude-opus-4"),
 		WithUser("user-test-123"),
@@ -1866,7 +1850,7 @@ func TestNewConfigOptionsIntegration(t *testing.T) {
 
 	// Verify existing options still work
 	assertOptionsSystemPrompt(t, options, "You are a helpful assistant")
-	assertOptionsModel(t, options, testModelSonnet)
+	assertOptionsModel(t, options, optTestModelSonnet)
 }
 
 // Helper functions for new options
@@ -2522,7 +2506,7 @@ func TestWithDebugWriterIntegration(t *testing.T) {
 	options := NewOptions(
 		WithSystemPrompt("You are a helpful assistant"),
 		WithDebugWriter(&debugBuf),
-		WithModel(testModelSonnet),
+		WithModel(optTestModelSonnet),
 		WithPermissionMode(PermissionModeAcceptEdits),
 	)
 
@@ -2533,7 +2517,7 @@ func TestWithDebugWriterIntegration(t *testing.T) {
 
 	// Verify other options are preserved
 	assertOptionsSystemPrompt(t, options, "You are a helpful assistant")
-	assertOptionsModel(t, options, testModelSonnet)
+	assertOptionsModel(t, options, optTestModelSonnet)
 	assertOptionsPermissionMode(t, options, PermissionModeAcceptEdits)
 }
 
@@ -2693,14 +2677,14 @@ func TestOutputFormatIntegration(t *testing.T) {
 	opts := NewOptions(
 		WithSystemPrompt("You are helpful"),
 		WithJSONSchema(schema),
-		WithModel(testModelSonnet),
+		WithModel(optTestModelSonnet),
 		WithPermissionMode(PermissionModeAcceptEdits),
 	)
 
 	// Verify all options are set correctly
 	assertOptionsSystemPrompt(t, opts, "You are helpful")
 	assertOutputFormatType(t, opts, "json_schema")
-	assertOptionsModel(t, opts, testModelSonnet)
+	assertOptionsModel(t, opts, optTestModelSonnet)
 	assertOptionsPermissionMode(t, opts, PermissionModeAcceptEdits)
 }
 
@@ -2956,7 +2940,7 @@ func TestSandboxOptionOverride(t *testing.T) {
 func TestSandboxIntegrationWithOtherOptions(t *testing.T) {
 	options := NewOptions(
 		WithSystemPrompt("You are a helpful assistant"),
-		WithModel(testModelSonnet),
+		WithModel(optTestModelSonnet),
 		WithSandbox(&SandboxSettings{
 			Enabled:                  true,
 			AutoAllowBashIfSandboxed: true,
@@ -2966,7 +2950,7 @@ func TestSandboxIntegrationWithOtherOptions(t *testing.T) {
 
 	// Verify sandbox settings preserved alongside other options
 	assertOptionsSystemPrompt(t, options, "You are a helpful assistant")
-	assertOptionsModel(t, options, testModelSonnet)
+	assertOptionsModel(t, options, optTestModelSonnet)
 	assertOptionsPermissionMode(t, options, PermissionModeAcceptEdits)
 	assertOptionsSandboxNotNil(t, options)
 	assertOptionsSandboxEnabled(t, options, true)
@@ -3249,7 +3233,7 @@ func TestAgentModelConstants(t *testing.T) {
 func TestAgentOptionsIntegration(t *testing.T) {
 	options := NewOptions(
 		WithSystemPrompt("System prompt"),
-		WithModel(testModelSonnet),
+		WithModel(optTestModelSonnet),
 		WithAgent("code-reviewer", AgentDefinition{
 			Description: "Reviews code",
 			Prompt:      "You are a reviewer...",
@@ -3261,7 +3245,7 @@ func TestAgentOptionsIntegration(t *testing.T) {
 
 	// Verify agents work with other options
 	assertOptionsSystemPrompt(t, options, "System prompt")
-	assertOptionsModel(t, options, testModelSonnet)
+	assertOptionsModel(t, options, optTestModelSonnet)
 	assertOptionsAgentsLength(t, options, 1)
 	assertOptionsSettingSources(t, options, []SettingSource{SettingSourceProject})
 }
@@ -3489,7 +3473,7 @@ func TestStderrCallbackIntegration(t *testing.T) {
 		WithSystemPrompt("You are a helpful assistant"),
 		WithDebugWriter(&debugBuf),
 		WithStderrCallback(func(_ string) {}),
-		WithModel(testModelSonnet),
+		WithModel(optTestModelSonnet),
 		WithPermissionMode(PermissionModeAcceptEdits),
 	)
 
@@ -3505,7 +3489,7 @@ func TestStderrCallbackIntegration(t *testing.T) {
 
 	// Verify other options are preserved
 	assertOptionsSystemPrompt(t, options, "You are a helpful assistant")
-	assertOptionsModel(t, options, testModelSonnet)
+	assertOptionsModel(t, options, optTestModelSonnet)
 	assertOptionsPermissionMode(t, options, PermissionModeAcceptEdits)
 }
 
@@ -3779,7 +3763,7 @@ func TestWithCanUseTool(t *testing.T) {
 func TestCanUseToolIntegration(t *testing.T) {
 	options := NewOptions(
 		WithSystemPrompt("You are a helpful assistant"),
-		WithModel(testModelSonnet),
+		WithModel(optTestModelSonnet),
 		WithPermissionMode(PermissionModeAcceptEdits),
 		WithCanUseTool(func(
 			_ context.Context,
@@ -3798,7 +3782,7 @@ func TestCanUseToolIntegration(t *testing.T) {
 
 	// Verify other options are preserved
 	assertOptionsSystemPrompt(t, options, "You are a helpful assistant")
-	assertOptionsModel(t, options, testModelSonnet)
+	assertOptionsModel(t, options, optTestModelSonnet)
 	assertOptionsPermissionMode(t, options, PermissionModeAcceptEdits)
 }
 
@@ -4080,7 +4064,7 @@ func TestHookOptionsWithOtherOptions(t *testing.T) {
 
 	options := NewOptions(
 		WithSystemPrompt("You are a helpful assistant"),
-		WithModel(testModelSonnet),
+		WithModel(optTestModelSonnet),
 		WithHook(HookEventPreToolUse, "Bash", callback),
 		WithPermissionMode(PermissionModeAcceptEdits),
 	)
@@ -4092,7 +4076,7 @@ func TestHookOptionsWithOtherOptions(t *testing.T) {
 
 	// Verify other options are preserved
 	assertOptionsSystemPrompt(t, options, "You are a helpful assistant")
-	assertOptionsModel(t, options, testModelSonnet)
+	assertOptionsModel(t, options, optTestModelSonnet)
 	assertOptionsPermissionMode(t, options, PermissionModeAcceptEdits)
 }
 
