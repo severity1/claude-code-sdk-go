@@ -177,4 +177,3 @@ func (c *ClientImpl) untrackQuery(queryID string) {
 	defer c.queriesMu.Unlock()
 	delete(c.activeQueries, queryID)
 }
-

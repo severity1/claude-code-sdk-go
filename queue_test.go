@@ -420,14 +420,15 @@ func TestQueueManagerGetQueueLength(t *testing.T) {
 		t.Errorf("Expected queue length 10, got %d", length)
 	}
 
+	// Set query delay BEFORE resuming to ensure processing takes time
+	mockClient.setQueryDelay(500 * time.Millisecond)
+
 	// Resume queue and let one message start processing
 	err = qm.ResumeQueue(sessionID)
 	assertNoError(t, err)
 
-	mockClient.setQueryDelay(500 * time.Millisecond)
-
 	// Wait for processing to start
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(200 * time.Millisecond)
 
 	// Verify processing message NOT included in pending count
 	length = qm.GetQueueLength(sessionID)
