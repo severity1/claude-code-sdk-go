@@ -328,6 +328,10 @@ sleep 0.5
 
 // TestTransportResultMessageChannelClosure tests the critical fix for ResultMessage-driven channel closure
 func TestTransportResultMessageChannelClosure(t *testing.T) {
+	if runtime.GOOS == windowsOS {
+		t.Skip("Skipped on Windows: bash script not supported")
+	}
+
 	tests := []struct {
 		name           string
 		scriptTemplate string
@@ -490,6 +494,10 @@ Loop:
 
 // TestTransportMultipleResultMessages tests behavior with multiple ResultMessages
 func TestTransportMultipleResultMessages(t *testing.T) {
+	if runtime.GOOS == windowsOS {
+		t.Skip("Skipped on Windows: bash script not supported")
+	}
+
 	ctx, cancel := setupTransportTestContext(t, 5*time.Second)
 	defer cancel()
 
@@ -554,6 +562,10 @@ Loop:
 
 // TestTransportResultMessageWithErrors tests ResultMessage handling in error scenarios
 func TestTransportResultMessageWithErrors(t *testing.T) {
+	if runtime.GOOS == windowsOS {
+		t.Skip("Skipped on Windows: bash script not supported")
+	}
+
 	ctx, cancel := setupTransportTestContext(t, 5*time.Second)
 	defer cancel()
 
