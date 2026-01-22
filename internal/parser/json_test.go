@@ -11,6 +11,7 @@ import (
 
 // Test constants to avoid goconst warnings
 const testResultAnswer42 = "The answer is 42"
+const validSystemStatusJSON = `{"type": "system", "subtype": "status"}`
 
 // TestParseValidMessages tests parsing of valid message types
 func TestParseValidMessages(t *testing.T) {
@@ -319,7 +320,7 @@ func TestBufferManagement(t *testing.T) {
 	t.Run("buffer_reset_on_success", func(t *testing.T) {
 		parser := setupParserTest(t)
 
-		validJSON := `{"type": "system", "subtype": "status"}`
+		validJSON := validSystemStatusJSON
 		msg, err := parser.processJSONLine(validJSON)
 
 		assertNoParseError(t, err)
@@ -378,7 +379,7 @@ func TestBufferManagement(t *testing.T) {
 		assertBufferEmpty(t, parser)
 
 		// Parser should work normally after reset
-		validJSON := `{"type": "system", "subtype": "status"}`
+		validJSON := validSystemStatusJSON
 		msg2, err2 := parser.processJSONLine(validJSON)
 		assertNoParseError(t, err2)
 		assertMessageExists(t, msg2)
@@ -537,7 +538,7 @@ func TestParseMessages(t *testing.T) {
 	// Test successful parsing
 	lines := []string{
 		`{"type": "user", "message": {"content": "Hello"}}`,
-		`{"type": "system", "subtype": "status"}`,
+		validSystemStatusJSON,
 	}
 
 	messages, err := ParseMessages(lines)
