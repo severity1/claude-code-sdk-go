@@ -178,9 +178,9 @@ func addToolsFlag(cmd []string, options *shared.Options) []string {
 
 	switch v := options.Tools.(type) {
 	case []string:
-		if len(v) > 0 {
-			cmd = append(cmd, "--tools", strings.Join(v, ","))
-		}
+		// Pass --tools "" for explicitly empty list (disables all tools)
+		// vs nil which means "use default tools"
+		cmd = append(cmd, "--tools", strings.Join(v, ","))
 	case shared.ToolsPreset:
 		// Serialize as JSON for preset
 		data, err := json.Marshal(v)

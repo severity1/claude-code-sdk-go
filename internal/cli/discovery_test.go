@@ -765,7 +765,7 @@ func TestToolsFlagSupport(t *testing.T) {
 			options: &shared.Options{
 				Tools: []string{},
 			},
-			validate: validateNoToolsFlag,
+			validate: validateEmptyToolsFlag,
 		},
 	}
 
@@ -804,6 +804,14 @@ func validateToolsPresetFlag(t *testing.T, cmd []string) {
 func validateNoToolsFlag(t *testing.T, cmd []string) {
 	t.Helper()
 	assertNotContainsArg(t, cmd, "--tools")
+}
+
+// validateEmptyToolsFlag checks that --tools flag is present with empty string value
+// This is important because --tools "" explicitly disables all tools,
+// which is different from nil (use default tools).
+func validateEmptyToolsFlag(t *testing.T, cmd []string) {
+	t.Helper()
+	assertContainsArgs(t, cmd, "--tools", "")
 }
 
 // TestSessionManagementFlagsSupport tests fork_session and setting_sources CLI flags
