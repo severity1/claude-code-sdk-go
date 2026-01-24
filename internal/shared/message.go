@@ -52,10 +52,11 @@ type ContentBlock interface {
 
 // UserMessage represents a message from the user.
 type UserMessage struct {
-	MessageType     string      `json:"type"`
-	Content         interface{} `json:"content"` // string or []ContentBlock
-	UUID            *string     `json:"uuid,omitempty"`
-	ParentToolUseID *string     `json:"parent_tool_use_id,omitempty"`
+	MessageType     string         `json:"type"`
+	Content         interface{}    `json:"content"` // string or []ContentBlock
+	UUID            *string        `json:"uuid,omitempty"`
+	ParentToolUseID *string        `json:"parent_tool_use_id,omitempty"`
+	ToolUseResult   map[string]any `json:"tool_use_result,omitempty"`
 }
 
 // Type returns the message type for UserMessage.
@@ -77,6 +78,16 @@ func (m *UserMessage) GetParentToolUseID() string {
 		return *m.ParentToolUseID
 	}
 	return ""
+}
+
+// GetToolUseResult returns the tool use result metadata or nil if not present.
+func (m *UserMessage) GetToolUseResult() map[string]any {
+	return m.ToolUseResult
+}
+
+// HasToolUseResult returns true if tool use result metadata is present and non-empty.
+func (m *UserMessage) HasToolUseResult() bool {
+	return m.ToolUseResult != nil && len(m.ToolUseResult) > 0
 }
 
 // MarshalJSON implements custom JSON marshaling for UserMessage
