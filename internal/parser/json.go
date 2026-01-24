@@ -174,6 +174,12 @@ func (p *Parser) parseUserMessage(data map[string]any) (*shared.UserMessage, err
 		parentToolUseID = &ptid
 	}
 
+	// Extract tool_use_result (Issue #98: Python SDK v0.1.22 parity)
+	var toolUseResult map[string]any
+	if tur, ok := data["tool_use_result"].(map[string]any); ok {
+		toolUseResult = tur
+	}
+
 	// Handle both string content and array of content blocks
 	switch c := content.(type) {
 	case string:
@@ -182,6 +188,7 @@ func (p *Parser) parseUserMessage(data map[string]any) (*shared.UserMessage, err
 			Content:         c,
 			UUID:            uuid,
 			ParentToolUseID: parentToolUseID,
+			ToolUseResult:   toolUseResult,
 		}, nil
 	case []any:
 		// Array of content blocks
@@ -197,6 +204,7 @@ func (p *Parser) parseUserMessage(data map[string]any) (*shared.UserMessage, err
 			Content:         blocks,
 			UUID:            uuid,
 			ParentToolUseID: parentToolUseID,
+			ToolUseResult:   toolUseResult,
 		}, nil
 	default:
 		return nil, shared.NewMessageParseError("invalid user message content type", data)

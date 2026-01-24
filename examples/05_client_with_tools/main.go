@@ -1,5 +1,6 @@
 // Package main demonstrates Client API with file tools using WithClient for automatic resource management.
-// Also showcases dynamic permission mode switching with SetPermissionMode.
+// Also showcases dynamic permission mode switching with SetPermissionMode and tool_use_result metadata
+// for rich edit information (file paths, diffs, patches) - Python SDK v0.1.22 parity.
 package main
 
 import (
@@ -109,6 +110,27 @@ func streamResponse(ctx context.Context, client claudecode.Client) error {
 					}
 				}
 			case *claudecode.UserMessage:
+				// Check for tool_use_result metadata (Issue #98: Python SDK v0.1.22 parity)
+				// This provides rich metadata about tool execution (file paths, diffs, patches)
+				if msg.HasToolUseResult() {
+					result := msg.GetToolUseResult()
+					if filePath, ok := result["filePath"].(string); ok {
+						fmt.Printf("[Edit] %s", filePath)
+						// Show structured patch info if available
+						if patches, ok := result["structuredPatch"].([]any); ok && len(patches) > 0 {
+							if patch, ok := patches[0].(map[string]any); ok {
+								if oldStart, ok := patch["oldStart"].(float64); ok {
+									if lines, ok := patch["lines"].([]any); ok {
+										fmt.Printf(" (line %d, %d changes)", int(oldStart), len(lines))
+									}
+								}
+							}
+						}
+						fmt.Println()
+					}
+				}
+
+				// Also display tool result content
 				if blocks, ok := msg.Content.([]claudecode.ContentBlock); ok {
 					for _, block := range blocks {
 						if toolResult, ok := block.(*claudecode.ToolResultBlock); ok {

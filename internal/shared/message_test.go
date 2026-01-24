@@ -581,3 +581,77 @@ func TestAssistantMessageErrorJSONMarshaling(t *testing.T) {
 		t.Error("Expected 'error' field to be omitted when nil")
 	}
 }
+
+// Issue #98: Test ToolUseResult accessor methods (Python SDK v0.1.22 parity)
+
+// TestUserMessage_ToolUseResult tests ToolUseResult accessor methods
+func TestUserMessage_ToolUseResult(t *testing.T) {
+	tests := []struct {
+		name          string
+		toolUseResult map[string]any
+		wantHas       bool
+		wantNil       bool
+	}{
+		{
+			name:          "nil_returns_false_and_nil",
+			toolUseResult: nil,
+			wantHas:       false,
+			wantNil:       true,
+		},
+		{
+			name:          "empty_map_returns_false_and_empty",
+			toolUseResult: map[string]any{},
+			wantHas:       false,
+			wantNil:       false,
+		},
+		{
+			name: "populated_returns_true_and_data",
+			toolUseResult: map[string]any{
+				"filePath":  "/path/to/file.py",
+				"oldString": "old",
+				"newString": "new",
+			},
+			wantHas: true,
+			wantNil: false,
+		},
+		{
+			name: "nested_structure_preserved",
+			toolUseResult: map[string]any{
+				"filePath": "/test.go",
+				"structuredPatch": []any{
+					map[string]any{"oldStart": float64(1), "lines": []any{"-old", "+new"}},
+				},
+			},
+			wantHas: true,
+			wantNil: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			um := &UserMessage{
+				Content:       "test",
+				ToolUseResult: tc.toolUseResult,
+			}
+
+			gotHas := um.HasToolUseResult()
+			if gotHas != tc.wantHas {
+				t.Errorf("HasToolUseResult() = %v, want %v", gotHas, tc.wantHas)
+			}
+
+			gotResult := um.GetToolUseResult()
+			if (gotResult == nil) != tc.wantNil {
+				t.Errorf("GetToolUseResult() nil = %v, want nil = %v", gotResult == nil, tc.wantNil)
+			}
+
+			// Verify data integrity for non-nil cases (skip nested structures)
+			if !tc.wantNil && tc.toolUseResult != nil {
+				if filePath, ok := tc.toolUseResult["filePath"].(string); ok {
+					if gotResult["filePath"] != filePath {
+						t.Errorf("GetToolUseResult()[\"filePath\"] = %v, want %v", gotResult["filePath"], filePath)
+					}
+				}
+			}
+		})
+	}
+}

@@ -39,6 +39,11 @@ func BenchmarkProcessLine(b *testing.B) {
 			name: "result_success",
 			line: `{"type":"result","subtype":"success","duration_ms":1000,"duration_api_ms":800,"is_error":false,"num_turns":1,"session_id":"sess_123"}`,
 		},
+		// Issue #98: tool_use_result benchmark (Python SDK v0.1.22 parity)
+		{
+			name: "user_with_tool_use_result",
+			line: `{"type":"user","uuid":"msg-123","message":{"content":[{"tool_use_id":"t1","type":"tool_result","content":"Updated"}]},"tool_use_result":{"filePath":"/test.py","oldString":"old","newString":"new","originalFile":"contents","structuredPatch":[{"oldStart":1,"oldLines":3,"newStart":1,"newLines":3,"lines":["-old","+new"]}],"userModified":false,"replaceAll":false}}`,
+		},
 	}
 
 	for _, tc := range tests {
