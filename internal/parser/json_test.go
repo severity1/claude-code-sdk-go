@@ -113,6 +113,102 @@ func TestParseValidMessages(t *testing.T) {
 				}
 			},
 		},
+		// Issue #98: tool_use_result field tests (Python SDK v0.1.22 parity)
+		{
+			name: "user_message_with_tool_use_result",
+			data: map[string]any{
+				"type": "user",
+				"message": map[string]any{
+					"role": "user",
+					"content": []any{
+						map[string]any{
+							"tool_use_id": "toolu_vrtx_01KXWexk3NJdwkjWzPMGQ2F1",
+							"type":        "tool_result",
+							"content":     "The file has been updated.",
+						},
+					},
+				},
+				"session_id": "84afb479-17ae-49af-8f2b-666ac2530c3a",
+				"uuid":       "2ace3375-1879-48a0-a421-6bce25a9295a",
+				"tool_use_result": map[string]any{
+					"filePath":     "/path/to/file.py",
+					"oldString":    "old code",
+					"newString":    "new code",
+					"originalFile": "full file contents",
+					"structuredPatch": []any{
+						map[string]any{
+							"oldStart": float64(33),
+							"oldLines": float64(7),
+							"newStart": float64(33),
+							"newLines": float64(7),
+							"lines":    []any{"   # comment", "-      old line", "+      new line"},
+						},
+					},
+					"userModified": false,
+					"replaceAll":   false,
+				},
+			},
+			expectedType: shared.MessageTypeUser,
+			validate: func(t *testing.T, msg shared.Message) {
+				t.Helper()
+				um := msg.(*shared.UserMessage)
+				if um.ToolUseResult == nil {
+					t.Fatal("expected ToolUseResult to be set")
+				}
+				if um.ToolUseResult["filePath"] != "/path/to/file.py" {
+					t.Errorf("expected filePath '/path/to/file.py', got %v", um.ToolUseResult["filePath"])
+				}
+				if um.ToolUseResult["oldString"] != "old code" {
+					t.Errorf("expected oldString 'old code', got %v", um.ToolUseResult["oldString"])
+				}
+				if um.ToolUseResult["newString"] != "new code" {
+					t.Errorf("expected newString 'new code', got %v", um.ToolUseResult["newString"])
+				}
+				// Verify nested structuredPatch preserved
+				patch, ok := um.ToolUseResult["structuredPatch"].([]any)
+				if !ok || len(patch) == 0 {
+					t.Fatal("expected structuredPatch array")
+				}
+				patchItem, ok := patch[0].(map[string]any)
+				if !ok {
+					t.Fatal("expected structuredPatch[0] to be map")
+				}
+				if patchItem["oldStart"] != float64(33) {
+					t.Errorf("expected oldStart 33, got %v", patchItem["oldStart"])
+				}
+				if um.UUID == nil || *um.UUID != "2ace3375-1879-48a0-a421-6bce25a9295a" {
+					t.Errorf("expected UUID '2ace3375-1879-48a0-a421-6bce25a9295a'")
+				}
+			},
+		},
+		{
+			name: "user_message_with_string_content_and_tool_use_result",
+			data: map[string]any{
+				"type":    "user",
+				"message": map[string]any{"content": "Simple string content"},
+				"tool_use_result": map[string]any{
+					"filePath":     "/path/to/file.py",
+					"userModified": true,
+				},
+			},
+			expectedType: shared.MessageTypeUser,
+			validate: func(t *testing.T, msg shared.Message) {
+				t.Helper()
+				um := msg.(*shared.UserMessage)
+				if um.Content != "Simple string content" {
+					t.Errorf("expected string content 'Simple string content', got %v", um.Content)
+				}
+				if um.ToolUseResult == nil {
+					t.Fatal("expected ToolUseResult to be set")
+				}
+				if um.ToolUseResult["filePath"] != "/path/to/file.py" {
+					t.Errorf("expected filePath '/path/to/file.py'")
+				}
+				if um.ToolUseResult["userModified"] != true {
+					t.Errorf("expected userModified true")
+				}
+			},
+		},
 		{
 			name: "assistant_message",
 			data: map[string]any{
