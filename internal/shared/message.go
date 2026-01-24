@@ -87,7 +87,7 @@ func (m *UserMessage) GetToolUseResult() map[string]any {
 
 // HasToolUseResult returns true if tool use result metadata is present and non-empty.
 func (m *UserMessage) HasToolUseResult() bool {
-	return m.ToolUseResult != nil && len(m.ToolUseResult) > 0
+	return len(m.ToolUseResult) > 0
 }
 
 // MarshalJSON implements custom JSON marshaling for UserMessage
